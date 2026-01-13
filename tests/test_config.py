@@ -10,6 +10,7 @@ def test_config_defaults():
     assert Config.DEFAULT_ELEVATION_TTL == 300
     assert Config.ELICITATION_TIMEOUT == 300
     assert Config.WORKSPACE_ROOT == "./workspace"
+    assert Config.COMMAND_TIMEOUT == 30
 
 
 def test_config_lease_ttl_positive():

@@ -29,6 +29,7 @@ class Config:
     PORT: int = _parse_port.__func__(os.getenv("PORT", "8001"))
     WORKSPACE_ROOT: str = os.getenv("WORKSPACE_ROOT", "./workspace")
     AUDIT_LOG_PATH: str = os.getenv("AUDIT_LOG_PATH", "./audit.jsonl")
+    COMMAND_TIMEOUT: int = int(os.getenv("COMMAND_TIMEOUT", "30"))
 
     # ========================================================================
     # Redis Configuration

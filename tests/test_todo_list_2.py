@@ -34,9 +34,10 @@ def core_tools_module(tmp_path, monkeypatch):
     Load core_tools with an isolated WORKSPACE_ROOT for filesystem tests.
     """
     monkeypatch.setenv("WORKSPACE_ROOT", str(tmp_path))
+    monkeypatch.setattr(Config, "WORKSPACE_ROOT", str(tmp_path))
     import servers.core_tools as core_tools
     importlib.reload(core_tools)
-    Path(core_tools.WORKSPACE_ROOT).mkdir(parents=True, exist_ok=True)
+    Path(Config.WORKSPACE_ROOT).mkdir(parents=True, exist_ok=True)
     return core_tools
 
 
@@ -65,7 +66,7 @@ def test_remove_directory_succeeds_on_valid_directory(core_tools_module):
     remove_directory = core_tools_module.remove_directory
 
     # Create temporary test directory with contents
-    workspace = Path(core_tools_module.WORKSPACE_ROOT)
+    workspace = Path(Config.WORKSPACE_ROOT)
     test_dir = workspace / "test_remove_dir"
     test_dir.mkdir(parents=True, exist_ok=True)
 
@@ -114,7 +115,7 @@ def test_remove_directory_fails_on_file_path(core_tools_module):
     remove_directory = core_tools_module.remove_directory
 
     # Create a file (not a directory)
-    workspace = Path(core_tools_module.WORKSPACE_ROOT)
+    workspace = Path(Config.WORKSPACE_ROOT)
     test_file = workspace / "test_file.txt"
     test_file.write_text("not a directory")
 
@@ -140,7 +141,7 @@ def test_remove_directory_recursive_deletion(core_tools_module):
     remove_directory = core_tools_module.remove_directory
 
     # Create complex directory structure
-    workspace = Path(core_tools_module.WORKSPACE_ROOT)
+    workspace = Path(Config.WORKSPACE_ROOT)
     test_dir = workspace / "test_recursive"
     test_dir.mkdir(parents=True, exist_ok=True)
 
