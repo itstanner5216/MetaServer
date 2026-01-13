@@ -19,6 +19,7 @@ from .artifacts import (
     get_artifact_generator,
 )
 from .policy import PolicyDecision, evaluate_policy
+from .permission import PermissionRequest
 from .tokens import decode_token, generate_token, verify_token
 
 __all__ = [
@@ -30,6 +31,7 @@ __all__ = [
     "ApprovalDecision",
     "ApprovalProvider",
     "ApprovalRequest",
+    "PermissionRequest",
     "ApprovalResponse",
     "DBusGUIProvider",
     "FastMCPElicitProvider",

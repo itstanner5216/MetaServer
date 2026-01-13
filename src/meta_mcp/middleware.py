@@ -18,6 +18,7 @@ from .governance.approval import (
     get_approval_provider,
 )
 from .governance.artifacts import get_artifact_generator
+from .governance.permission import PermissionRequest
 from .governance.tokens import verify_token
 from .leases import lease_manager
 from .registry import tool_registry
@@ -128,6 +129,45 @@ class GovernanceMiddleware(Middleware):
 
         # Default: tool name
         return tool_name
+
+    @staticmethod
+    def _to_approval_request(permission_request: PermissionRequest) -> ApprovalRequest:
+        """Convert a structured permission request to an approval request."""
+        return ApprovalRequest(
+            request_id=permission_request.request_id,
+            tool_name=permission_request.tool_name,
+            message=permission_request.message,
+            required_scopes=permission_request.required_scopes,
+            artifacts_path=permission_request.artifacts_path,
+            timeout_seconds=permission_request.timeout_seconds,
+            context_metadata=permission_request.context_metadata,
+        )
+
+    def _build_permission_request(
+        self, ctx: Context, tool_name: str, arguments: Dict[str, Any]
+    ) -> PermissionRequest:
+        """Build a structured permission request from tool context."""
+        session_id = str(ctx.session_id)
+        context_key = self._extract_context_key(tool_name, arguments)
+        request_id = self._generate_request_id(session_id, tool_name, context_key)
+        required_scopes = self._get_required_scopes(tool_name, arguments)
+        request_message = self._format_approval_request(tool_name, arguments)
+        run_context = getattr(ctx, "run_context", None)
+
+        return PermissionRequest(
+            request_id=request_id,
+            tool_name=tool_name,
+            message=request_message,
+            required_scopes=required_scopes,
+            artifacts_path=None,
+            timeout_seconds=ELICITATION_TIMEOUT,
+            context_metadata={
+                "session_id": session_id,
+                "arguments": arguments,
+                "context_key": context_key,
+            },
+            run_context=run_context,
+        )
 
     def _compute_elevation_key(
         self, tool_name: str, arguments: Dict[str, Any], session_id: str
@@ -382,18 +422,12 @@ class GovernanceMiddleware(Middleware):
             - lease_seconds: User-specified lease duration (0 = single-use)
             - selected_scopes: Which scopes the user granted
         """
-        session_id = str(ctx.session_id)
-
         try:
-            # Generate stable request_id
-            context_key = self._extract_context_key(tool_name, arguments)
-            request_id = self._generate_request_id(session_id, tool_name, context_key)
-
-            # Get required scopes for this operation
-            required_scopes = self._get_required_scopes(tool_name, arguments)
-
-            # Format approval message
-            request_message = self._format_approval_request(tool_name, arguments)
+            permission_request = self._build_permission_request(
+                ctx, tool_name, arguments
+            )
+            session_id = permission_request.context_metadata["session_id"]
+            context_key = permission_request.context_metadata["context_key"]
 
             # Generate approval artifacts (HTML and JSON)
             artifacts_path = None
@@ -402,10 +436,10 @@ class GovernanceMiddleware(Middleware):
 
                 # Generate HTML artifact for GUI display
                 html_path = artifact_generator.generate_html_artifact(
-                    request_id=request_id,
-                    tool_name=tool_name,
-                    message=request_message,
-                    required_scopes=required_scopes,
+                    request_id=permission_request.request_id,
+                    tool_name=permission_request.tool_name,
+                    message=permission_request.message,
+                    required_scopes=permission_request.required_scopes,
                     arguments=arguments,
                     context_metadata={
                         "session_id": session_id,
@@ -415,10 +449,10 @@ class GovernanceMiddleware(Middleware):
 
                 # Generate JSON artifact for programmatic access
                 json_path = artifact_generator.generate_json_artifact(
-                    request_id=request_id,
-                    tool_name=tool_name,
-                    message=request_message,
-                    required_scopes=required_scopes,
+                    request_id=permission_request.request_id,
+                    tool_name=permission_request.tool_name,
+                    message=permission_request.message,
+                    required_scopes=permission_request.required_scopes,
                     arguments=arguments,
                     context_metadata={
                         "session_id": session_id,
@@ -429,30 +463,18 @@ class GovernanceMiddleware(Middleware):
                 # Use HTML path for UI (JSON available at same location with .json extension)
                 artifacts_path = html_path
                 logger.debug(
-                    f"Generated approval artifacts for {request_id}: "
+                    f"Generated approval artifacts for {permission_request.request_id}: "
                     f"HTML={html_path}, JSON={json_path}"
                 )
 
             except Exception as e:
                 # Non-fatal: approval can proceed without artifacts
                 logger.warning(
-                    f"Failed to generate approval artifacts for {request_id}: {e}"
+                    f"Failed to generate approval artifacts for {permission_request.request_id}: {e}"
                 )
 
-            # Create approval request
-            approval_request = ApprovalRequest(
-                request_id=request_id,
-                tool_name=tool_name,
-                message=request_message,
-                required_scopes=required_scopes,
-                artifacts_path=artifacts_path,
-                timeout_seconds=ELICITATION_TIMEOUT,
-                context_metadata={
-                    "session_id": session_id,
-                    "arguments": arguments,
-                    "context_key": context_key,
-                },
-            )
+            permission_request.artifacts_path = artifacts_path
+            approval_request = self._to_approval_request(permission_request)
 
             # Audit approval request with request_id
             audit_logger.log(
@@ -460,15 +482,15 @@ class GovernanceMiddleware(Middleware):
                 tool_name=tool_name,
                 arguments=arguments,
                 session_id=session_id,
-                request_id=request_id,
-                required_scopes=required_scopes,
+                request_id=permission_request.request_id,
+                required_scopes=permission_request.required_scopes,
             )
 
             # Get approval provider
             provider = await get_approval_provider(context=ctx)
             logger.info(
                 f"Using approval provider: {provider.get_name()} "
-                f"for {tool_name} (request: {request_id})"
+                f"for {tool_name} (request: {permission_request.request_id})"
             )
 
             # Request approval from provider
@@ -478,13 +500,13 @@ class GovernanceMiddleware(Middleware):
             if response.decision == ApprovalDecision.TIMEOUT:
                 logger.warning(
                     f"Approval timeout for {tool_name} "
-                    f"(request: {request_id}, session: {session_id})"
+                    f"(request: {permission_request.request_id}, session: {session_id})"
                 )
                 audit_logger.log_approval_timeout(
                     tool_name=tool_name,
                     arguments=arguments,
                     session_id=session_id,
-                    request_id=request_id,
+                    request_id=permission_request.request_id,
                     timeout_seconds=ELICITATION_TIMEOUT,
                 )
                 return False, 0, []
@@ -492,14 +514,14 @@ class GovernanceMiddleware(Middleware):
             elif response.decision == ApprovalDecision.ERROR:
                 logger.error(
                     f"Approval error for {tool_name} "
-                    f"(request: {request_id}, session: {session_id}): "
+                    f"(request: {permission_request.request_id}, session: {session_id}): "
                     f"{response.error_message}"
                 )
                 audit_logger.log_approval(
                     tool_name=tool_name,
                     arguments=arguments,
                     session_id=session_id,
-                    request_id=request_id,
+                    request_id=permission_request.request_id,
                     approved=False,
                     error=response.error_message,
                 )
@@ -508,13 +530,13 @@ class GovernanceMiddleware(Middleware):
             elif response.decision == ApprovalDecision.DENIED:
                 logger.info(
                     f"Approval denied for {tool_name} "
-                    f"(request: {request_id}, session: {session_id})"
+                    f"(request: {permission_request.request_id}, session: {session_id})"
                 )
                 audit_logger.log_approval(
                     tool_name=tool_name,
                     arguments=arguments,
                     session_id=session_id,
-                    request_id=request_id,
+                    request_id=permission_request.request_id,
                     approved=False,
                 )
                 return False, 0, []
@@ -525,13 +547,13 @@ class GovernanceMiddleware(Middleware):
                 if len(response.selected_scopes) == 0:
                     logger.warning(
                         f"Approval denied for {tool_name}: No scopes selected "
-                        f"(request: {request_id}, session: {session_id})"
+                        f"(request: {permission_request.request_id}, session: {session_id})"
                     )
                     audit_logger.log_approval(
                         tool_name=tool_name,
                         arguments=arguments,
                         session_id=session_id,
-                        request_id=request_id,
+                        request_id=permission_request.request_id,
                         approved=False,
                         reason="no_scopes_selected",
                     )
@@ -539,34 +561,38 @@ class GovernanceMiddleware(Middleware):
 
                 # CRITICAL SECURITY: Validate ALL required scopes are selected
                 # User MUST approve ALL required scopes, not just a subset
-                missing_scopes = set(required_scopes) - set(response.selected_scopes)
+                missing_scopes = set(permission_request.required_scopes) - set(
+                    response.selected_scopes
+                )
                 if missing_scopes:
                     logger.error(
                         f"Approval denied for {tool_name}: Missing required scopes {missing_scopes} "
-                        f"(request: {request_id}, session: {session_id})"
+                        f"(request: {permission_request.request_id}, session: {session_id})"
                     )
                     audit_logger.log_approval(
                         tool_name=tool_name,
                         arguments=arguments,
                         session_id=session_id,
-                        request_id=request_id,
+                        request_id=permission_request.request_id,
                         approved=False,
                         reason=f"missing_required_scopes: {list(missing_scopes)}",
                     )
                     return False, 0, []
 
                 # Validate no invalid scopes added (extra scopes not in required)
-                invalid_scopes = set(response.selected_scopes) - set(required_scopes)
+                invalid_scopes = set(response.selected_scopes) - set(
+                    permission_request.required_scopes
+                )
                 if invalid_scopes:
                     logger.error(
                         f"Approval denied for {tool_name}: Invalid scopes {invalid_scopes} "
-                        f"(request: {request_id}, session: {session_id})"
+                        f"(request: {permission_request.request_id}, session: {session_id})"
                     )
                     audit_logger.log_approval(
                         tool_name=tool_name,
                         arguments=arguments,
                         session_id=session_id,
-                        request_id=request_id,
+                        request_id=permission_request.request_id,
                         approved=False,
                         reason=f"invalid_extra_scopes: {list(invalid_scopes)}",
                     )
@@ -575,14 +601,14 @@ class GovernanceMiddleware(Middleware):
                 # All validations passed
                 logger.info(
                     f"Approval granted for {tool_name} "
-                    f"(request: {request_id}, session: {session_id}, "
+                    f"(request: {permission_request.request_id}, session: {session_id}, "
                     f"scopes: {response.selected_scopes}, lease: {response.lease_seconds}s)"
                 )
                 audit_logger.log_approval(
                     tool_name=tool_name,
                     arguments=arguments,
                     session_id=session_id,
-                    request_id=request_id,
+                    request_id=permission_request.request_id,
                     approved=True,
                     selected_scopes=response.selected_scopes,
                     lease_seconds=response.lease_seconds,
@@ -594,13 +620,13 @@ class GovernanceMiddleware(Middleware):
             else:
                 logger.error(
                     f"Unknown approval decision {response.decision} for {tool_name} "
-                    f"(request: {request_id}, session: {session_id})"
+                    f"(request: {permission_request.request_id}, session: {session_id})"
                 )
                 audit_logger.log_approval(
                     tool_name=tool_name,
                     arguments=arguments,
                     session_id=session_id,
-                    request_id=request_id,
+                    request_id=permission_request.request_id,
                     approved=False,
                     reason=f"unknown_decision: {response.decision}",
                 )
