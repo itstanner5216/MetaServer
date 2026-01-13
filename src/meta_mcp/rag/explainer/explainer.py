@@ -19,6 +19,7 @@ try:
 except ImportError:
     litellm = None
 
+from ...llm_gateway import call_model
 from ..retrieval import RetrievalCandidate
 
 logger = logging.getLogger(__name__)
@@ -392,34 +393,17 @@ class RetrievalExplainer:
         Raises:
             RuntimeError: If LLM call fails
         """
-        try:
-            # Prepare messages
-            messages = [
-                {"role": "system", "content": SYSTEM_PROMPT},
-                {"role": "user", "content": user_prompt},
-            ]
+        messages = [
+            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "user", "content": user_prompt},
+        ]
 
-            # Prepare kwargs
-            kwargs = {
-                "model": self.model,
-                "messages": messages,
-                "temperature": self.temperature,
-            }
-
-            # Add response_format if model supports it (OpenAI models)
-            if "gpt" in self.model.lower() or "o1" in self.model.lower():
-                kwargs["response_format"] = {"type": "json_object"}
-
-            # Call LLM via litellm
-            response = self.llm_client.completion(**kwargs)
-
-            # Extract content
-            content = response.choices[0].message.content
-            return content
-
-        except Exception as e:
-            logger.error(f"LLM call failed: {e}")
-            raise RuntimeError(f"LLM call failed: {e}") from e
+        return call_model(
+            model=self.model,
+            messages=messages,
+            temperature=self.temperature,
+            client=self.llm_client,
+        )
 
     def _parse_response(
         self,
