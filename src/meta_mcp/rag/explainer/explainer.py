@@ -19,6 +19,7 @@ try:
 except ImportError:
     litellm = None
 
+from ...llm.gateway import model_call
 from ..retrieval import RetrievalCandidate
 
 logger = logging.getLogger(__name__)
@@ -410,8 +411,8 @@ class RetrievalExplainer:
             if "gpt" in self.model.lower() or "o1" in self.model.lower():
                 kwargs["response_format"] = {"type": "json_object"}
 
-            # Call LLM via litellm
-            response = self.llm_client.completion(**kwargs)
+            # Call LLM via gateway
+            response = model_call(**kwargs, llm_client=self.llm_client)
 
             # Extract content
             content = response.choices[0].message.content
