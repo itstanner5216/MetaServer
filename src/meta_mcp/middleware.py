@@ -19,6 +19,7 @@ from .governance.approval import (
 )
 from .governance.artifacts import get_artifact_generator
 from .governance.tokens import verify_token
+from .hooks import hook_manager
 from .leases import lease_manager
 from .registry import tool_registry
 from .state import ExecutionMode, governance_state
@@ -645,6 +646,12 @@ class GovernanceMiddleware(Middleware):
         arguments = context.request_context.arguments or {}
         session_id = str(context.session_id)
 
+        async def invoke_tool() -> Any:
+            hook_manager.before_tool_call(context, tool_name, arguments)
+            result = await call_next()
+            hook_manager.after_tool_call(context, tool_name, arguments, result)
+            return result
+
         # PHASE 3+4 INTEGRATION: Validate lease and token before governance checks
         # Note: Bootstrap tools bypass lease checks
         # CRITICAL: Skip lease checks if ENABLE_LEASE_MANAGEMENT is False
@@ -731,13 +738,13 @@ class GovernanceMiddleware(Middleware):
                 arguments=arguments,
                 session_id=session_id,
             )
-            result = await call_next()
+            result = await invoke_tool()
             return self._apply_toon_encoding(result)
 
         # Path 2: Non-sensitive tools - pass through
         if tool_name not in SENSITIVE_TOOLS:
             logger.debug(f"Non-sensitive tool {tool_name}, passing through")
-            result = await call_next()
+            result = await invoke_tool()
             return self._apply_toon_encoding(result)
 
         # Path 3: READ_ONLY mode - block sensitive operations
@@ -773,7 +780,7 @@ class GovernanceMiddleware(Middleware):
                     context_key=context_key,
                     session_id=session_id,
                 )
-                result = await call_next()
+                result = await invoke_tool()
                 return self._apply_toon_encoding(result)
 
             # No elevation, elicit approval
@@ -804,7 +811,7 @@ class GovernanceMiddleware(Middleware):
                     )
 
                 # Execute tool
-                result = await call_next()
+                result = await invoke_tool()
                 return self._apply_toon_encoding(result)
             else:
                 # Denied - audit already logged in _elicit_approval
