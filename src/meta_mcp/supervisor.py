@@ -49,14 +49,18 @@ WORKSPACE_ROOT = Config.WORKSPACE_ROOT
 
 _loaded_tools: set[str] = set()  # Tools currently exposed to MCP clients
 _tool_instances: dict[str, Any] = {}  # Cached tool function instances
+_SERVER_ID_TO_MCP = {
+    "core_tools": core_server,
+    "admin_tools": admin_server,
+}
 
 
 async def _get_tool_function(tool_name: str) -> Optional[Any]:
     """
-    Lazily retrieve FunctionTool instance from core_server or admin_server.
+    Lazily retrieve FunctionTool instance using the registry server mapping.
 
-    Uses the async get_tool() method to retrieve the FunctionTool wrapper
-    from the mounted server instances. Caches tool instances to avoid
+    Uses the registry to find a ToolRecord, then dispatches to the mapped
+    FastMCP server for that server_id. Caches tool instances to avoid
     repeated async lookups.
 
     Args:
@@ -69,40 +73,23 @@ async def _get_tool_function(tool_name: str) -> Optional[Any]:
     if tool_name in _tool_instances:
         return _tool_instances[tool_name]
 
-    # Define tool mappings
-    core_tools = {
-        "read_file",
-        "write_file",
-        "delete_file",
-        "list_directory",
-        "create_directory",
-        "remove_directory",
-        "move_file",
-        "execute_command",
-        "git_commit",
-        "git_push",
-        "git_reset",
-    }
+    tool_record = tool_registry.get(tool_name)
+    if not tool_record:
+        return None
 
-    admin_tools = {
-        "set_governance_mode",
-        "get_governance_status",
-        "revoke_all_elevations",
-    }
+    server = _SERVER_ID_TO_MCP.get(tool_record.server_id)
+    if not server:
+        logger.warning(
+            "Tool '%s' is registered in YAML for server_id '%s', but no server mapping exists.",
+            tool_record.tool_id,
+            tool_record.server_id,
+        )
+        return None
 
-    # Try to get FunctionTool from core_server
-    if tool_name in core_tools:
-        tool_instance = await core_server.get_tool(tool_name)
-        if tool_instance:
-            _tool_instances[tool_name] = tool_instance
-            return tool_instance
-
-    # Try to get FunctionTool from admin_server
-    if tool_name in admin_tools:
-        tool_instance = await admin_server.get_tool(tool_name)
-        if tool_instance:
-            _tool_instances[tool_name] = tool_instance
-            return tool_instance
+    tool_instance = await server.get_tool(tool_name)
+    if tool_instance:
+        _tool_instances[tool_name] = tool_instance
+        return tool_instance
 
     # Tool not recognized
     return None
