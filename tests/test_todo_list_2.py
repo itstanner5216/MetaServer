@@ -11,6 +11,7 @@ Test Coverage:
 
 import importlib
 import sys
+from datetime import datetime
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -277,7 +278,7 @@ async def test_middleware_always_skips_lease_for_bootstrap_tools(
     """
     Test that middleware always skips lease check for bootstrap tools.
 
-    Validates: Bootstrap tools (search_tools, get_tool_schema) bypass lease checks
+    Validates: Bootstrap tools (search_tools, get_tool_schema, request_tool_access) bypass lease checks
     """
     # Enable lease management (ensures bootstrap bypass is active)
     original_enable = Config.ENABLE_LEASE_MANAGEMENT
@@ -305,6 +306,14 @@ async def test_middleware_always_skips_lease_for_bootstrap_tools(
             # Test get_tool_schema (bootstrap tool) - should work without lease
             call_next.reset_mock()
             mock_fastmcp_context.request_context.tool_name = "get_tool_schema"
+            mock_fastmcp_context.request_context.arguments = {"tool_name": "read_file"}
+
+            result = await middleware.on_call_tool(mock_fastmcp_context, call_next)
+            call_next.assert_called_once()
+
+            # Test request_tool_access (bootstrap tool) - should work without lease
+            call_next.reset_mock()
+            mock_fastmcp_context.request_context.tool_name = "request_tool_access"
             mock_fastmcp_context.request_context.arguments = {"tool_name": "read_file"}
 
             result = await middleware.on_call_tool(mock_fastmcp_context, call_next)
@@ -368,16 +377,15 @@ async def test_middleware_extracts_client_id_from_session_id(
 
 
 @pytest.mark.asyncio
-async def test_supervisor_get_tool_schema_uses_session_id_for_client_id(
+async def test_supervisor_request_tool_access_uses_session_id_for_client_id(
     mock_fastmcp_context
 ):
     """
-    Test that supervisor's get_tool_schema extracts client_id from ctx.session_id.
+    Test that supervisor's request_tool_access extracts client_id from ctx.session_id.
 
-    Validates: Client identification in supervisor (line 367 in supervisor.py)
+    Validates: Client identification in supervisor (request_tool_access)
     """
-    from src.meta_mcp.supervisor import get_tool_schema
-    from src.meta_mcp.registry import tool_registry
+    from src.meta_mcp.supervisor import request_tool_access
 
     # Setup context with session_id
     mock_context = MagicMock()
@@ -392,46 +400,31 @@ async def test_supervisor_get_tool_schema_uses_session_id_for_client_id(
             schema_min=None
         )
 
-        # Mock _expose_tool to succeed
-        with patch('src.meta_mcp.supervisor._expose_tool', new_callable=AsyncMock) as mock_expose, \
-             patch('src.meta_mcp.supervisor.governance_state.get_mode', new_callable=AsyncMock) as mock_mode:
-            mock_expose.return_value = True
+        with patch('src.meta_mcp.supervisor.governance_state.get_mode', new_callable=AsyncMock) as mock_mode:
             mock_mode.return_value = ExecutionMode.PERMISSION
 
-            # Mock lease_manager.grant to capture client_id
             from src.meta_mcp.leases import lease_manager
             with patch.object(lease_manager, 'grant', new_callable=AsyncMock) as mock_grant:
                 mock_grant.return_value = MagicMock(
                     tool_id="test_tool",
-                    calls_remaining=3
+                    calls_remaining=3,
+                    granted_at=datetime.now(),
+                    expires_at=datetime.now(),
+                    mode_at_issue="PERMISSION",
                 )
 
-                # Mock mcp.get_tool to return a tool
-                with patch('src.meta_mcp.supervisor.mcp') as mock_mcp:
-                    mock_tool = MagicMock()
-                    mock_tool.to_mcp_tool.return_value = MagicMock(
-                        name="test_tool",
-                        description="Test tool",
-                        inputSchema={"type": "object"}
-                    )
-                    mock_mcp.get_tool = AsyncMock(return_value=mock_tool)
+                try:
+                    await request_tool_access("test_tool", ctx=mock_context)
 
-                    # Execute get_tool_schema with context
-                    try:
-                        result = await get_tool_schema("test_tool", expand=False, ctx=mock_context)
+                    mock_grant.assert_called_once()
+                    grant_kwargs = mock_grant.call_args[1]
 
-                        # Verify lease_manager.grant was called with client_id from session_id
-                        mock_grant.assert_called_once()
+                    assert grant_kwargs['client_id'] == "supervisor-session-xyz789"
+
+                except Exception:
+                    if mock_grant.called:
                         grant_kwargs = mock_grant.call_args[1]
-
-                        # client_id should be str(ctx.session_id)
                         assert grant_kwargs['client_id'] == "supervisor-session-xyz789"
-
-                    except Exception as e:
-                        # If it fails for other reasons (like missing mocks), still check the grant call
-                        if mock_grant.called:
-                            grant_kwargs = mock_grant.call_args[1]
-                            assert grant_kwargs['client_id'] == "supervisor-session-xyz789"
 
 
 @pytest.mark.asyncio
@@ -441,7 +434,7 @@ async def test_supervisor_handles_missing_context_gracefully():
 
     Validates: Fail-safe behavior when context is unavailable (line 361-365 in supervisor.py)
     """
-    from src.meta_mcp.supervisor import get_tool_schema
+    from src.meta_mcp.supervisor import request_tool_access
 
     # Mock registry
     with patch('src.meta_mcp.supervisor.tool_registry') as mock_registry:
@@ -452,10 +445,7 @@ async def test_supervisor_handles_missing_context_gracefully():
             schema_min=None
         )
 
-        # Mock _expose_tool
-        with patch('src.meta_mcp.supervisor._expose_tool', new_callable=AsyncMock) as mock_expose, \
-             patch('src.meta_mcp.supervisor.governance_state.get_mode', new_callable=AsyncMock) as mock_mode:
-            mock_expose.return_value = True
+        with patch('src.meta_mcp.supervisor.governance_state.get_mode', new_callable=AsyncMock) as mock_mode:
             mock_mode.return_value = ExecutionMode.PERMISSION
 
             # Mock lease_manager.grant
@@ -463,10 +453,54 @@ async def test_supervisor_handles_missing_context_gracefully():
             with patch.object(lease_manager, 'grant', new_callable=AsyncMock) as mock_grant:
                 mock_grant.return_value = MagicMock(
                     tool_id="test_tool",
-                    calls_remaining=3
+                    calls_remaining=3,
+                    granted_at=datetime.now(),
+                    expires_at=datetime.now(),
+                    mode_at_issue="PERMISSION",
                 )
 
-                # Mock mcp.get_tool
+                # Execute with ctx=None (fail-safe scenario)
+                try:
+                    await request_tool_access("test_tool", ctx=None)
+
+                    mock_grant.assert_called_once()
+                    grant_kwargs = mock_grant.call_args[1]
+
+                    assert grant_kwargs['client_id'] == "unknown_client"
+
+                except Exception:
+                    if mock_grant.called:
+                        grant_kwargs = mock_grant.call_args[1]
+                        assert grant_kwargs['client_id'] == "unknown_client"
+
+
+# ============================================================================
+# TEST 4: get_tool_schema compatibility modes
+# ============================================================================
+
+
+@pytest.mark.asyncio
+async def test_get_tool_schema_does_not_grant_lease_when_compat_disabled():
+    """
+    Test that get_tool_schema does not grant leases when compatibility is disabled.
+    """
+    from src.meta_mcp.supervisor import get_tool_schema
+
+    original_compat = Config.ENABLE_SCHEMA_LEASE_COMPAT
+    Config.ENABLE_SCHEMA_LEASE_COMPAT = False
+
+    try:
+        with patch('src.meta_mcp.supervisor.tool_registry') as mock_registry:
+            mock_registry.is_registered.return_value = True
+            mock_registry.get.return_value = MagicMock(
+                risk_level="safe",
+                schema_full=None,
+                schema_min=None
+            )
+
+            with patch('src.meta_mcp.supervisor._expose_tool', new_callable=AsyncMock) as mock_expose:
+                mock_expose.return_value = True
+
                 with patch('src.meta_mcp.supervisor.mcp') as mock_mcp:
                     mock_tool = MagicMock()
                     mock_tool.to_mcp_tool.return_value = MagicMock(
@@ -476,26 +510,58 @@ async def test_supervisor_handles_missing_context_gracefully():
                     )
                     mock_mcp.get_tool = AsyncMock(return_value=mock_tool)
 
-                    # Execute with ctx=None (fail-safe scenario)
-                    try:
+                    with patch('src.meta_mcp.supervisor.lease_manager.grant', new_callable=AsyncMock) as mock_grant:
                         result = await get_tool_schema("test_tool", expand=False, ctx=None)
+                        assert "test_tool" in result
+                        mock_grant.assert_not_called()
+    finally:
+        Config.ENABLE_SCHEMA_LEASE_COMPAT = original_compat
 
-                        # Verify lease_manager.grant was called with fail-safe client_id
+
+@pytest.mark.asyncio
+async def test_get_tool_schema_grants_lease_when_compat_enabled():
+    """
+    Test that get_tool_schema still grants leases when compatibility is enabled.
+    """
+    from src.meta_mcp.supervisor import get_tool_schema
+
+    original_compat = Config.ENABLE_SCHEMA_LEASE_COMPAT
+    Config.ENABLE_SCHEMA_LEASE_COMPAT = True
+
+    try:
+        with patch('src.meta_mcp.supervisor.tool_registry') as mock_registry:
+            mock_registry.is_registered.return_value = True
+            mock_registry.get.return_value = MagicMock(
+                risk_level="safe",
+                schema_full=None,
+                schema_min=None
+            )
+
+            with patch('src.meta_mcp.supervisor._expose_tool', new_callable=AsyncMock) as mock_expose, \
+                 patch('src.meta_mcp.supervisor.governance_state.get_mode', new_callable=AsyncMock) as mock_mode:
+                mock_expose.return_value = True
+                mock_mode.return_value = ExecutionMode.PERMISSION
+
+                with patch('src.meta_mcp.supervisor.mcp') as mock_mcp:
+                    mock_tool = MagicMock()
+                    mock_tool.to_mcp_tool.return_value = MagicMock(
+                        name="test_tool",
+                        description="Test tool",
+                        inputSchema={"type": "object"}
+                    )
+                    mock_mcp.get_tool = AsyncMock(return_value=mock_tool)
+
+                    with patch('src.meta_mcp.supervisor.lease_manager.grant', new_callable=AsyncMock) as mock_grant:
+                        mock_grant.return_value = MagicMock()
+                        result = await get_tool_schema("test_tool", expand=False, ctx=None)
+                        assert "test_tool" in result
                         mock_grant.assert_called_once()
-                        grant_kwargs = mock_grant.call_args[1]
-
-                        # Should use "unknown_client" as fail-safe
-                        assert grant_kwargs['client_id'] == "unknown_client"
-
-                    except Exception:
-                        # Even if other parts fail, check the grant call used fail-safe
-                        if mock_grant.called:
-                            grant_kwargs = mock_grant.call_args[1]
-                            assert grant_kwargs['client_id'] == "unknown_client"
+    finally:
+        Config.ENABLE_SCHEMA_LEASE_COMPAT = original_compat
 
 
 # ============================================================================
-# TEST 4: format_search_results - works with both ToolSummary and ToolCandidate
+# TEST 5: format_search_results - works with both ToolSummary and ToolCandidate
 # ============================================================================
 
 
@@ -624,7 +690,7 @@ def test_format_search_results_mixed_risk_levels():
 
 
 # ============================================================================
-# TEST 5: Package imports - admin_tools.py imports work without sys.path mutation
+# TEST 6: Package imports - admin_tools.py imports work without sys.path mutation
 # ============================================================================
 
 

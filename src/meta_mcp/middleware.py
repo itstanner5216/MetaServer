@@ -648,7 +648,7 @@ class GovernanceMiddleware(Middleware):
         # PHASE 3+4 INTEGRATION: Validate lease and token before governance checks
         # Note: Bootstrap tools bypass lease checks
         # CRITICAL: Skip lease checks if ENABLE_LEASE_MANAGEMENT is False
-        bootstrap_tools = {"search_tools", "get_tool_schema"}
+        bootstrap_tools = {"search_tools", "get_tool_schema", "request_tool_access"}
 
         if Config.ENABLE_LEASE_MANAGEMENT and tool_name not in bootstrap_tools:
             # Extract client_id from FastMCP session context
@@ -663,7 +663,7 @@ class GovernanceMiddleware(Middleware):
                 )
                 raise ToolError(
                     f"No valid lease for tool '{tool_name}'. "
-                    f"Please request tool schema first via get_tool_schema('{tool_name}')."
+                    f"Please request tool access via request_tool_access('{tool_name}')."
                 )
 
             # PHASE 4: Verify capability token if present
@@ -702,7 +702,7 @@ class GovernanceMiddleware(Middleware):
                 )
                 raise ToolError(
                     f"Lease exhausted for tool '{tool_name}'. "
-                    f"Please request a new lease via get_tool_schema('{tool_name}')."
+                    f"Please request a new lease via request_tool_access('{tool_name}')."
                 )
 
             logger.info(

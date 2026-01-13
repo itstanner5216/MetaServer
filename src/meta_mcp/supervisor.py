@@ -22,7 +22,7 @@ from .governance.approval import get_approval_provider
 from .governance.artifacts import get_artifact_generator
 from .governance.policy import evaluate_policy
 from .governance.tokens import generate_token
-from .leases import lease_manager
+from .leases import ToolLease, lease_manager
 from .registry import tool_registry
 from .middleware import GovernanceMiddleware
 from .state import governance_state
@@ -312,6 +312,111 @@ def search_tools(query: str) -> str:
     return format_search_results(results)
 
 
+def _resolve_client_id(ctx: Context, tool_name: str) -> str:
+    if ctx is None:
+        logger.warning(
+            f"No context available for {tool_name}, using fail-safe client_id"
+        )
+        return "unknown_client"
+    return str(ctx.session_id)
+
+
+async def _grant_tool_lease(tool_name: str, ctx: Context) -> ToolLease:
+    client_id = _resolve_client_id(ctx, tool_name)
+
+    tool_record = tool_registry.get(tool_name)
+    if not tool_record:
+        raise ToolError(f"Tool '{tool_name}' not found in registry")
+
+    risk_level = tool_record.risk_level
+    current_mode = await governance_state.get_mode()
+
+    policy_decision = evaluate_policy(
+        mode=current_mode,
+        tool_risk=risk_level,
+        tool_id=tool_name,
+    )
+
+    if policy_decision.action == "block":
+        logger.warning(
+            f"Policy blocked access to '{tool_name}': {policy_decision.reason}"
+        )
+        raise ToolError(
+            f"Access to '{tool_name}' blocked by policy: {policy_decision.reason}"
+        )
+
+    if policy_decision.action == "require_approval":
+        logger.info(
+            f"Policy requires approval for '{tool_name}': {policy_decision.reason}"
+        )
+        raise ToolError(
+            f"Access to '{tool_name}' requires approval. "
+            f"The system will prompt for permission when you attempt to use this tool. "
+            f"Reason: {policy_decision.reason}"
+        )
+
+    logger.info(f"Policy allows access to '{tool_name}': {policy_decision.reason}")
+
+    ttl_seconds = Config.LEASE_TTL_BY_RISK.get(risk_level, 300)
+    calls_remaining = Config.LEASE_CALLS_BY_RISK.get(risk_level, 1)
+
+    capability_token = generate_token(
+        client_id=client_id,
+        tool_id=tool_name,
+        ttl_seconds=ttl_seconds,
+        secret=Config.HMAC_SECRET,
+        context_key=None,
+    )
+
+    lease = await lease_manager.grant(
+        client_id=client_id,
+        tool_id=tool_name,
+        ttl_seconds=ttl_seconds,
+        calls_remaining=calls_remaining,
+        mode_at_issue=current_mode.value,
+        capability_token=capability_token,
+    )
+
+    if lease is None:
+        raise ToolError(
+            f"Failed to grant lease for '{tool_name}'. "
+            "Access denied due to lease management failure."
+        )
+
+    logger.info(
+        f"Granted lease for {client_id}:{tool_name} "
+        f"(TTL={ttl_seconds}s, calls={calls_remaining}, mode={current_mode.value}, "
+        f"policy={policy_decision.action})"
+    )
+
+    return lease
+
+
+@mcp.tool()
+async def request_tool_access(tool_name: str, ctx: Context = None) -> str:
+    """
+    Request authorization to call a tool.
+
+    This explicit lease pathway performs governance checks and grants a
+    time-limited lease for the requested tool.
+    """
+    if not tool_registry.is_registered(tool_name):
+        raise ToolError(f"Tool '{tool_name}' is not registered")
+
+    lease = await _grant_tool_lease(tool_name, ctx)
+
+    return json.dumps(
+        {
+            "status": "approved",
+            "tool": tool_name,
+            "ttl_seconds": int((lease.expires_at - lease.granted_at).total_seconds()),
+            "calls_remaining": lease.calls_remaining,
+            "mode_at_issue": lease.mode_at_issue,
+        },
+        indent=2,
+    )
+
+
 @mcp.tool()
 async def get_tool_schema(tool_name: str, expand: bool = False, ctx: Context = None) -> str:
     """
@@ -330,7 +435,8 @@ async def get_tool_schema(tool_name: str, expand: bool = False, ctx: Context = N
     Workflow:
     - Model searches for tools using search_tools() → gets metadata only
     - Model requests schema using get_tool_schema() → tool is exposed + schema returned
-    - Tool now appears in tools/list and can be invoked
+    - Model requests a lease via request_tool_access() before invoking the tool
+    - Tool now appears in tools/list and can be invoked (after requesting access)
     - Model can request full schema using get_tool_schema(expand=True) if needed
 
     Args:
@@ -355,96 +461,9 @@ async def get_tool_schema(tool_name: str, expand: bool = False, ctx: Context = N
             "Tool may not exist in core_server or admin_server."
         )
 
-    # Step 2.5: PHASE 3+4 INTEGRATION - Evaluate policy and grant lease
-    # Extract client_id from FastMCP session context
-    # In FastMCP/MCP protocol, session_id is the stable client connection identifier
-    # If context is not available (shouldn't happen), fail closed with safe default
-    if ctx is None:
-        logger.warning(
-            f"No context available for get_tool_schema({tool_name}), using fail-safe client_id"
-        )
-        client_id = "unknown_client"  # Fail-safe: each call gets unique lease
-    else:
-        client_id = str(ctx.session_id)
-
-    # Get tool metadata from registry to determine risk level
-    tool_record = tool_registry.get(tool_name)
-    if not tool_record:
-        raise ToolError(f"Tool '{tool_name}' not found in registry")
-
-    risk_level = tool_record.risk_level
-
-    # Get current governance mode
-    current_mode = await governance_state.get_mode()
-
-    # PHASE 4: Evaluate governance policy
-    policy_decision = evaluate_policy(
-        mode=current_mode,
-        tool_risk=risk_level,
-        tool_id=tool_name,
-    )
-
-    # Handle policy decision
-    if policy_decision.action == "block":
-        # Policy blocks access - deny immediately
-        logger.warning(
-            f"Policy blocked access to '{tool_name}': {policy_decision.reason}"
-        )
-        raise ToolError(
-            f"Access to '{tool_name}' blocked by policy: {policy_decision.reason}"
-        )
-
-    elif policy_decision.action == "require_approval":
-        # Policy requires approval - trigger elicitation
-        # NOTE: This uses the existing middleware elicitation pattern
-        # The middleware will handle approval request and elevation grant
-        logger.info(
-            f"Policy requires approval for '{tool_name}': {policy_decision.reason}"
-        )
-        raise ToolError(
-            f"Access to '{tool_name}' requires approval. "
-            f"The system will prompt for permission when you attempt to use this tool. "
-            f"Reason: {policy_decision.reason}"
-        )
-
-    # Policy allows access - proceed with lease grant
-    logger.info(f"Policy allows access to '{tool_name}': {policy_decision.reason}")
-
-    # Determine TTL and calls based on risk level
-    ttl_seconds = Config.LEASE_TTL_BY_RISK.get(risk_level, 300)
-    calls_remaining = Config.LEASE_CALLS_BY_RISK.get(risk_level, 1)
-
-    # PHASE 4: Generate capability token
-    capability_token = generate_token(
-        client_id=client_id,
-        tool_id=tool_name,
-        ttl_seconds=ttl_seconds,
-        secret=Config.HMAC_SECRET,
-        context_key=None,  # No additional context scoping for now
-    )
-
-    # Grant lease with capability token
-    lease = await lease_manager.grant(
-        client_id=client_id,
-        tool_id=tool_name,
-        ttl_seconds=ttl_seconds,
-        calls_remaining=calls_remaining,
-        mode_at_issue=current_mode.value,
-        capability_token=capability_token,
-    )
-
-    # Fail-safe: Deny access if lease grant fails
-    if lease is None:
-        raise ToolError(
-            f"Failed to grant lease for '{tool_name}'. "
-            "Access denied due to lease management failure."
-        )
-
-    logger.info(
-        f"Granted lease for {client_id}:{tool_name} "
-        f"(TTL={ttl_seconds}s, calls={calls_remaining}, mode={current_mode.value}, "
-        f"policy={policy_decision.action})"
-    )
+    if Config.ENABLE_SCHEMA_LEASE_COMPAT:
+        # Compatibility mode: keep legacy schema-triggered leases for one release.
+        await _grant_tool_lease(tool_name, ctx)
 
     # Step 3: Retrieve tool from MCP registry (now exposed)
     try:

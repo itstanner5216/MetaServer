@@ -131,6 +131,7 @@ class ToolRegistry:
         ONLY these tools are exposed at startup:
         - search_tools: Entry point for discovery
         - get_tool_schema: Triggers tool exposure (progressive discovery)
+        - request_tool_access: Explicit lease grant path
 
         All other tools (including read_file, list_directory) are:
         1. Registered in this registry (searchable via search_tools)
@@ -140,9 +141,9 @@ class ToolRegistry:
         This implements true progressive discovery.
 
         Returns:
-            List of 2 bootstrap tool names
+            List of bootstrap tool names
         """
-        return ["search_tools", "get_tool_schema"]
+        return ["search_tools", "get_tool_schema", "request_tool_access"]
 
     def get_all_summaries(self) -> List[ToolSummary]:
         """

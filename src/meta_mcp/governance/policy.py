@@ -54,7 +54,7 @@ def evaluate_policy(
     Design Plan Section 5.5
     """
     # Bootstrap tools are always allowed
-    if tool_id in {"search_tools", "get_tool_schema"}:
+    if tool_id in {"search_tools", "get_tool_schema", "request_tool_access"}:
         return PolicyDecision(
             action="allow",
             requires_approval=False,

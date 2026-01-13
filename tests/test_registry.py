@@ -14,9 +14,9 @@ def test_registry_loads_from_yaml():
 
 
 def test_bootstrap_tools_defined():
-    """Bootstrap tools must be exactly search_tools and get_tool_schema (Nuance 5.3)."""
+    """Bootstrap tools must include discovery and access helpers (Nuance 5.3)."""
     bootstrap = tool_registry.get_bootstrap_tools()
-    assert bootstrap == {"search_tools", "get_tool_schema"}
+    assert bootstrap == {"search_tools", "get_tool_schema", "request_tool_access"}
 
 
 def test_tool_record_validation():
@@ -82,7 +82,7 @@ def test_get_tool_not_found():
 def test_all_tools_have_required_fields():
     """All tools should have required metadata fields."""
     summaries = tool_registry.get_all_summaries()
-    assert len(summaries) == 15  # Total tools from YAML
+    assert len(summaries) == 16  # Total tools from YAML
 
     for tool in summaries:
         assert tool.tool_id
@@ -98,9 +98,11 @@ def test_bootstrap_tools_are_safe():
     """Bootstrap tools should have risk_level=safe (Nuance 5.3)."""
     search_tool = tool_registry.get("search_tools")
     schema_tool = tool_registry.get("get_tool_schema")
+    access_tool = tool_registry.get("request_tool_access")
 
     assert search_tool.risk_level == "safe"
     assert schema_tool.risk_level == "safe"
+    assert access_tool.risk_level == "safe"
 
 
 def test_sensitive_tools_require_permission():

@@ -24,7 +24,11 @@ class ToolRegistry:
         """Initialize empty tool registry."""
         self._tools: Dict[str, ToolRecord] = {}
         self._servers: Dict[str, ServerRecord] = {}
-        self._bootstrap_tools = {"search_tools", "get_tool_schema"}
+        self._bootstrap_tools = {
+            "search_tools",
+            "get_tool_schema",
+            "request_tool_access",
+        }
 
     @classmethod
     def from_yaml(cls, yaml_path: str) -> "ToolRegistry":
@@ -185,11 +189,12 @@ class ToolRegistry:
         Bootstrap tools are:
         - search_tools: Entry point for discovery
         - get_tool_schema: Triggers tool exposure
+        - request_tool_access: Explicit lease grant path
 
         These tools are auto-exposed at startup and always available.
 
         Returns:
-            Set of 2 bootstrap tool names
+            Set of bootstrap tool names
         """
         return self._bootstrap_tools
 

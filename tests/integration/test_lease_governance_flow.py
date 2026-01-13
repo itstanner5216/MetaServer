@@ -126,7 +126,7 @@ async def test_bootstrap_tools_always_allowed(redis_client):
     """
     Verify bootstrap tools are always allowed regardless of mode.
 
-    Security: search_tools and get_tool_schema must always work.
+    Security: bootstrap tools must always work.
     """
     for mode in [ExecutionMode.READ_ONLY, ExecutionMode.PERMISSION, ExecutionMode.BYPASS]:
         # search_tools always allowed
@@ -142,6 +142,14 @@ async def test_bootstrap_tools_always_allowed(redis_client):
             mode=mode,
             tool_risk="safe",
             tool_id="get_tool_schema"
+        )
+        assert decision.action == "allow"
+
+        # request_tool_access always allowed
+        decision = evaluate_policy(
+            mode=mode,
+            tool_risk="safe",
+            tool_id="request_tool_access"
         )
         assert decision.action == "allow"
 
