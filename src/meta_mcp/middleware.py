@@ -649,11 +649,14 @@ class GovernanceMiddleware(Middleware):
         # Note: Bootstrap tools bypass lease checks
         # CRITICAL: Skip lease checks if ENABLE_LEASE_MANAGEMENT is False
         bootstrap_tools = {"search_tools", "get_tool_schema"}
+        should_consume_lease = False
+        client_id = None
 
         if Config.ENABLE_LEASE_MANAGEMENT and tool_name not in bootstrap_tools:
             # Extract client_id from FastMCP session context
             # In FastMCP/MCP protocol, session_id is the stable client connection identifier
             client_id = str(context.session_id)
+            should_consume_lease = True
 
             # Validate lease exists
             lease = await lease_manager.validate(client_id, tool_name)
@@ -693,22 +696,25 @@ class GovernanceMiddleware(Middleware):
                     f"(client: {client_id})"
                 )
 
-            # Consume lease (decrement calls_remaining)
-            consumed_lease = await lease_manager.consume(client_id, tool_name)
-            if consumed_lease is None:
-                logger.warning(
-                    f"Failed to consume lease for {tool_name} "
-                    f"(client: {client_id}, session: {session_id})"
-                )
-                raise ToolError(
-                    f"Lease exhausted for tool '{tool_name}'. "
-                    f"Please request a new lease via get_tool_schema('{tool_name}')."
-                )
+        async def _execute_tool() -> Any:
+            result = await call_next()
+            if should_consume_lease and client_id is not None:
+                consumed_lease = await lease_manager.consume(client_id, tool_name)
+                if consumed_lease is None:
+                    logger.warning(
+                        f"Failed to consume lease for {tool_name} "
+                        f"(client: {client_id}, session: {session_id})"
+                    )
+                    raise ToolError(
+                        f"Lease exhausted for tool '{tool_name}'. "
+                        f"Please request a new lease via get_tool_schema('{tool_name}')."
+                    )
 
-            logger.info(
-                f"Lease consumed for {tool_name} "
-                f"(client: {client_id}, remaining={consumed_lease.calls_remaining})"
-            )
+                logger.info(
+                    f"Lease consumed for {tool_name} "
+                    f"(client: {client_id}, remaining={consumed_lease.calls_remaining})"
+                )
+            return self._apply_toon_encoding(result)
 
         # Get current governance mode
         mode = await governance_state.get_mode()
@@ -731,14 +737,12 @@ class GovernanceMiddleware(Middleware):
                 arguments=arguments,
                 session_id=session_id,
             )
-            result = await call_next()
-            return self._apply_toon_encoding(result)
+            return await _execute_tool()
 
         # Path 2: Non-sensitive tools - pass through
         if tool_name not in SENSITIVE_TOOLS:
             logger.debug(f"Non-sensitive tool {tool_name}, passing through")
-            result = await call_next()
-            return self._apply_toon_encoding(result)
+            return await _execute_tool()
 
         # Path 3: READ_ONLY mode - block sensitive operations
         if mode == ExecutionMode.READ_ONLY:
@@ -773,8 +777,7 @@ class GovernanceMiddleware(Middleware):
                     context_key=context_key,
                     session_id=session_id,
                 )
-                result = await call_next()
-                return self._apply_toon_encoding(result)
+                return await _execute_tool()
 
             # No elevation, elicit approval
             logger.info(
@@ -804,8 +807,7 @@ class GovernanceMiddleware(Middleware):
                     )
 
                 # Execute tool
-                result = await call_next()
-                return self._apply_toon_encoding(result)
+                return await _execute_tool()
             else:
                 # Denied - audit already logged in _elicit_approval
                 logger.warning(f"Approval denied for {tool_name} (session: {session_id})")
