@@ -24,26 +24,6 @@ from .registry import tool_registry
 from .state import ExecutionMode, governance_state
 from .toon import encode_output
 
-
-# Constants
-SENSITIVE_TOOLS = {
-    # File operations
-    "write_file",
-    "delete_file",
-    "move_file",
-    "create_directory",
-    "remove_directory",
-    # Command execution
-    "execute_command",
-    # Git operations
-    "git_commit",
-    "git_push",
-    "git_reset",
-    # Admin operations
-    "set_governance_mode",
-    "revoke_all_elevations",
-}
-
 ELICITATION_TIMEOUT = Config.ELICITATION_TIMEOUT
 DEFAULT_ELEVATION_TTL = Config.DEFAULT_ELEVATION_TTL
 
@@ -84,6 +64,29 @@ class GovernanceMiddleware(Middleware):
             # Fail-safe: return original result if encoding fails
             logger.warning(f"TOON encoding failed: {e}, returning original result")
             return result
+
+    @staticmethod
+    def _is_sensitive(tool_name: str) -> bool:
+        """
+        Determine whether a tool is sensitive based on registry metadata.
+
+        Args:
+            tool_name: Name of the tool
+
+        Returns:
+            True if the tool requires permission or is non-safe risk level.
+
+        Raises:
+            ToolError: If tool is not registered.
+        """
+        tool_record = tool_registry.get(tool_name)
+        if tool_record is None:
+            logger.error(f"Tool '{tool_name}' not found in registry")
+            raise ToolError(
+                f"Tool '{tool_name}' is not registered; governance checks cannot proceed."
+            )
+
+        return tool_record.requires_permission or tool_record.risk_level != "safe"
 
     @staticmethod
     def _extract_context_key(tool_name: str, arguments: Dict[str, Any]) -> str:
@@ -247,16 +250,20 @@ class GovernanceMiddleware(Middleware):
             List of required permission scopes
         """
         # Start with base scopes from registry
-        tool_record = tool_registry.get_tool(tool_name)
-        if tool_record and tool_record.required_scopes:
-            base_scopes = tool_record.required_scopes.copy()
-        else:
-            # Fallback: generate basic scope if not in registry
-            logger.warning(
-                f"Tool {tool_name} not found in registry or has no required_scopes, "
-                f"using fallback scope"
+        tool_record = tool_registry.get(tool_name)
+        if tool_record is None:
+            logger.error(f"Tool '{tool_name}' not found in registry")
+            raise ToolError(
+                f"Tool '{tool_name}' is not registered; cannot determine required scopes."
             )
-            base_scopes = [f"tool:{tool_name}"]
+
+        if not tool_record.required_scopes:
+            logger.error(f"Tool '{tool_name}' missing required scopes in registry")
+            raise ToolError(
+                f"Tool '{tool_name}' has no required scopes defined in registry."
+            )
+
+        base_scopes = tool_record.required_scopes.copy()
 
         # Add resource-specific scopes based on arguments
         # These are dynamic and depend on actual operation context
@@ -606,6 +613,8 @@ class GovernanceMiddleware(Middleware):
                 )
                 return False, 0, []
 
+        except ToolError:
+            raise
         except Exception as e:
             # Error = denial (fail-safe)
             logger.error(
@@ -735,7 +744,7 @@ class GovernanceMiddleware(Middleware):
             return self._apply_toon_encoding(result)
 
         # Path 2: Non-sensitive tools - pass through
-        if tool_name not in SENSITIVE_TOOLS:
+        if not self._is_sensitive(tool_name):
             logger.debug(f"Non-sensitive tool {tool_name}, passing through")
             result = await call_next()
             return self._apply_toon_encoding(result)
