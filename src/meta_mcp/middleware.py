@@ -85,6 +85,28 @@ class GovernanceMiddleware(Middleware):
             logger.warning(f"TOON encoding failed: {e}, returning original result")
             return result
 
+    async def _invoke_tool(
+        self,
+        context: Context,
+        tool_name: str,
+        arguments: Dict[str, Any],
+        call_next,
+    ) -> Any:
+        """
+        Invoke the next middleware/tool and apply TOON encoding if enabled.
+
+        Args:
+            context: FastMCP context
+            tool_name: Name of the tool
+            arguments: Tool arguments
+            call_next: Next middleware in chain
+
+        Returns:
+            Tool result with TOON encoding applied if configured
+        """
+        result = await call_next()
+        return self._apply_toon_encoding(result)
+
     @staticmethod
     def _extract_context_key(tool_name: str, arguments: Dict[str, Any]) -> str:
         """
@@ -731,14 +753,16 @@ class GovernanceMiddleware(Middleware):
                 arguments=arguments,
                 session_id=session_id,
             )
-            result = await call_next()
-            return self._apply_toon_encoding(result)
+            return await self._invoke_tool(
+                context, tool_name, arguments, call_next
+            )
 
         # Path 2: Non-sensitive tools - pass through
         if tool_name not in SENSITIVE_TOOLS:
             logger.debug(f"Non-sensitive tool {tool_name}, passing through")
-            result = await call_next()
-            return self._apply_toon_encoding(result)
+            return await self._invoke_tool(
+                context, tool_name, arguments, call_next
+            )
 
         # Path 3: READ_ONLY mode - block sensitive operations
         if mode == ExecutionMode.READ_ONLY:
@@ -773,8 +797,9 @@ class GovernanceMiddleware(Middleware):
                     context_key=context_key,
                     session_id=session_id,
                 )
-                result = await call_next()
-                return self._apply_toon_encoding(result)
+                return await self._invoke_tool(
+                    context, tool_name, arguments, call_next
+                )
 
             # No elevation, elicit approval
             logger.info(
@@ -804,8 +829,9 @@ class GovernanceMiddleware(Middleware):
                     )
 
                 # Execute tool
-                result = await call_next()
-                return self._apply_toon_encoding(result)
+                return await self._invoke_tool(
+                    context, tool_name, arguments, call_next
+                )
             else:
                 # Denied - audit already logged in _elicit_approval
                 logger.warning(f"Approval denied for {tool_name} (session: {session_id})")
