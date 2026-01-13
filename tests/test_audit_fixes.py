@@ -90,6 +90,24 @@ class TestAuditLoggingFixes:
         assert "read_file" in content
         assert "session_old" in content
 
+    def test_audit_log_rotation_does_not_raise(self, tmp_path):
+        """Test audit log rotation handles multiple writes without raising errors."""
+        log_file = tmp_path / "audit.jsonl"
+        logger = AuditLogger(str(log_file), max_bytes=200, backup_count=2)
+
+        for index in range(30):
+            logger.log(
+                AuditEvent.TOOL_INVOKED,
+                tool_name="write_file",
+                arguments={"payload": "x" * 100},
+                session_id=f"session_{index}",
+                mode="PERMISSION",
+            )
+
+        assert log_file.exists()
+        rotated_logs = list(tmp_path.glob("audit.jsonl.*"))
+        assert rotated_logs, "Expected rotated audit log files to be created"
+
 
 class TestScopeEnforcementFixes:
     """Test scope enforcement requires ALL required scopes."""

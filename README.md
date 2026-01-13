@@ -60,6 +60,11 @@ export HMAC_SECRET="your-64-byte-hex-key"
 # Workspace root directory
 export WORKSPACE_ROOT="./workspace"
 
+# Audit logging
+export AUDIT_LOG_PATH="./audit.jsonl"
+export AUDIT_LOG_MAX_BYTES="10485760"    # Rotate after ~10MB
+export AUDIT_LOG_BACKUP_COUNT="5"        # Retain 5 rotated files
+
 # Server configuration
 export HOST="0.0.0.0"
 export PORT="8001"
