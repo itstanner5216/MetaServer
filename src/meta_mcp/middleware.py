@@ -22,6 +22,7 @@ from .governance.tokens import verify_token
 from .leases import lease_manager
 from .registry import tool_registry
 from .state import ExecutionMode, governance_state
+from .tooling.hooks import hook_manager
 from .toon import encode_output
 
 
@@ -46,6 +47,34 @@ SENSITIVE_TOOLS = {
 
 ELICITATION_TIMEOUT = Config.ELICITATION_TIMEOUT
 DEFAULT_ELEVATION_TTL = Config.DEFAULT_ELEVATION_TTL
+
+
+async def invoke_tool(
+    ctx: Context,
+    tool_name: str,
+    args: Dict[str, Any],
+    call_next,
+) -> Any:
+    """
+    Invoke tool execution with pre/post hook support.
+
+    Args:
+        ctx: FastMCP context
+        tool_name: Name of the tool being invoked
+        args: Tool arguments
+        call_next: Next middleware in chain
+
+    Returns:
+        Tool result
+    """
+    hook_manager.before_tool_call(ctx, tool_name, args)
+    try:
+        result = await call_next()
+    except Exception as error:
+        hook_manager.after_tool_call(ctx, tool_name, args, None, error)
+        raise
+    hook_manager.after_tool_call(ctx, tool_name, args, result, None)
+    return result
 
 
 class GovernanceMiddleware(Middleware):
@@ -731,13 +760,13 @@ class GovernanceMiddleware(Middleware):
                 arguments=arguments,
                 session_id=session_id,
             )
-            result = await call_next()
+            result = await invoke_tool(context, tool_name, arguments, call_next)
             return self._apply_toon_encoding(result)
 
         # Path 2: Non-sensitive tools - pass through
         if tool_name not in SENSITIVE_TOOLS:
             logger.debug(f"Non-sensitive tool {tool_name}, passing through")
-            result = await call_next()
+            result = await invoke_tool(context, tool_name, arguments, call_next)
             return self._apply_toon_encoding(result)
 
         # Path 3: READ_ONLY mode - block sensitive operations
@@ -773,7 +802,7 @@ class GovernanceMiddleware(Middleware):
                     context_key=context_key,
                     session_id=session_id,
                 )
-                result = await call_next()
+                result = await invoke_tool(context, tool_name, arguments, call_next)
                 return self._apply_toon_encoding(result)
 
             # No elevation, elicit approval
@@ -804,7 +833,7 @@ class GovernanceMiddleware(Middleware):
                     )
 
                 # Execute tool
-                result = await call_next()
+                result = await invoke_tool(context, tool_name, arguments, call_next)
                 return self._apply_toon_encoding(result)
             else:
                 # Denied - audit already logged in _elicit_approval
