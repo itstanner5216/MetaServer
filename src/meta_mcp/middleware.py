@@ -385,74 +385,12 @@ class GovernanceMiddleware(Middleware):
         session_id = str(ctx.session_id)
 
         try:
-            # Generate stable request_id
-            context_key = self._extract_context_key(tool_name, arguments)
-            request_id = self._generate_request_id(session_id, tool_name, context_key)
-
-            # Get required scopes for this operation
-            required_scopes = self._get_required_scopes(tool_name, arguments)
-
-            # Format approval message
-            request_message = self._format_approval_request(tool_name, arguments)
-
-            # Generate approval artifacts (HTML and JSON)
-            artifacts_path = None
-            try:
-                artifact_generator = get_artifact_generator()
-
-                # Generate HTML artifact for GUI display
-                html_path = artifact_generator.generate_html_artifact(
-                    request_id=request_id,
-                    tool_name=tool_name,
-                    message=request_message,
-                    required_scopes=required_scopes,
-                    arguments=arguments,
-                    context_metadata={
-                        "session_id": session_id,
-                        "context_key": context_key,
-                    },
-                )
-
-                # Generate JSON artifact for programmatic access
-                json_path = artifact_generator.generate_json_artifact(
-                    request_id=request_id,
-                    tool_name=tool_name,
-                    message=request_message,
-                    required_scopes=required_scopes,
-                    arguments=arguments,
-                    context_metadata={
-                        "session_id": session_id,
-                        "context_key": context_key,
-                    },
-                )
-
-                # Use HTML path for UI (JSON available at same location with .json extension)
-                artifacts_path = html_path
-                logger.debug(
-                    f"Generated approval artifacts for {request_id}: "
-                    f"HTML={html_path}, JSON={json_path}"
-                )
-
-            except Exception as e:
-                # Non-fatal: approval can proceed without artifacts
-                logger.warning(
-                    f"Failed to generate approval artifacts for {request_id}: {e}"
-                )
-
-            # Create approval request
-            approval_request = ApprovalRequest(
-                request_id=request_id,
-                tool_name=tool_name,
-                message=request_message,
-                required_scopes=required_scopes,
-                artifacts_path=artifacts_path,
-                timeout_seconds=ELICITATION_TIMEOUT,
-                context_metadata={
-                    "session_id": session_id,
-                    "arguments": arguments,
-                    "context_key": context_key,
-                },
+            approval_request, permission_context = self._build_permission_request(
+                ctx, tool_name, arguments
             )
+            request_id = permission_context["request_id"]
+            required_scopes = permission_context["required_scopes"]
+            context_key = permission_context["context_key"]
 
             # Audit approval request with request_id
             audit_logger.log(
@@ -621,6 +559,126 @@ class GovernanceMiddleware(Middleware):
             )
             return False, 0, []
 
+    def _build_permission_request(
+        self, run_context: Context, tool_name: str, arguments: Dict[str, Any]
+    ) -> tuple[ApprovalRequest, Dict[str, Any]]:
+        """
+        Build approval request and supporting metadata.
+
+        Args:
+            run_context: FastMCP run context
+            tool_name: Name of the tool
+            arguments: Tool arguments
+
+        Returns:
+            Tuple of (ApprovalRequest, permission_context)
+        """
+        session_id = str(run_context.session_id)
+
+        # Generate stable request_id
+        context_key = self._extract_context_key(tool_name, arguments)
+        request_id = self._generate_request_id(session_id, tool_name, context_key)
+
+        # Get required scopes for this operation
+        required_scopes = self._get_required_scopes(tool_name, arguments)
+
+        # Format approval message
+        request_message = self._format_approval_request(tool_name, arguments)
+
+        # Generate approval artifacts (HTML and JSON)
+        artifacts_path = None
+        try:
+            artifact_generator = get_artifact_generator()
+
+            # Generate HTML artifact for GUI display
+            html_path = artifact_generator.generate_html_artifact(
+                request_id=request_id,
+                tool_name=tool_name,
+                message=request_message,
+                required_scopes=required_scopes,
+                arguments=arguments,
+                context_metadata={
+                    "session_id": session_id,
+                    "context_key": context_key,
+                },
+            )
+
+            # Generate JSON artifact for programmatic access
+            json_path = artifact_generator.generate_json_artifact(
+                request_id=request_id,
+                tool_name=tool_name,
+                message=request_message,
+                required_scopes=required_scopes,
+                arguments=arguments,
+                context_metadata={
+                    "session_id": session_id,
+                    "context_key": context_key,
+                },
+            )
+
+            # Use HTML path for UI (JSON available at same location with .json extension)
+            artifacts_path = html_path
+            logger.debug(
+                f"Generated approval artifacts for {request_id}: "
+                f"HTML={html_path}, JSON={json_path}"
+            )
+
+        except Exception as e:
+            # Non-fatal: approval can proceed without artifacts
+            logger.warning(f"Failed to generate approval artifacts for {request_id}: {e}")
+
+        # Create approval request
+        approval_request = ApprovalRequest(
+            request_id=request_id,
+            tool_name=tool_name,
+            message=request_message,
+            required_scopes=required_scopes,
+            artifacts_path=artifacts_path,
+            timeout_seconds=ELICITATION_TIMEOUT,
+            context_metadata={
+                "session_id": session_id,
+                "arguments": arguments,
+                "context_key": context_key,
+            },
+        )
+
+        return approval_request, {
+            "session_id": session_id,
+            "request_id": request_id,
+            "required_scopes": required_scopes,
+            "context_key": context_key,
+        }
+
+    async def _run_tool_hooks(
+        self, run_context: Context, stage: str, result: Optional[Any] = None
+    ) -> None:
+        """
+        Hook seam for tool execution lifecycle.
+
+        Args:
+            run_context: FastMCP run context
+            stage: Hook stage ("before" or "after")
+            result: Optional tool result for after hook
+        """
+        _ = (run_context, stage, result)
+        return None
+
+    async def invoke_tool(self, run_context: Context, call_next) -> Any:
+        """
+        Execute the tool via middleware chain.
+
+        Args:
+            run_context: FastMCP run context
+            call_next: Next middleware/tool callable
+
+        Returns:
+            Tool execution result
+        """
+        await self._run_tool_hooks(run_context, "before")
+        result = await call_next()
+        await self._run_tool_hooks(run_context, "after", result=result)
+        return result
+
     async def on_call_tool(self, context: Context, call_next):
         """
         Intercept tool calls and enforce tri-state governance.
@@ -731,13 +789,13 @@ class GovernanceMiddleware(Middleware):
                 arguments=arguments,
                 session_id=session_id,
             )
-            result = await call_next()
+            result = await self.invoke_tool(context, call_next)
             return self._apply_toon_encoding(result)
 
         # Path 2: Non-sensitive tools - pass through
         if tool_name not in SENSITIVE_TOOLS:
             logger.debug(f"Non-sensitive tool {tool_name}, passing through")
-            result = await call_next()
+            result = await self.invoke_tool(context, call_next)
             return self._apply_toon_encoding(result)
 
         # Path 3: READ_ONLY mode - block sensitive operations
@@ -773,7 +831,7 @@ class GovernanceMiddleware(Middleware):
                     context_key=context_key,
                     session_id=session_id,
                 )
-                result = await call_next()
+                result = await self.invoke_tool(context, call_next)
                 return self._apply_toon_encoding(result)
 
             # No elevation, elicit approval
@@ -804,7 +862,7 @@ class GovernanceMiddleware(Middleware):
                     )
 
                 # Execute tool
-                result = await call_next()
+                result = await self.invoke_tool(context, call_next)
                 return self._apply_toon_encoding(result)
             else:
                 # Denied - audit already logged in _elicit_approval
