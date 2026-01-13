@@ -49,6 +49,42 @@ WORKSPACE_ROOT = Config.WORKSPACE_ROOT
 
 _loaded_tools: set[str] = set()  # Tools currently exposed to MCP clients
 _tool_instances: dict[str, Any] = {}  # Cached tool function instances
+_SERVER_ID_TO_INSTANCE: dict[str, FastMCP] = {
+    "core_tools": core_server,
+    "admin_tools": admin_server,
+}
+_FALLBACK_TOOL_SERVERS: dict[str, set[str]] = {
+    "core_tools": {
+        "read_file",
+        "write_file",
+        "delete_file",
+        "list_directory",
+        "create_directory",
+        "remove_directory",
+        "move_file",
+        "execute_command",
+        "git_commit",
+        "git_push",
+        "git_reset",
+    },
+    "admin_tools": {
+        "set_governance_mode",
+        "get_governance_status",
+        "revoke_all_elevations",
+    },
+}
+
+
+def _fallback_server_for_tool(tool_name: str) -> Optional[FastMCP]:
+    """
+    Resolve a server instance for tools missing from the registry.
+
+    This is a temporary transition fallback for unknown tools.
+    """
+    for server_id, tool_names in _FALLBACK_TOOL_SERVERS.items():
+        if tool_name in tool_names:
+            return _SERVER_ID_TO_INSTANCE.get(server_id)
+    return None
 
 
 async def _get_tool_function(tool_name: str) -> Optional[Any]:
@@ -69,42 +105,32 @@ async def _get_tool_function(tool_name: str) -> Optional[Any]:
     if tool_name in _tool_instances:
         return _tool_instances[tool_name]
 
-    # Define tool mappings
-    core_tools = {
-        "read_file",
-        "write_file",
-        "delete_file",
-        "list_directory",
-        "create_directory",
-        "remove_directory",
-        "move_file",
-        "execute_command",
-        "git_commit",
-        "git_push",
-        "git_reset",
-    }
+    tool_record = tool_registry.get(tool_name)
+    server_instance = None
 
-    admin_tools = {
-        "set_governance_mode",
-        "get_governance_status",
-        "revoke_all_elevations",
-    }
+    if tool_record:
+        server_instance = _SERVER_ID_TO_INSTANCE.get(tool_record.server_id)
+        if server_instance is None:
+            logger.warning(
+                f"Unknown server_id '{tool_record.server_id}' for tool '{tool_name}', "
+                "falling back to legacy mapping"
+            )
+    else:
+        logger.warning(
+            f"Tool '{tool_name}' not found in registry, falling back to legacy mapping"
+        )
 
-    # Try to get FunctionTool from core_server
-    if tool_name in core_tools:
-        tool_instance = await core_server.get_tool(tool_name)
-        if tool_instance:
-            _tool_instances[tool_name] = tool_instance
-            return tool_instance
+    if server_instance is None:
+        server_instance = _fallback_server_for_tool(tool_name)
 
-    # Try to get FunctionTool from admin_server
-    if tool_name in admin_tools:
-        tool_instance = await admin_server.get_tool(tool_name)
-        if tool_instance:
-            _tool_instances[tool_name] = tool_instance
-            return tool_instance
+    if server_instance is None:
+        return None
 
-    # Tool not recognized
+    tool_instance = await server_instance.get_tool(tool_name)
+    if tool_instance:
+        _tool_instances[tool_name] = tool_instance
+        return tool_instance
+
     return None
 
 
