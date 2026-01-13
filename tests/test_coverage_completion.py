@@ -135,6 +135,22 @@ async def test_admin_operations_context_key(
 # ============================================================================
 
 
+def test_get_required_scopes_from_registry():
+    """
+    Test that required scopes are resolved from the registry and include resources.
+
+    Expected: Registry scopes are included along with resource path scope.
+    Coverage: middleware.py lines 250-276
+    """
+    scopes = GovernanceMiddleware._get_required_scopes(
+        "write_file", {"path": "/tmp/example.txt"}
+    )
+
+    assert "tool:write_file" in scopes
+    assert "filesystem:write" in scopes
+    assert "resource:path:/tmp/example.txt" in scopes
+
+
 @pytest.mark.asyncio
 async def test_approval_request_long_argument_truncation(
     governance_in_permission,
