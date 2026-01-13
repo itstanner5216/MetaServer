@@ -20,29 +20,10 @@ from .governance.approval import (
 from .governance.artifacts import get_artifact_generator
 from .governance.tokens import verify_token
 from .leases import lease_manager
-from .registry import tool_registry
+from .registry import ToolRecord, tool_registry
 from .state import ExecutionMode, governance_state
 from .toon import encode_output
 
-
-# Constants
-SENSITIVE_TOOLS = {
-    # File operations
-    "write_file",
-    "delete_file",
-    "move_file",
-    "create_directory",
-    "remove_directory",
-    # Command execution
-    "execute_command",
-    # Git operations
-    "git_commit",
-    "git_push",
-    "git_reset",
-    # Admin operations
-    "set_governance_mode",
-    "revoke_all_elevations",
-}
 
 ELICITATION_TIMEOUT = Config.ELICITATION_TIMEOUT
 DEFAULT_ELEVATION_TTL = Config.DEFAULT_ELEVATION_TTL
@@ -286,6 +267,21 @@ class GovernanceMiddleware(Middleware):
                 base_scopes.append(f"resource:path:{path}")
 
         return base_scopes
+
+    @staticmethod
+    def _is_sensitive_tool(tool_record: Optional[ToolRecord]) -> bool:
+        """
+        Determine whether a tool requires governance enforcement.
+
+        Args:
+            tool_record: ToolRecord for the requested tool
+
+        Returns:
+            True if tool is sensitive/dangerous or requires permission
+        """
+        if tool_record is None:
+            return True
+        return tool_record.requires_permission or tool_record.risk_level != "safe"
 
     @staticmethod
     def _format_approval_request(
@@ -734,8 +730,23 @@ class GovernanceMiddleware(Middleware):
             result = await call_next()
             return self._apply_toon_encoding(result)
 
+        tool_record = tool_registry.get(tool_name)
+        if tool_record is None:
+            logger.error(
+                f"Unknown tool ID '{tool_name}' requested (session: {session_id}); denying"
+            )
+            audit_logger.log_blocked(
+                tool_name=tool_name,
+                arguments=arguments,
+                session_id=session_id,
+                reason="unknown_tool",
+            )
+            raise ToolError(
+                f"Operation '{tool_name}' denied: Unknown tool ID"
+            )
+
         # Path 2: Non-sensitive tools - pass through
-        if tool_name not in SENSITIVE_TOOLS:
+        if not self._is_sensitive_tool(tool_record):
             logger.debug(f"Non-sensitive tool {tool_name}, passing through")
             result = await call_next()
             return self._apply_toon_encoding(result)
