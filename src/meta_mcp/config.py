@@ -1,6 +1,25 @@
 """Centralized configuration for MetaMCP."""
 import os
+import warnings
 from typing import Dict
+
+
+def _get_default_execution_mode() -> str:
+    deprecated_value = os.getenv("DEFAULT_MODE")
+    governance_value = os.getenv("DEFAULT_GOVERNANCE_MODE")
+
+    if deprecated_value:
+        warnings.warn(
+            "DEFAULT_MODE is deprecated; use DEFAULT_GOVERNANCE_MODE instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+
+    if governance_value:
+        return governance_value
+    if deprecated_value:
+        return deprecated_value
+    return "permission"
 
 
 class Config:
@@ -39,7 +58,7 @@ class Config:
     # ========================================================================
     # Governance Configuration
     # ========================================================================
-    DEFAULT_EXECUTION_MODE: str = os.getenv("DEFAULT_MODE", "PERMISSION")
+    DEFAULT_EXECUTION_MODE: str = _get_default_execution_mode()
     DEFAULT_ELEVATION_TTL: int = 300  # 5 minutes
     ELICITATION_TIMEOUT: int = 300  # 5 minutes
 

@@ -1,6 +1,19 @@
 """Tests for centralized Config class."""
+import importlib
+import warnings
+
 import pytest
+
+from src.meta_mcp import config as config_module
 from src.meta_mcp.config import Config
+
+
+def _reload_config(monkeypatch, **env):
+    for key in ("DEFAULT_GOVERNANCE_MODE", "DEFAULT_MODE"):
+        monkeypatch.delenv(key, raising=False)
+    for key, value in env.items():
+        monkeypatch.setenv(key, value)
+    return importlib.reload(config_module).Config
 
 
 def test_config_defaults():
@@ -89,3 +102,31 @@ def test_config_feature_flags_default_disabled():
     assert Config.ENABLE_LEASE_MANAGEMENT is True
     assert Config.ENABLE_PROGRESSIVE_SCHEMAS is False
     assert Config.ENABLE_MACROS is True
+
+
+def test_default_execution_mode_env_keys(monkeypatch):
+    """Default execution mode should map from new and deprecated keys."""
+    config = _reload_config(monkeypatch, DEFAULT_GOVERNANCE_MODE="read_only")
+    assert config.DEFAULT_EXECUTION_MODE == "read_only"
+
+    with warnings.catch_warnings(record=True) as captured:
+        warnings.simplefilter("always")
+        config = _reload_config(monkeypatch, DEFAULT_MODE="bypass")
+        assert config.DEFAULT_EXECUTION_MODE == "bypass"
+        assert any(
+            "DEFAULT_MODE is deprecated" in str(warning.message)
+            for warning in captured
+        )
+
+    with warnings.catch_warnings(record=True) as captured:
+        warnings.simplefilter("always")
+        config = _reload_config(
+            monkeypatch,
+            DEFAULT_GOVERNANCE_MODE="permission",
+            DEFAULT_MODE="read_only",
+        )
+        assert config.DEFAULT_EXECUTION_MODE == "permission"
+        assert any(
+            "DEFAULT_MODE is deprecated" in str(warning.message)
+            for warning in captured
+        )

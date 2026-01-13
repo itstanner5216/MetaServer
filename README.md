@@ -81,6 +81,7 @@ Set the default mode via:
 ```bash
 export DEFAULT_GOVERNANCE_MODE="permission"
 ```
+`DEFAULT_MODE` is deprecated and will be removed in a future release.
 
 ## Running the Server
 

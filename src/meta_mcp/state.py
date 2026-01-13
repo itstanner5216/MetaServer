@@ -43,6 +43,29 @@ class GovernanceState:
         self._redis_pool: Optional[aioredis.ConnectionPool] = None
         self._redis_url = REDIS_URL
 
+    @staticmethod
+    def _parse_mode(mode_value: Optional[str]) -> Optional[ExecutionMode]:
+        """Parse execution mode string into ExecutionMode enum."""
+        if not mode_value:
+            return None
+        normalized = mode_value.strip().lower()
+        try:
+            return ExecutionMode(normalized)
+        except ValueError:
+            return None
+
+    @classmethod
+    def _default_mode(cls) -> ExecutionMode:
+        """Resolve default execution mode from configuration."""
+        config_value = Config.DEFAULT_EXECUTION_MODE
+        parsed_mode = cls._parse_mode(config_value)
+        if parsed_mode is None:
+            logger.error(
+                f"Invalid default governance mode '{config_value}'; using fail-safe default: {ExecutionMode.PERMISSION}"
+            )
+            return ExecutionMode.PERMISSION
+        return parsed_mode
+
     async def _get_redis(self) -> aioredis.Redis:
         """
         Get or create Redis client with connection pool (lazy initialization).
@@ -80,20 +103,33 @@ class GovernanceState:
             mode_str = await redis.get(GOVERNANCE_MODE_KEY)
 
             if mode_str is None:
-                # No mode set, return fail-safe default
+                default_mode = self._default_mode()
                 logger.warning(
-                    f"No governance mode set in Redis, using fail-safe default: {ExecutionMode.PERMISSION}"
+                    f"No governance mode set in Redis, initializing to config default: {default_mode.value}"
                 )
-                return ExecutionMode.PERMISSION
+                try:
+                    await redis.set(GOVERNANCE_MODE_KEY, default_mode.value)
+                except Exception as e:
+                    logger.error(
+                        f"Failed to initialize governance mode in Redis: {e}"
+                    )
+                return default_mode
 
             # Validate and return mode
-            try:
-                return ExecutionMode(mode_str)
-            except ValueError:
+            parsed_mode = self._parse_mode(mode_str)
+            if parsed_mode is None:
+                default_mode = self._default_mode()
                 logger.error(
-                    f"Invalid governance mode in Redis: {mode_str}, using fail-safe default: {ExecutionMode.PERMISSION}"
+                    f"Invalid governance mode in Redis: {mode_str}, resetting to config default: {default_mode.value}"
                 )
-                return ExecutionMode.PERMISSION
+                try:
+                    await redis.set(GOVERNANCE_MODE_KEY, default_mode.value)
+                except Exception as e:
+                    logger.error(
+                        f"Failed to reset governance mode in Redis: {e}"
+                    )
+                return default_mode
+            return parsed_mode
 
         except (aioredis.ConnectionError, aioredis.TimeoutError) as e:
             logger.error(
