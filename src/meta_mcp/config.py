@@ -114,6 +114,12 @@ class Config:
                 "HMAC_SECRET not set - capability tokens will fail in Phase 4. "
                 "Set HMAC_SECRET environment variable for production use."
             )
+        elif is_default_secret:
+            import warnings
+            warnings.warn(
+                "HMAC_SECRET is using the default development secret. "
+                "Set a unique secret for real deployments."
+            )
         elif len(cls.HMAC_SECRET) < 32:
             import warnings
             warnings.warn(

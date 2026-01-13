@@ -1,5 +1,10 @@
 """Tests for centralized Config class."""
+import importlib
+import os
+import warnings
+
 import pytest
+from src.meta_mcp import config as config_module
 from src.meta_mcp.config import Config
 
 
@@ -89,3 +94,37 @@ def test_config_feature_flags_default_disabled():
     assert Config.ENABLE_LEASE_MANAGEMENT is True
     assert Config.ENABLE_PROGRESSIVE_SCHEMAS is False
     assert Config.ENABLE_MACROS is True
+
+
+def test_config_validation_warns_on_default_secret(monkeypatch):
+    """Config.validate() should warn when using the default dev secret."""
+    monkeypatch.setenv("ENVIRONMENT", "development")
+    original_secret = Config.HMAC_SECRET
+
+    try:
+        Config.HMAC_SECRET = "default_dev_secret_change_in_production_32bytes_minimum"
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            Config.validate()
+        assert any(
+            "default development secret" in str(warning.message)
+            for warning in caught
+        ), "Expected warning about default development secret"
+    finally:
+        Config.HMAC_SECRET = original_secret
+
+
+def test_config_invalid_port_env_raises(monkeypatch):
+    """Invalid PORT environment value should raise on import."""
+    original_port_env = os.getenv("PORT")
+    monkeypatch.setenv("PORT", "70000")
+
+    try:
+        with pytest.raises(ValueError, match="Invalid PORT environment variable"):
+            importlib.reload(config_module)
+    finally:
+        if original_port_env is None:
+            monkeypatch.delenv("PORT", raising=False)
+        else:
+            monkeypatch.setenv("PORT", original_port_env)
+        importlib.reload(config_module)

@@ -537,6 +537,18 @@ def main():
 
     logger.info(f"Starting {SERVER_NAME}...")
 
+    # Validate configuration early to fail fast in production
+    try:
+        Config.validate()
+        logger.info("Config validation status: PASSED")
+    except ValueError as exc:
+        is_production = os.getenv("ENVIRONMENT", "").lower() == "production"
+        logger_message = f"Config validation status: FAILED ({exc})"
+        if is_production:
+            logger.error(logger_message)
+            sys.exit(1)
+        logger.warning(logger_message)
+
     # Run with HTTP/SSE transport (Docker compatible)
     try:
         mcp.run(transport="sse", host=HOST, port=PORT)
