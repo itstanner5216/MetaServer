@@ -247,7 +247,7 @@ class GovernanceMiddleware(Middleware):
             List of required permission scopes
         """
         # Start with base scopes from registry
-        tool_record = tool_registry.get_tool(tool_name)
+        tool_record = tool_registry.get(tool_name)
         if tool_record and tool_record.required_scopes:
             base_scopes = tool_record.required_scopes.copy()
         else:
