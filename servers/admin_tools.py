@@ -15,6 +15,8 @@ from loguru import logger
 # Import governance components using package-safe absolute imports
 # Note: Requires package installation via 'pip install -e .'
 from meta_mcp.audit import audit_logger, AuditEvent
+from meta_mcp.middleware import SENSITIVE_TOOLS
+from meta_mcp.registry import tool_registry
 from meta_mcp.state import ExecutionMode, governance_state
 
 
@@ -129,6 +131,20 @@ async def get_governance_status() -> str:
         elevation_count = "unavailable"
 
     # Format status report
+    sensitive_tool_ids = []
+    try:
+        sensitive_tool_ids = sorted(
+            tool.tool_id
+            for tool in tool_registry.get_all_summaries()
+            if tool.risk_level in {"sensitive", "dangerous"}
+        )
+    except Exception as e:
+        logger.debug(f"Could not load sensitive tool list from registry: {e}")
+
+    if not sensitive_tool_ids:
+        sensitive_tool_ids = sorted(SENSITIVE_TOOLS)
+
+    sensitive_tools_display = ", ".join(sensitive_tool_ids)
     status_lines = [
         "# Governance System Status",
         "",
@@ -141,9 +157,7 @@ async def get_governance_status() -> str:
         "",
         f"**Active Elevations:** {elevation_count}",
         "",
-        "**Sensitive Tools:** write_file, delete_file, move_file, create_directory,",
-        "                    execute_command, git_commit, git_push, git_reset,",
-        "                    set_governance_mode, revoke_all_elevations",
+        f"**Sensitive Tools:** {sensitive_tools_display}",
     ]
 
     return "\n".join(status_lines)
