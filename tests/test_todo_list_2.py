@@ -748,7 +748,7 @@ async def test_todo_list_2_integration(
     Integration test validating all TODO List 2 changes work together.
 
     Tests:
-    1. remove_directory is registered as sensitive tool
+    1. remove_directory is registered with non-safe risk level in config/tools.yaml
     2. Middleware uses session_id for client_id
     3. Config.ENABLE_LEASE_MANAGEMENT controls lease checks
     4. format_search_results works with registry search
@@ -758,9 +758,11 @@ async def test_todo_list_2_integration(
     from servers.core_tools import remove_directory
     assert hasattr(remove_directory, "fn")
 
-    # 2. Verify remove_directory is registered in middleware's SENSITIVE_TOOLS
-    from src.meta_mcp.middleware import SENSITIVE_TOOLS
-    assert "remove_directory" in SENSITIVE_TOOLS
+    # 2. Verify remove_directory risk level in config/tools.yaml is not safe
+    from src.meta_mcp.registry import tool_registry as yaml_registry
+    tool_record = yaml_registry.get("remove_directory")
+    assert tool_record is not None
+    assert tool_record.risk_level != "safe"
 
     # 3. Test middleware uses session_id for client tracking
     middleware = GovernanceMiddleware()
@@ -796,7 +798,6 @@ async def test_todo_list_2_integration(
         Config.ENABLE_LEASE_MANAGEMENT = original_enable
 
     # 4. Test format_search_results with registry search (config/tools.yaml)
-    from src.meta_mcp.registry import tool_registry as yaml_registry
     results = yaml_registry.search("remove")
 
     # Should find remove_directory
@@ -806,7 +807,7 @@ async def test_todo_list_2_integration(
     # Format results
     formatted = format_search_results(results)
     assert "remove_directory" in formatted
-    assert "[SENSITIVE]" in formatted  # remove_directory is sensitive
+    assert "[SENSITIVE]" in formatted  # remove_directory risk_level is non-safe
 
     # 5. Verify admin_tools imports work
     from servers.admin_tools import admin_server, set_governance_mode
