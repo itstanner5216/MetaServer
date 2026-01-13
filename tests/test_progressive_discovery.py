@@ -10,7 +10,12 @@ Validates that the progressive discovery implementation meets all success criter
 - Context reduction achieved
 """
 
+from unittest.mock import AsyncMock, MagicMock
+
 import pytest
+
+from src.meta_mcp.registry.registry import ToolRegistry
+from src.meta_mcp import supervisor
 from src.meta_mcp.supervisor import mcp, tool_registry, search_tools, get_tool_schema
 from src.meta_mcp.state import ExecutionMode, governance_state
 
@@ -334,3 +339,41 @@ async def test_bootstrap_tools_always_available():
 
     schema_result = await get_tool_schema.fn(tool_name="search_tools")
     assert "search_tools" in schema_result, "get_tool_schema should be callable"
+
+
+@pytest.mark.asyncio
+async def test_expose_tool_uses_yaml_registry(tmp_path, monkeypatch):
+    """
+    Validate that tools registered via YAML can be exposed.
+    """
+    yaml_content = """
+servers:
+- server_id: core_tools
+  description: Core tools
+  risk_level: dangerous
+  tags: [core]
+tools:
+- tool_id: yaml_only_tool
+  server_id: core_tools
+  description_1line: YAML tool for testing.
+  description_full: YAML tool for testing.
+  tags: [core, test]
+  risk_level: safe
+"""
+    yaml_path = tmp_path / "tools.yaml"
+    yaml_path.write_text(yaml_content)
+
+    registry = ToolRegistry.from_yaml(str(yaml_path))
+    monkeypatch.setattr(supervisor, "tool_registry", registry)
+
+    mock_tool = MagicMock()
+    mock_get_tool = AsyncMock(return_value=mock_tool)
+    monkeypatch.setattr(supervisor.core_server, "get_tool", mock_get_tool)
+    monkeypatch.setattr(supervisor.mcp, "add_tool", MagicMock())
+    monkeypatch.setattr(supervisor, "_loaded_tools", set())
+    monkeypatch.setattr(supervisor, "_tool_instances", {})
+
+    exposed = await supervisor._expose_tool("yaml_only_tool")
+
+    assert exposed is True
+    mock_get_tool.assert_awaited_once_with("yaml_only_tool")
