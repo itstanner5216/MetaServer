@@ -15,14 +15,14 @@ project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root / "src"))
 
 # Now import from the project
-from meta_mcp.registry.registry import ToolRegistry
+from meta_mcp.registry.registry import ToolRegistry, DEFAULT_TOOLS_YAML_PATH
 from meta_mcp.retrieval.search import SemanticSearch
 
 
 def benchmark_registry_loading() -> dict:
     """Benchmark registry loading time."""
     start = time.perf_counter()
-    registry = ToolRegistry.from_yaml("config/tools.yaml")
+    registry = ToolRegistry.from_yaml(DEFAULT_TOOLS_YAML_PATH)
     elapsed = time.perf_counter() - start
 
     return {
@@ -34,7 +34,7 @@ def benchmark_registry_loading() -> dict:
 
 def benchmark_search_latency(iterations: int = 100) -> dict:
     """Benchmark search operation latency."""
-    registry = ToolRegistry.from_yaml("config/tools.yaml")
+    registry = ToolRegistry.from_yaml(DEFAULT_TOOLS_YAML_PATH)
     searcher = SemanticSearch(registry)
 
     # Warm up
@@ -71,7 +71,7 @@ def benchmark_search_latency(iterations: int = 100) -> dict:
 
 def benchmark_index_building() -> dict:
     """Benchmark embedding index building time."""
-    registry = ToolRegistry.from_yaml("config/tools.yaml")
+    registry = ToolRegistry.from_yaml(DEFAULT_TOOLS_YAML_PATH)
     searcher = SemanticSearch(registry)
 
     start = time.perf_counter()
@@ -87,7 +87,7 @@ def benchmark_index_building() -> dict:
 
 def benchmark_tool_retrieval(iterations: int = 1000) -> dict:
     """Benchmark individual tool retrieval."""
-    registry = ToolRegistry.from_yaml("config/tools.yaml")
+    registry = ToolRegistry.from_yaml(DEFAULT_TOOLS_YAML_PATH)
 
     # Get a sample tool ID
     tools = registry.get_all_summaries()

@@ -204,7 +204,7 @@ class ToolRegistry:
 
 
 # Singleton instance with absolute path
-_default_tools_path = os.getenv("TOOLS_YAML_PATH") or str(
+DEFAULT_TOOLS_YAML_PATH = os.getenv("TOOLS_YAML_PATH") or str(
     Path(__file__).parent.parent.parent / "config" / "tools.yaml"
 )
-tool_registry = ToolRegistry.from_yaml(_default_tools_path)
+tool_registry = ToolRegistry.from_yaml(DEFAULT_TOOLS_YAML_PATH)

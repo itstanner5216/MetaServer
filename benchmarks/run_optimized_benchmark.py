@@ -15,13 +15,13 @@ project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root / "src"))
 
 # Now import from the project
-from meta_mcp.registry.registry import ToolRegistry
+from meta_mcp.registry.registry import ToolRegistry, DEFAULT_TOOLS_YAML_PATH
 from meta_mcp.retrieval.search import SemanticSearch
 
 
 def benchmark_cached_searches(iterations: int = 100) -> dict:
     """Benchmark search with hot cache."""
-    registry = ToolRegistry.from_yaml("config/tools.yaml")
+    registry = ToolRegistry.from_yaml(DEFAULT_TOOLS_YAML_PATH)
     searcher = SemanticSearch(registry)
 
     # Build index once
@@ -50,7 +50,7 @@ def benchmark_cached_searches(iterations: int = 100) -> dict:
 
 def benchmark_embedding_reuse() -> dict:
     """Benchmark embedding cache hit rate."""
-    registry = ToolRegistry.from_yaml("config/tools.yaml")
+    registry = ToolRegistry.from_yaml(DEFAULT_TOOLS_YAML_PATH)
     searcher = SemanticSearch(registry)
 
     # Build index (populates cache)
@@ -83,7 +83,7 @@ def benchmark_embedding_reuse() -> dict:
 
 def benchmark_batch_vs_individual() -> dict:
     """Compare batch operations vs individual operations."""
-    registry = ToolRegistry.from_yaml("config/tools.yaml")
+    registry = ToolRegistry.from_yaml(DEFAULT_TOOLS_YAML_PATH)
     tools = registry.get_all_summaries()
 
     if len(tools) < 5:
@@ -118,7 +118,7 @@ def benchmark_memory_footprint() -> dict:
     """Estimate memory footprint of embeddings and cache."""
     import sys
 
-    registry = ToolRegistry.from_yaml("config/tools.yaml")
+    registry = ToolRegistry.from_yaml(DEFAULT_TOOLS_YAML_PATH)
     searcher = SemanticSearch(registry)
     searcher._build_index()
 

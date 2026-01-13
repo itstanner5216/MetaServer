@@ -22,7 +22,7 @@ project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root / "src"))
 
 # Now import from the project
-from meta_mcp.registry.registry import ToolRegistry
+from meta_mcp.registry.registry import ToolRegistry, DEFAULT_TOOLS_YAML_PATH
 from meta_mcp.retrieval.search import SemanticSearch
 
 
@@ -30,7 +30,7 @@ class LoadTester:
     """Run load tests on the system."""
 
     def __init__(self):
-        self.registry = ToolRegistry.from_yaml("config/tools.yaml")
+        self.registry = ToolRegistry.from_yaml(DEFAULT_TOOLS_YAML_PATH)
         self.searcher = SemanticSearch(self.registry)
         self.searcher._build_index()
         self.tools = self.registry.get_all_summaries()

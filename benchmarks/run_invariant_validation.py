@@ -14,7 +14,7 @@ project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root / "src"))
 
 # Now import from the project
-from meta_mcp.registry.registry import ToolRegistry
+from meta_mcp.registry.registry import ToolRegistry, DEFAULT_TOOLS_YAML_PATH
 from meta_mcp.retrieval.search import SemanticSearch
 
 
@@ -90,7 +90,7 @@ def validate_registry_invariants(validator: InvariantValidator):
     print("Validating registry invariants...")
 
     try:
-        registry = ToolRegistry.from_yaml("config/tools.yaml")
+        registry = ToolRegistry.from_yaml(DEFAULT_TOOLS_YAML_PATH)
     except Exception as e:
         validator.check(False, f"Failed to load registry: {e}")
         return
@@ -148,7 +148,7 @@ def validate_search_invariants(validator: InvariantValidator):
     """Validate semantic search invariants."""
     print("Validating search invariants...")
 
-    registry = ToolRegistry.from_yaml("config/tools.yaml")
+    registry = ToolRegistry.from_yaml(DEFAULT_TOOLS_YAML_PATH)
     searcher = SemanticSearch(registry)
 
     # Check: Index builds successfully
@@ -195,7 +195,7 @@ def validate_embedding_invariants(validator: InvariantValidator):
     """Validate embedding invariants."""
     print("Validating embedding invariants...")
 
-    registry = ToolRegistry.from_yaml("config/tools.yaml")
+    registry = ToolRegistry.from_yaml(DEFAULT_TOOLS_YAML_PATH)
     searcher = SemanticSearch(registry)
     searcher._build_index()
 
@@ -238,7 +238,7 @@ def validate_security_properties(validator: InvariantValidator):
     """Validate security-related invariants."""
     print("Validating security properties...")
 
-    registry = ToolRegistry.from_yaml("config/tools.yaml")
+    registry = ToolRegistry.from_yaml(DEFAULT_TOOLS_YAML_PATH)
     searcher = SemanticSearch(registry)
 
     # Check: Search results don't leak schemas
