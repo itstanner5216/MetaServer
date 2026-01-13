@@ -3,6 +3,7 @@
 import asyncio
 import hashlib
 import time
+from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
 
 from fastmcp import Context
@@ -48,6 +49,52 @@ ELICITATION_TIMEOUT = Config.ELICITATION_TIMEOUT
 DEFAULT_ELEVATION_TTL = Config.DEFAULT_ELEVATION_TTL
 
 
+@dataclass
+class RunContext:
+    session_id: str
+    tool_name: str
+    arguments: Dict[str, Any]
+
+
+@dataclass
+class ToolCall:
+    tool_name: str
+    arguments: Dict[str, Any]
+
+
+@dataclass
+class ToolResult:
+    tool_name: str
+    output: Any
+
+
+class HookManager:
+    def __init__(self) -> None:
+        self.before_tool_hooks: List[Any] = []
+        self.after_tool_hooks: List[Any] = []
+
+    async def before_tool(self, tool_call: ToolCall, ctx: RunContext) -> ToolCall:
+        for hook in self.before_tool_hooks:
+            result = await hook(tool_call, ctx)
+            if result is not None:
+                tool_call = result
+        return tool_call
+
+    async def after_tool(self, tool_result: ToolResult, ctx: RunContext) -> ToolResult:
+        for hook in self.after_tool_hooks:
+            result = await hook(tool_result, ctx)
+            if result is not None:
+                tool_result = result
+        return tool_result
+
+
+_hook_manager = HookManager()
+
+
+def get_hook_manager() -> HookManager:
+    return _hook_manager
+
+
 class GovernanceMiddleware(Middleware):
     """
     FastMCP middleware for tri-state governance enforcement.
@@ -84,6 +131,54 @@ class GovernanceMiddleware(Middleware):
             # Fail-safe: return original result if encoding fails
             logger.warning(f"TOON encoding failed: {e}, returning original result")
             return result
+
+    async def invoke_tool(
+        self,
+        context: Context,
+        call_next,
+        tool_name: str,
+        arguments: Dict[str, Any],
+    ) -> Any:
+        """
+        Invoke the next tool middleware with hook wrapping.
+
+        Args:
+            context: FastMCP context
+            call_next: Next middleware in chain
+            tool_name: Tool name
+            arguments: Tool arguments
+
+        Returns:
+            Tool execution result
+        """
+        session_id = str(context.session_id)
+        run_context = RunContext(
+            session_id=session_id,
+            tool_name=tool_name,
+            arguments=arguments,
+        )
+        hook_manager = get_hook_manager()
+        tool_call = ToolCall(tool_name=tool_name, arguments=arguments)
+        tool_call = await hook_manager.before_tool(tool_call, run_context)
+
+        if tool_call.tool_name != tool_name:
+            context.request_context.tool_name = tool_call.tool_name
+        if tool_call.arguments != arguments:
+            context.request_context.arguments = tool_call.arguments
+        if (
+            tool_call.tool_name != tool_name
+            or tool_call.arguments != arguments
+        ):
+            run_context = RunContext(
+                session_id=session_id,
+                tool_name=tool_call.tool_name,
+                arguments=tool_call.arguments,
+            )
+
+        result = await call_next()
+        tool_result = ToolResult(tool_name=tool_call.tool_name, output=result)
+        tool_result = await hook_manager.after_tool(tool_result, run_context)
+        return tool_result.output
 
     @staticmethod
     def _extract_context_key(tool_name: str, arguments: Dict[str, Any]) -> str:
@@ -731,13 +826,17 @@ class GovernanceMiddleware(Middleware):
                 arguments=arguments,
                 session_id=session_id,
             )
-            result = await call_next()
+            result = await self.invoke_tool(
+                context, call_next, tool_name, arguments
+            )
             return self._apply_toon_encoding(result)
 
         # Path 2: Non-sensitive tools - pass through
         if tool_name not in SENSITIVE_TOOLS:
             logger.debug(f"Non-sensitive tool {tool_name}, passing through")
-            result = await call_next()
+            result = await self.invoke_tool(
+                context, call_next, tool_name, arguments
+            )
             return self._apply_toon_encoding(result)
 
         # Path 3: READ_ONLY mode - block sensitive operations
@@ -773,7 +872,9 @@ class GovernanceMiddleware(Middleware):
                     context_key=context_key,
                     session_id=session_id,
                 )
-                result = await call_next()
+                result = await self.invoke_tool(
+                    context, call_next, tool_name, arguments
+                )
                 return self._apply_toon_encoding(result)
 
             # No elevation, elicit approval
@@ -804,7 +905,9 @@ class GovernanceMiddleware(Middleware):
                     )
 
                 # Execute tool
-                result = await call_next()
+                result = await self.invoke_tool(
+                    context, call_next, tool_name, arguments
+                )
                 return self._apply_toon_encoding(result)
             else:
                 # Denied - audit already logged in _elicit_approval
