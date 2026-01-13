@@ -12,6 +12,7 @@ from loguru import logger
 
 from .audit import audit_logger, AuditEvent
 from .config import Config
+from .context import build_run_context
 from .governance.approval import (
     ApprovalDecision,
     ApprovalRequest,
@@ -644,6 +645,7 @@ class GovernanceMiddleware(Middleware):
         tool_name = context.request_context.tool_name
         arguments = context.request_context.arguments or {}
         session_id = str(context.session_id)
+        lease_context = None
 
         # PHASE 3+4 INTEGRATION: Validate lease and token before governance checks
         # Note: Bootstrap tools bypass lease checks
@@ -709,6 +711,9 @@ class GovernanceMiddleware(Middleware):
                 f"Lease consumed for {tool_name} "
                 f"(client: {client_id}, remaining={consumed_lease.calls_remaining})"
             )
+            lease_context = consumed_lease
+
+        context.run_context = build_run_context(context, lease=lease_context)
 
         # Get current governance mode
         mode = await governance_state.get_mode()

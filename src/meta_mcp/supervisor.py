@@ -17,6 +17,7 @@ from servers.core_tools import core_server
 
 from .audit import audit_logger
 from .config import Config
+from .context import build_run_context
 from .discovery import format_search_results
 from .governance.approval import get_approval_provider
 from .governance.artifacts import get_artifact_generator
@@ -359,6 +360,10 @@ async def get_tool_schema(tool_name: str, expand: bool = False, ctx: Context = N
     # Extract client_id from FastMCP session context
     # In FastMCP/MCP protocol, session_id is the stable client connection identifier
     # If context is not available (shouldn't happen), fail closed with safe default
+    run_context = build_run_context(ctx) if ctx else None
+    if ctx is not None:
+        ctx.run_context = run_context
+
     if ctx is None:
         logger.warning(
             f"No context available for get_tool_schema({tool_name}), using fail-safe client_id"
