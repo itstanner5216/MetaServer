@@ -26,24 +26,7 @@ from .toon import encode_output
 
 
 # Constants
-SENSITIVE_TOOLS = {
-    # File operations
-    "write_file",
-    "delete_file",
-    "move_file",
-    "create_directory",
-    "remove_directory",
-    # Command execution
-    "execute_command",
-    # Git operations
-    "git_commit",
-    "git_push",
-    "git_reset",
-    # Admin operations
-    "set_governance_mode",
-    "revoke_all_elevations",
-}
-
+BOOTSTRAP_TOOLS = tool_registry.get_bootstrap_tools()
 ELICITATION_TIMEOUT = Config.ELICITATION_TIMEOUT
 DEFAULT_ELEVATION_TTL = Config.DEFAULT_ELEVATION_TTL
 
@@ -84,6 +67,29 @@ class GovernanceMiddleware(Middleware):
             # Fail-safe: return original result if encoding fails
             logger.warning(f"TOON encoding failed: {e}, returning original result")
             return result
+
+    @staticmethod
+    def _is_sensitive_tool(tool_name: str) -> bool:
+        """
+        Determine if a tool is sensitive based on registry metadata.
+
+        Args:
+            tool_name: Name of the tool
+
+        Returns:
+            True if tool is sensitive or requires permission, False otherwise
+        """
+        tool_record = tool_registry.get(tool_name)
+        if tool_record:
+            return tool_record.risk_level != "safe" or tool_record.requires_permission
+
+        if tool_name in BOOTSTRAP_TOOLS:
+            return False
+
+        logger.warning(
+            f"Tool {tool_name} not found in registry, treating as sensitive"
+        )
+        return True
 
     @staticmethod
     def _extract_context_key(tool_name: str, arguments: Dict[str, Any]) -> str:
@@ -648,9 +654,7 @@ class GovernanceMiddleware(Middleware):
         # PHASE 3+4 INTEGRATION: Validate lease and token before governance checks
         # Note: Bootstrap tools bypass lease checks
         # CRITICAL: Skip lease checks if ENABLE_LEASE_MANAGEMENT is False
-        bootstrap_tools = {"search_tools", "get_tool_schema"}
-
-        if Config.ENABLE_LEASE_MANAGEMENT and tool_name not in bootstrap_tools:
+        if Config.ENABLE_LEASE_MANAGEMENT and tool_name not in BOOTSTRAP_TOOLS:
             # Extract client_id from FastMCP session context
             # In FastMCP/MCP protocol, session_id is the stable client connection identifier
             client_id = str(context.session_id)
@@ -735,7 +739,7 @@ class GovernanceMiddleware(Middleware):
             return self._apply_toon_encoding(result)
 
         # Path 2: Non-sensitive tools - pass through
-        if tool_name not in SENSITIVE_TOOLS:
+        if not self._is_sensitive_tool(tool_name):
             logger.debug(f"Non-sensitive tool {tool_name}, passing through")
             result = await call_next()
             return self._apply_toon_encoding(result)
