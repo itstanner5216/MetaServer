@@ -1,8 +1,6 @@
 """Filesystem and command tools as a standalone FastMCP server."""
 
-import asyncio
 import json
-import os
 import shutil
 import subprocess
 from pathlib import Path
@@ -12,10 +10,7 @@ from fastmcp import FastMCP
 from fastmcp.exceptions import ToolError
 from loguru import logger
 
-
-# Constants
-WORKSPACE_ROOT = os.getenv("WORKSPACE_ROOT", "./workspace")
-COMMAND_TIMEOUT = 30
+from src.meta_mcp.config import Config
 
 
 # Create FastMCP server instance
@@ -35,7 +30,7 @@ def _validate_path(path: str) -> Path:
     Raises:
         ToolError: If path is outside WORKSPACE_ROOT
     """
-    workspace = Path(WORKSPACE_ROOT).resolve()
+    workspace = Path(Config.WORKSPACE_ROOT).resolve()
     target = (workspace / path).resolve()
 
     # Check if target is within workspace using is_relative_to (Python 3.9+)
@@ -252,7 +247,7 @@ def execute_command(command: str, cwd: Optional[str] = None) -> str:
     """
     # Validate and resolve working directory
     if cwd is None:
-        work_dir = Path(WORKSPACE_ROOT).resolve()
+        work_dir = Path(Config.WORKSPACE_ROOT).resolve()
     else:
         work_dir = _validate_path(cwd)
         if not work_dir.is_dir():
@@ -265,7 +260,7 @@ def execute_command(command: str, cwd: Optional[str] = None) -> str:
             cwd=str(work_dir),
             capture_output=True,
             text=True,
-            timeout=COMMAND_TIMEOUT,
+            timeout=Config.COMMAND_TIMEOUT,
             encoding="utf-8",
             errors="replace",
         )
@@ -281,7 +276,7 @@ def execute_command(command: str, cwd: Optional[str] = None) -> str:
 
     except subprocess.TimeoutExpired:
         raise ToolError(
-            f"Command timed out after {COMMAND_TIMEOUT} seconds: {command}"
+            f"Command timed out after {Config.COMMAND_TIMEOUT} seconds: {command}"
         )
     except Exception as e:
         raise ToolError(f"Failed to execute command: {e}")
@@ -307,7 +302,7 @@ async def git_commit(message: str, cwd: Optional[str] = None) -> str:
     """
     # Validate and resolve working directory
     if cwd is None:
-        work_dir = Path(WORKSPACE_ROOT).resolve()
+        work_dir = Path(Config.WORKSPACE_ROOT).resolve()
     else:
         work_dir = _validate_path(cwd)
         if not work_dir.is_dir():
@@ -320,7 +315,7 @@ async def git_commit(message: str, cwd: Optional[str] = None) -> str:
             cwd=str(work_dir),
             capture_output=True,
             text=True,
-            timeout=COMMAND_TIMEOUT,
+            timeout=Config.COMMAND_TIMEOUT,
             encoding="utf-8",
             errors="replace",
         )
@@ -338,7 +333,7 @@ async def git_commit(message: str, cwd: Optional[str] = None) -> str:
         return json.dumps(output, indent=2)
 
     except subprocess.TimeoutExpired:
-        raise ToolError(f"Git commit timed out after {COMMAND_TIMEOUT}s")
+        raise ToolError(f"Git commit timed out after {Config.COMMAND_TIMEOUT}s")
     except Exception as e:
         raise ToolError(f"Git commit error: {e}")
 
@@ -366,7 +361,7 @@ async def git_push(
     """
     # Validate and resolve working directory
     if cwd is None:
-        work_dir = Path(WORKSPACE_ROOT).resolve()
+        work_dir = Path(Config.WORKSPACE_ROOT).resolve()
     else:
         work_dir = _validate_path(cwd)
         if not work_dir.is_dir():
@@ -384,7 +379,7 @@ async def git_push(
             cwd=str(work_dir),
             capture_output=True,
             text=True,
-            timeout=COMMAND_TIMEOUT,
+            timeout=Config.COMMAND_TIMEOUT,
             encoding="utf-8",
             errors="replace",
         )
@@ -402,7 +397,7 @@ async def git_push(
         return json.dumps(output, indent=2)
 
     except subprocess.TimeoutExpired:
-        raise ToolError(f"Git push timed out after {COMMAND_TIMEOUT}s")
+        raise ToolError(f"Git push timed out after {Config.COMMAND_TIMEOUT}s")
     except Exception as e:
         raise ToolError(f"Git push error: {e}")
 
@@ -432,7 +427,7 @@ async def git_reset(
     """
     # Validate and resolve working directory
     if cwd is None:
-        work_dir = Path(WORKSPACE_ROOT).resolve()
+        work_dir = Path(Config.WORKSPACE_ROOT).resolve()
     else:
         work_dir = _validate_path(cwd)
         if not work_dir.is_dir():
@@ -451,7 +446,7 @@ async def git_reset(
             cwd=str(work_dir),
             capture_output=True,
             text=True,
-            timeout=COMMAND_TIMEOUT,
+            timeout=Config.COMMAND_TIMEOUT,
             encoding="utf-8",
             errors="replace",
         )
@@ -470,7 +465,7 @@ async def git_reset(
         return json.dumps(output, indent=2)
 
     except subprocess.TimeoutExpired:
-        raise ToolError(f"Git reset timed out after {COMMAND_TIMEOUT}s")
+        raise ToolError(f"Git reset timed out after {Config.COMMAND_TIMEOUT}s")
     except Exception as e:
         raise ToolError(f"Git reset error: {e}")
 
