@@ -12,6 +12,7 @@ from loguru import logger
 
 from .audit import audit_logger, AuditEvent
 from .config import Config
+from .context import RunContext
 from .governance.approval import (
     ApprovalDecision,
     ApprovalRequest,
@@ -365,6 +366,28 @@ class GovernanceMiddleware(Middleware):
         # Denial is default (fail-safe)
         return False
 
+    @staticmethod
+    def _get_request_context_value(ctx: Context, key: str) -> Optional[str]:
+        """
+        Safely extract a value from FastMCP request context or metadata.
+
+        Args:
+            ctx: FastMCP context
+            key: Context value key
+
+        Returns:
+            Value from request context or metadata, if available
+        """
+        request_context = getattr(ctx, "request_context", None)
+        if request_context is None:
+            return None
+
+        metadata = getattr(request_context, "metadata", None)
+        if isinstance(metadata, dict) and key in metadata:
+            return metadata.get(key)
+
+        return getattr(request_context, key, None)
+
     async def _elicit_approval(
         self, ctx: Context, tool_name: str, arguments: Dict[str, Any]
     ) -> tuple[bool, int, List[str]]:
@@ -383,6 +406,8 @@ class GovernanceMiddleware(Middleware):
             - selected_scopes: Which scopes the user granted
         """
         session_id = str(ctx.session_id)
+        run_id = self._get_request_context_value(ctx, "run_id")
+        agent_id = self._get_request_context_value(ctx, "agent_id")
 
         try:
             # Generate stable request_id
@@ -410,6 +435,8 @@ class GovernanceMiddleware(Middleware):
                     context_metadata={
                         "session_id": session_id,
                         "context_key": context_key,
+                        "run_id": run_id,
+                        "agent_id": agent_id,
                     },
                 )
 
@@ -423,6 +450,8 @@ class GovernanceMiddleware(Middleware):
                     context_metadata={
                         "session_id": session_id,
                         "context_key": context_key,
+                        "run_id": run_id,
+                        "agent_id": agent_id,
                     },
                 )
 
@@ -451,6 +480,8 @@ class GovernanceMiddleware(Middleware):
                     "session_id": session_id,
                     "arguments": arguments,
                     "context_key": context_key,
+                    "run_id": run_id,
+                    "agent_id": agent_id,
                 },
             )
 
@@ -644,6 +675,10 @@ class GovernanceMiddleware(Middleware):
         tool_name = context.request_context.tool_name
         arguments = context.request_context.arguments or {}
         session_id = str(context.session_id)
+        run_id = self._get_request_context_value(context, "run_id")
+        agent_id = self._get_request_context_value(context, "agent_id")
+        client_id = str(context.session_id)
+        lease = None
 
         # PHASE 3+4 INTEGRATION: Validate lease and token before governance checks
         # Note: Bootstrap tools bypass lease checks
@@ -653,8 +688,6 @@ class GovernanceMiddleware(Middleware):
         if Config.ENABLE_LEASE_MANAGEMENT and tool_name not in bootstrap_tools:
             # Extract client_id from FastMCP session context
             # In FastMCP/MCP protocol, session_id is the stable client connection identifier
-            client_id = str(context.session_id)
-
             # Validate lease exists
             lease = await lease_manager.validate(client_id, tool_name)
             if lease is None:
@@ -709,6 +742,15 @@ class GovernanceMiddleware(Middleware):
                 f"Lease consumed for {tool_name} "
                 f"(client: {client_id}, remaining={consumed_lease.calls_remaining})"
             )
+            lease = consumed_lease
+
+        run_context = RunContext(
+            run_id=run_id,
+            lease=lease,
+            agent_id=agent_id,
+            client_id=client_id,
+            tool_name=tool_name,
+        )
 
         # Get current governance mode
         mode = await governance_state.get_mode()
@@ -731,13 +773,13 @@ class GovernanceMiddleware(Middleware):
                 arguments=arguments,
                 session_id=session_id,
             )
-            result = await call_next()
+            result = await call_next(run_context=run_context)
             return self._apply_toon_encoding(result)
 
         # Path 2: Non-sensitive tools - pass through
         if tool_name not in SENSITIVE_TOOLS:
             logger.debug(f"Non-sensitive tool {tool_name}, passing through")
-            result = await call_next()
+            result = await call_next(run_context=run_context)
             return self._apply_toon_encoding(result)
 
         # Path 3: READ_ONLY mode - block sensitive operations
@@ -773,7 +815,7 @@ class GovernanceMiddleware(Middleware):
                     context_key=context_key,
                     session_id=session_id,
                 )
-                result = await call_next()
+                result = await call_next(run_context=run_context)
                 return self._apply_toon_encoding(result)
 
             # No elevation, elicit approval
@@ -804,7 +846,7 @@ class GovernanceMiddleware(Middleware):
                     )
 
                 # Execute tool
-                result = await call_next()
+                result = await call_next(run_context=run_context)
                 return self._apply_toon_encoding(result)
             else:
                 # Denied - audit already logged in _elicit_approval
