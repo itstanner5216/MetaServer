@@ -3,7 +3,7 @@
 from dataclasses import dataclass
 from typing import Literal
 
-from ..state import ExecutionMode
+from .modes import ExecutionMode
 
 
 @dataclass

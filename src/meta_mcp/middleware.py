@@ -21,7 +21,8 @@ from .governance.artifacts import get_artifact_generator
 from .governance.tokens import verify_token
 from .leases import lease_manager
 from .registry import tool_registry
-from .state import ExecutionMode, governance_state
+from .governance.modes import ExecutionMode
+from .state import governance_state
 from .toon import encode_output
 
 

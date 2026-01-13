@@ -1,14 +1,13 @@
 """Redis-backed tri-state governance with scoped elevation cache."""
 
 import hashlib
-import os
-from enum import Enum
 from typing import Optional
 
 from loguru import logger
 from redis import asyncio as aioredis
 
 from .config import Config
+from .governance.modes import ExecutionMode
 
 
 # Constants
@@ -16,14 +15,6 @@ REDIS_URL = Config.REDIS_URL
 GOVERNANCE_MODE_KEY = "governance:mode"
 ELEVATION_PREFIX = "elevation:"
 DEFAULT_ELEVATION_TTL = Config.DEFAULT_ELEVATION_TTL
-
-
-class ExecutionMode(str, Enum):
-    """Tri-state execution mode for governance."""
-
-    READ_ONLY = "read_only"
-    PERMISSION = "permission"
-    BYPASS = "bypass"
 
 
 class GovernanceState:
@@ -103,6 +94,45 @@ class GovernanceState:
         except Exception as e:
             logger.error(
                 f"Unexpected error in get_mode: {e}, using fail-safe default: {ExecutionMode.PERMISSION}"
+            )
+            return ExecutionMode.PERMISSION
+
+    async def ensure_mode(self, default_mode: ExecutionMode) -> ExecutionMode:
+        """
+        Ensure a governance mode exists in Redis, setting a default if absent.
+
+        Args:
+            default_mode: Execution mode to set when Redis has no mode configured.
+
+        Returns:
+            Current execution mode (existing or default).
+        """
+        try:
+            redis = await self._get_redis()
+            mode_str = await redis.get(GOVERNANCE_MODE_KEY)
+
+            if mode_str is None:
+                await redis.set(GOVERNANCE_MODE_KEY, default_mode.value)
+                logger.info(
+                    f"No governance mode in Redis; set default to {default_mode.value}."
+                )
+                return default_mode
+
+            try:
+                return ExecutionMode(mode_str)
+            except ValueError:
+                logger.error(
+                    f"Invalid governance mode in Redis: {mode_str}, using fail-safe default: {ExecutionMode.PERMISSION}"
+                )
+                return ExecutionMode.PERMISSION
+        except (aioredis.ConnectionError, aioredis.TimeoutError) as e:
+            logger.error(
+                f"Redis connection failed in ensure_mode: {e}, using fail-safe default: {ExecutionMode.PERMISSION}"
+            )
+            return ExecutionMode.PERMISSION
+        except Exception as e:
+            logger.error(
+                f"Unexpected error in ensure_mode: {e}, using fail-safe default: {ExecutionMode.PERMISSION}"
             )
             return ExecutionMode.PERMISSION
 

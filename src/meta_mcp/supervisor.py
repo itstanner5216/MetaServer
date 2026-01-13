@@ -180,7 +180,7 @@ async def lifespan(app):
 
     # 1. Verify Redis connectivity (graceful degradation)
     try:
-        mode = await governance_state.get_mode()
+        mode = await governance_state.ensure_mode(Config.DEFAULT_EXECUTION_MODE)
         logger.info(f"Redis connected - Governance mode: {mode.value}")
     except Exception as e:
         logger.warning(

@@ -2,6 +2,8 @@
 import os
 from typing import Dict
 
+from .governance.modes import ExecutionMode
+
 
 class Config:
     """
@@ -22,6 +24,18 @@ class Config:
         except ValueError as e:
             raise ValueError(f"Invalid PORT environment variable: {e}")
 
+    @staticmethod
+    def _parse_execution_mode(mode_str: str) -> ExecutionMode:
+        """Parse and validate execution mode from string."""
+        normalized = mode_str.strip().lower()
+        try:
+            return ExecutionMode(normalized)
+        except ValueError as e:
+            raise ValueError(
+                "Invalid DEFAULT_GOVERNANCE_MODE environment variable. "
+                f"Expected one of {[mode.value for mode in ExecutionMode]}, got {mode_str}."
+            ) from e
+
     # ========================================================================
     # Server Configuration
     # ========================================================================
@@ -39,7 +53,9 @@ class Config:
     # ========================================================================
     # Governance Configuration
     # ========================================================================
-    DEFAULT_EXECUTION_MODE: str = os.getenv("DEFAULT_MODE", "PERMISSION")
+    DEFAULT_EXECUTION_MODE: ExecutionMode = _parse_execution_mode.__func__(
+        os.getenv("DEFAULT_GOVERNANCE_MODE", "permission")
+    )
     DEFAULT_ELEVATION_TTL: int = 300  # 5 minutes
     ELICITATION_TIMEOUT: int = 300  # 5 minutes
 
