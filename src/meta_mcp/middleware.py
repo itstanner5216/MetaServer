@@ -86,6 +86,31 @@ class GovernanceMiddleware(Middleware):
             return result
 
     @staticmethod
+    def _get_run_context(context: Context) -> Optional[Any]:
+        """Extract RunContext from FastMCP context if present."""
+        return getattr(context, "run_context", None)
+
+    async def invoke_tool(
+        self,
+        context: Context,
+        call_next,
+        run_context: Optional[Any] = None,
+    ) -> Any:
+        """
+        Execute the tool via the middleware chain.
+
+        Args:
+            context: FastMCP context
+            call_next: Next middleware in chain
+            run_context: Optional RunContext for hook integration
+
+        Returns:
+            Tool execution result
+        """
+        _ = run_context  # Placeholder to keep seam stable without behavior change.
+        return await call_next()
+
+    @staticmethod
     def _extract_context_key(tool_name: str, arguments: Dict[str, Any]) -> str:
         """
         Extract context key for scoped elevation.
@@ -330,6 +355,38 @@ class GovernanceMiddleware(Middleware):
         return "\n".join(lines)
 
     @staticmethod
+    def _build_permission_request(
+        request_id: str,
+        tool_name: str,
+        arguments: Dict[str, Any],
+        required_scopes: List[str],
+        artifacts_path: Optional[str],
+        session_id: str,
+        context_key: str,
+        run_context: Optional[Any] = None,
+    ) -> ApprovalRequest:
+        """Build an approval request with optional RunContext metadata."""
+        context_metadata: Dict[str, Any] = {
+            "session_id": session_id,
+            "arguments": arguments,
+            "context_key": context_key,
+        }
+        if run_context is not None:
+            context_metadata["run_context"] = run_context
+
+        return ApprovalRequest(
+            request_id=request_id,
+            tool_name=tool_name,
+            message=GovernanceMiddleware._format_approval_request(
+                tool_name, arguments
+            ),
+            required_scopes=required_scopes,
+            artifacts_path=artifacts_path,
+            timeout_seconds=ELICITATION_TIMEOUT,
+            context_metadata=context_metadata,
+        )
+
+    @staticmethod
     def _parse_approval_response(response: str) -> bool:
         """
         Parse approval response from user with strict word boundary matching.
@@ -366,7 +423,11 @@ class GovernanceMiddleware(Middleware):
         return False
 
     async def _elicit_approval(
-        self, ctx: Context, tool_name: str, arguments: Dict[str, Any]
+        self,
+        ctx: Context,
+        tool_name: str,
+        arguments: Dict[str, Any],
+        run_context: Optional[Any] = None,
     ) -> tuple[bool, int, List[str]]:
         """
         Elicit approval from user using approval provider system.
@@ -440,18 +501,15 @@ class GovernanceMiddleware(Middleware):
                 )
 
             # Create approval request
-            approval_request = ApprovalRequest(
+            approval_request = self._build_permission_request(
                 request_id=request_id,
                 tool_name=tool_name,
-                message=request_message,
+                arguments=arguments,
                 required_scopes=required_scopes,
                 artifacts_path=artifacts_path,
-                timeout_seconds=ELICITATION_TIMEOUT,
-                context_metadata={
-                    "session_id": session_id,
-                    "arguments": arguments,
-                    "context_key": context_key,
-                },
+                session_id=session_id,
+                context_key=context_key,
+                run_context=run_context,
             )
 
             # Audit approval request with request_id
@@ -644,6 +702,7 @@ class GovernanceMiddleware(Middleware):
         tool_name = context.request_context.tool_name
         arguments = context.request_context.arguments or {}
         session_id = str(context.session_id)
+        run_context = self._get_run_context(context)
 
         # PHASE 3+4 INTEGRATION: Validate lease and token before governance checks
         # Note: Bootstrap tools bypass lease checks
@@ -731,13 +790,21 @@ class GovernanceMiddleware(Middleware):
                 arguments=arguments,
                 session_id=session_id,
             )
-            result = await call_next()
+            result = await self.invoke_tool(
+                context,
+                call_next,
+                run_context=run_context,
+            )
             return self._apply_toon_encoding(result)
 
         # Path 2: Non-sensitive tools - pass through
         if tool_name not in SENSITIVE_TOOLS:
             logger.debug(f"Non-sensitive tool {tool_name}, passing through")
-            result = await call_next()
+            result = await self.invoke_tool(
+                context,
+                call_next,
+                run_context=run_context,
+            )
             return self._apply_toon_encoding(result)
 
         # Path 3: READ_ONLY mode - block sensitive operations
@@ -773,7 +840,11 @@ class GovernanceMiddleware(Middleware):
                     context_key=context_key,
                     session_id=session_id,
                 )
-                result = await call_next()
+                result = await self.invoke_tool(
+                    context,
+                    call_next,
+                    run_context=run_context,
+                )
                 return self._apply_toon_encoding(result)
 
             # No elevation, elicit approval
@@ -781,7 +852,10 @@ class GovernanceMiddleware(Middleware):
                 f"Eliciting approval for {tool_name} (session: {session_id})"
             )
             approved, lease_seconds, selected_scopes = await self._elicit_approval(
-                context, tool_name, arguments
+                context,
+                tool_name,
+                arguments,
+                run_context=run_context,
             )
 
             if approved:
@@ -804,7 +878,11 @@ class GovernanceMiddleware(Middleware):
                     )
 
                 # Execute tool
-                result = await call_next()
+                result = await self.invoke_tool(
+                    context,
+                    call_next,
+                    run_context=run_context,
+                )
                 return self._apply_toon_encoding(result)
             else:
                 # Denied - audit already logged in _elicit_approval
