@@ -11,7 +11,7 @@ class ToolRegistry:
     """
     Static tool registry loaded from YAML.
 
-    Replaces the dynamic discovery.ToolRegistry for Phase 1+.
+    config/tools.yaml is the single source of truth for tool definitions.
 
     Features:
     - Static tool definitions from YAML
@@ -29,7 +29,7 @@ class ToolRegistry:
     @classmethod
     def from_yaml(cls, yaml_path: str) -> "ToolRegistry":
         """
-        Load registry from YAML file.
+        Load registry from YAML file (config/tools.yaml is canonical).
 
         Args:
             yaml_path: Path to tools.yaml configuration file
