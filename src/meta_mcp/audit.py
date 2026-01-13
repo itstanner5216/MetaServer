@@ -3,17 +3,16 @@
 import json
 import os
 import sys
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from enum import Enum
 from pathlib import Path
 from typing import Any, Dict, Optional
 
-from loguru import logger
-
 
 # Constants
 AUDIT_LOG_PATH = os.getenv("AUDIT_LOG_PATH", "./audit.jsonl")
-AUDIT_RETENTION_DAYS = 30
+AUDIT_RETENTION_DAYS = int(os.getenv("AUDIT_RETENTION_DAYS", "30"))
+AUDIT_ROTATION_BYTES = int(os.getenv("AUDIT_ROTATION_BYTES", str(10 * 1024 * 1024)))
 MAX_CONTENT_LENGTH = 1000  # Truncate large content to prevent log bloat
 
 
@@ -42,6 +41,8 @@ class AuditLogger:
     - ISO 8601 UTC timestamps
     - Automatic content truncation
     - Append-only file mode
+    - Size-based rotation with timestamped backups
+    - Retention cleanup based on AUDIT_RETENTION_DAYS
     - Comprehensive event tracking
     """
 
@@ -55,8 +56,50 @@ class AuditLogger:
         if log_path is None:
             log_path = os.getenv("AUDIT_LOG_PATH", "./audit.jsonl")
         self.log_path = Path(log_path)
+        self.retention_days = AUDIT_RETENTION_DAYS
+        self.rotation_bytes = AUDIT_ROTATION_BYTES
+        self._last_cleanup: Optional[datetime] = None
         # Ensure parent directory exists
         self.log_path.parent.mkdir(parents=True, exist_ok=True)
+        self._cleanup_old_logs()
+
+    def _rotate_if_needed(self) -> None:
+        """Rotate the audit log if it exceeds the configured size."""
+        if not self.log_path.exists():
+            return
+        if self.log_path.stat().st_size < self.rotation_bytes:
+            return
+
+        timestamp = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S")
+        rotated_path = self.log_path.with_name(f"{self.log_path.name}.{timestamp}")
+        counter = 1
+        while rotated_path.exists():
+            rotated_path = self.log_path.with_name(
+                f"{self.log_path.name}.{timestamp}.{counter}"
+            )
+            counter += 1
+        self.log_path.replace(rotated_path)
+
+    def _cleanup_old_logs(self) -> None:
+        """Remove audit log files older than the retention window."""
+        if self.retention_days <= 0:
+            return
+        cutoff = datetime.now(timezone.utc) - timedelta(days=self.retention_days)
+        for path in self.log_path.parent.glob(f"{self.log_path.name}*"):
+            if not path.is_file():
+                continue
+            modified = datetime.fromtimestamp(path.stat().st_mtime, timezone.utc)
+            if modified < cutoff:
+                path.unlink()
+        self._last_cleanup = datetime.now(timezone.utc)
+
+    def _maybe_cleanup(self) -> None:
+        """Run cleanup once per day to enforce retention."""
+        if self.retention_days <= 0:
+            return
+        now = datetime.now(timezone.utc)
+        if self._last_cleanup is None or now - self._last_cleanup >= timedelta(days=1):
+            self._cleanup_old_logs()
 
     @staticmethod
     def _truncate_content(value: Any, max_length: int = MAX_CONTENT_LENGTH) -> Any:
@@ -78,23 +121,41 @@ class AuditLogger:
             return [AuditLogger._truncate_content(item, max_length) for item in value]
         return value
 
-    def log(self, event: AuditEvent, **kwargs):
+    def log(
+        self,
+        event: AuditEvent,
+        session_id: Optional[str] = None,
+        request_id: Optional[str] = None,
+        **kwargs,
+    ):
         """
         Write structured audit log entry in JSON Lines format.
 
         Args:
             event: Audit event type
+            session_id: Session identifier for correlation
+            request_id: Request identifier for correlation
             **kwargs: Additional fields to include in the audit record
         """
+        if session_id is None:
+            session_id = kwargs.pop("session_id", None)
+        if request_id is None:
+            request_id = kwargs.pop("request_id", None)
+
         # Create audit record with UTC timestamp
         audit_record = {
             "timestamp": datetime.now(timezone.utc).isoformat(),
             "event": event.value,
+            "session_id": session_id,
+            "request_id": request_id,
             **self._truncate_content(kwargs),
         }
 
         # Serialize to JSON and write directly to file
         json_line = json.dumps(audit_record, ensure_ascii=False)
+
+        self._maybe_cleanup()
+        self._rotate_if_needed()
 
         # Write directly to audit file (append mode)
         with open(self.log_path, "a", encoding="utf-8") as f:

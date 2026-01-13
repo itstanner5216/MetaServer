@@ -151,7 +151,15 @@ pytest --cov=src/meta_mcp --cov-report=html
 2. Ensure Redis is secured (password, network isolation)
 3. Set governance mode to PERMISSION or READ_ONLY
 4. Review audit logs regularly
-5. Keep workspace root permissions restricted
+5. Configure audit log retention/rotation to meet compliance needs
+6. Keep workspace root permissions restricted
+
+### Audit log retention and rotation
+- Audit logs are written in JSON Lines format to `AUDIT_LOG_PATH` (default: `./audit.jsonl`).
+- Logs rotate when they exceed `AUDIT_ROTATION_BYTES` (default: 10 MB). Rotated files are
+  stored alongside the active log with a timestamp suffix (e.g., `audit.jsonl.20240131120000`).
+- Logs older than `AUDIT_RETENTION_DAYS` (default: 30) are removed during scheduled cleanup
+  checks inside the audit logger.
 
 ## License
 
