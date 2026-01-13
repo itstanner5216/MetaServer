@@ -68,6 +68,24 @@ class Config:
     SCHEMA_MIN_TOKEN_BUDGET: int = 50
 
     # ========================================================================
+    # Command Execution Safety
+    # ========================================================================
+    COMMAND_TIMEOUT: int = int(os.getenv("COMMAND_TIMEOUT", "30"))
+    COMMAND_ALLOWLIST: list[str] = [
+        item.strip().lower()
+        for item in os.getenv("COMMAND_ALLOWLIST", "").split(",")
+        if item.strip()
+    ]
+    COMMAND_DENYLIST: list[str] = [
+        item.strip().lower()
+        for item in os.getenv("COMMAND_DENYLIST", "").split(",")
+        if item.strip()
+    ]
+    COMMAND_RESTRICTIONS_RELAXED: bool = (
+        os.getenv("COMMAND_RESTRICTIONS_RELAXED", "false").lower() == "true"
+    )
+
+    # ========================================================================
     # TOON Encoding (Phase 6)
     # ========================================================================
     ENABLE_TOON_OUTPUTS: bool = True
