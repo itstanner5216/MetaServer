@@ -18,10 +18,13 @@ Deprecated Components (kept for backward compatibility):
 - tool_registry singleton (replaced by registry.tool_registry)
 
 Migration Path:
-- OLD: from meta_mcp.discovery import tool_registry
-- NEW: from meta_mcp.registry import tool_registry
+- Prefer registry-backed tools: from meta_mcp.registry import tool_registry
+- Legacy fallback (manual registration): from meta_mcp.discovery import tool_registry
+  then call register_core_tools() explicitly, or set
+  META_MCP_AUTO_REGISTER_DISCOVERY_TOOLS=true to restore legacy auto-registration.
 """
 
+import os
 from dataclasses import dataclass
 from typing import List
 
@@ -363,5 +366,7 @@ def format_search_results(results) -> str:
 # Module-level singleton (DEPRECATED - use registry.tool_registry instead)
 tool_registry = ToolRegistry()
 
-# Auto-register core tools on import (DEPRECATED)
-register_core_tools()
+# Auto-register core tools on import (DEPRECATED, opt-in only)
+_AUTO_REGISTER_ENV = "META_MCP_AUTO_REGISTER_DISCOVERY_TOOLS"
+if os.getenv(_AUTO_REGISTER_ENV, "").lower() in {"1", "true", "yes", "on"}:
+    register_core_tools()

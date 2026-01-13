@@ -14,7 +14,7 @@ verifying all phases work together correctly.
 import asyncio
 import pytest
 from unittest.mock import AsyncMock
-from src.meta_mcp.discovery import tool_registry
+from src.meta_mcp.discovery import register_core_tools, tool_registry
 from src.meta_mcp.registry.registry import ToolRegistry
 from src.meta_mcp.registry.models import ToolRecord
 from src.meta_mcp.leases.manager import lease_manager
@@ -25,6 +25,11 @@ from src.meta_mcp.toon.encoder import encode_output
 from src.meta_mcp.macros.batch_read import batch_read_tools
 from src.meta_mcp.macros.batch_search import batch_search_tools
 from src.meta_mcp.config import Config
+
+
+@pytest.fixture(scope="module", autouse=True)
+def register_legacy_tool_summaries():
+    register_core_tools()
 
 
 @pytest.mark.asyncio
