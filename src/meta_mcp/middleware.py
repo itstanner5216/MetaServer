@@ -19,6 +19,7 @@ from .governance.approval import (
 )
 from .governance.artifacts import get_artifact_generator
 from .governance.tokens import verify_token
+from .hooks import HookManager
 from .leases import lease_manager
 from .registry import tool_registry
 from .state import ExecutionMode, governance_state
@@ -46,6 +47,8 @@ SENSITIVE_TOOLS = {
 
 ELICITATION_TIMEOUT = Config.ELICITATION_TIMEOUT
 DEFAULT_ELEVATION_TTL = Config.DEFAULT_ELEVATION_TTL
+
+hook_manager = HookManager()
 
 
 class GovernanceMiddleware(Middleware):
@@ -84,6 +87,18 @@ class GovernanceMiddleware(Middleware):
             # Fail-safe: return original result if encoding fails
             logger.warning(f"TOON encoding failed: {e}, returning original result")
             return result
+
+    async def _invoke_tool(
+        self,
+        context: Context,
+        tool_name: str,
+        arguments: Dict[str, Any],
+        call_next,
+    ) -> Any:
+        hook_manager.before_tool_call(context, tool_name, arguments)
+        result = await call_next()
+        hook_manager.after_tool_call(context, tool_name, arguments, result)
+        return result
 
     @staticmethod
     def _extract_context_key(tool_name: str, arguments: Dict[str, Any]) -> str:
@@ -731,13 +746,17 @@ class GovernanceMiddleware(Middleware):
                 arguments=arguments,
                 session_id=session_id,
             )
-            result = await call_next()
+            result = await self._invoke_tool(
+                context, tool_name, arguments, call_next
+            )
             return self._apply_toon_encoding(result)
 
         # Path 2: Non-sensitive tools - pass through
         if tool_name not in SENSITIVE_TOOLS:
             logger.debug(f"Non-sensitive tool {tool_name}, passing through")
-            result = await call_next()
+            result = await self._invoke_tool(
+                context, tool_name, arguments, call_next
+            )
             return self._apply_toon_encoding(result)
 
         # Path 3: READ_ONLY mode - block sensitive operations
@@ -773,7 +792,9 @@ class GovernanceMiddleware(Middleware):
                     context_key=context_key,
                     session_id=session_id,
                 )
-                result = await call_next()
+                result = await self._invoke_tool(
+                    context, tool_name, arguments, call_next
+                )
                 return self._apply_toon_encoding(result)
 
             # No elevation, elicit approval
@@ -804,7 +825,9 @@ class GovernanceMiddleware(Middleware):
                     )
 
                 # Execute tool
-                result = await call_next()
+                result = await self._invoke_tool(
+                    context, tool_name, arguments, call_next
+                )
                 return self._apply_toon_encoding(result)
             else:
                 # Denied - audit already logged in _elicit_approval
