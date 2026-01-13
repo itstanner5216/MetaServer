@@ -2,7 +2,6 @@
 
 import asyncio
 import json
-import os
 import shutil
 import subprocess
 from pathlib import Path
@@ -12,10 +11,13 @@ from fastmcp import FastMCP
 from fastmcp.exceptions import ToolError
 from loguru import logger
 
+from meta_mcp.command_runner import run_command
+from meta_mcp.config import Config
+
 
 # Constants
-WORKSPACE_ROOT = os.getenv("WORKSPACE_ROOT", "./workspace")
-COMMAND_TIMEOUT = 30
+WORKSPACE_ROOT = Config.WORKSPACE_ROOT
+COMMAND_TIMEOUT = Config.COMMAND_TIMEOUT_SECONDS
 
 
 # Create FastMCP server instance
@@ -248,7 +250,7 @@ def execute_command(command: str, cwd: Optional[str] = None) -> str:
         cwd: Working directory (relative to workspace root, default: workspace root)
 
     Returns:
-        Command output (stdout + stderr)
+        Structured command result (stdout, stderr, exit code, policy decision)
     """
     # Validate and resolve working directory
     if cwd is None:
@@ -259,30 +261,14 @@ def execute_command(command: str, cwd: Optional[str] = None) -> str:
             raise ToolError(f"Working directory is not a directory: {cwd}")
 
     try:
-        result = subprocess.run(
-            command,
-            shell=True,
-            cwd=str(work_dir),
-            capture_output=True,
-            text=True,
+        result = run_command(
+            command=command,
+            cwd=work_dir,
             timeout=COMMAND_TIMEOUT,
-            encoding="utf-8",
-            errors="replace",
+            allow_patterns=Config.COMMAND_ALLOW_PATTERNS,
+            deny_patterns=Config.COMMAND_DENY_PATTERNS,
         )
-
-        output = []
-        if result.stdout:
-            output.append(f"STDOUT:\n{result.stdout}")
-        if result.stderr:
-            output.append(f"STDERR:\n{result.stderr}")
-        output.append(f"Exit code: {result.returncode}")
-
-        return "\n\n".join(output) if output else "Command produced no output"
-
-    except subprocess.TimeoutExpired:
-        raise ToolError(
-            f"Command timed out after {COMMAND_TIMEOUT} seconds: {command}"
-        )
+        return json.dumps(result.to_dict(), indent=2)
     except Exception as e:
         raise ToolError(f"Failed to execute command: {e}")
 
