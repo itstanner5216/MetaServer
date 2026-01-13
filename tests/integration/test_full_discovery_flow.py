@@ -231,7 +231,7 @@ async def test_discovery_security_no_schema_leakage(redis_client):
         assert hasattr(tool, "description")
 
         # Should NOT have full schema details
-        # (ToolSummary doesn't have inputSchema)
+        # (ToolCandidate doesn't have inputSchema)
         assert not hasattr(tool, "inputSchema")
         assert not hasattr(tool, "examples")
 

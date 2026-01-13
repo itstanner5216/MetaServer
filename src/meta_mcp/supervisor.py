@@ -17,7 +17,7 @@ from servers.core_tools import core_server
 
 from .audit import audit_logger
 from .config import Config
-from .discovery import format_search_results
+from .discovery_utils import format_search_results
 from .governance.approval import get_approval_provider
 from .governance.artifacts import get_artifact_generator
 from .governance.policy import evaluate_policy
@@ -190,8 +190,7 @@ async def lifespan(app):
         # governance_state.get_mode() already handles fail-safe to PERMISSION
         # No need to crash - system will operate in PERMISSION mode
 
-    # 2. Register core tools in discovery registry
-    # (Already done via auto-registration in discovery.py on import)
+    # 2. Load tool registry from YAML configuration
     all_tools = tool_registry.get_all_summaries()
     logger.info(f"Tool registry initialized with {len(all_tools)} tools")
 

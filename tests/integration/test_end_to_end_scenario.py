@@ -14,7 +14,7 @@ verifying all phases work together correctly.
 import asyncio
 import pytest
 from unittest.mock import AsyncMock
-from src.meta_mcp.discovery import tool_registry
+from src.meta_mcp.registry import tool_registry
 from src.meta_mcp.registry.registry import ToolRegistry
 from src.meta_mcp.registry.models import ToolRecord
 from src.meta_mcp.leases.manager import lease_manager
