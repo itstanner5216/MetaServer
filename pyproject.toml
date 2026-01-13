@@ -13,6 +13,9 @@ dependencies = [
     "uvicorn>=0.30",
 ]
 
+[project.scripts]
+meta-mcp-server = "meta_mcp.supervisor:main"
+
 [project.optional-dependencies]
 dev = [
     "pytest>=8.0",

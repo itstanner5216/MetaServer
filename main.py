@@ -1,5 +1,8 @@
+from meta_mcp.supervisor import main as supervisor_main
+
+
 def main():
-    print("Hello from meta-mcp-server!")
+    supervisor_main()
 
 
 if __name__ == "__main__":
