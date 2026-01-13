@@ -23,6 +23,7 @@ from .leases import lease_manager
 from .registry import tool_registry
 from .state import ExecutionMode, governance_state
 from .toon import encode_output
+from .tooling.invocation import invoke_tool
 
 
 # Constants
@@ -731,14 +732,12 @@ class GovernanceMiddleware(Middleware):
                 arguments=arguments,
                 session_id=session_id,
             )
-            result = await call_next()
-            return self._apply_toon_encoding(result)
+            return await invoke_tool(context, tool_name, arguments, call_next)
 
         # Path 2: Non-sensitive tools - pass through
         if tool_name not in SENSITIVE_TOOLS:
             logger.debug(f"Non-sensitive tool {tool_name}, passing through")
-            result = await call_next()
-            return self._apply_toon_encoding(result)
+            return await invoke_tool(context, tool_name, arguments, call_next)
 
         # Path 3: READ_ONLY mode - block sensitive operations
         if mode == ExecutionMode.READ_ONLY:
@@ -773,8 +772,7 @@ class GovernanceMiddleware(Middleware):
                     context_key=context_key,
                     session_id=session_id,
                 )
-                result = await call_next()
-                return self._apply_toon_encoding(result)
+                return await invoke_tool(context, tool_name, arguments, call_next)
 
             # No elevation, elicit approval
             logger.info(
@@ -804,8 +802,7 @@ class GovernanceMiddleware(Middleware):
                     )
 
                 # Execute tool
-                result = await call_next()
-                return self._apply_toon_encoding(result)
+                return await invoke_tool(context, tool_name, arguments, call_next)
             else:
                 # Denied - audit already logged in _elicit_approval
                 logger.warning(f"Approval denied for {tool_name} (session: {session_id})")
