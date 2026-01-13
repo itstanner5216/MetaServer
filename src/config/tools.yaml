@@ -1,0 +1,297 @@
+# MetaMCP Tool Registry
+# Auto-generated from discovery.py
+#
+# This file defines all tools available in MetaMCP.
+# Tools are loaded at startup and searchable via search_tools().
+#
+# Structure:
+#   servers: List of MCP servers (logical groupings)
+#   tools: List of tool definitions with metadata
+#
+# Risk Levels:
+#   - safe: Read-only operations, no side effects
+#   - sensitive: Write operations, requires governance approval
+#   - dangerous: Destructive operations, requires explicit approval
+
+servers:
+- server_id: core_tools
+  description: Core file, system, and git operations
+  risk_level: dangerous
+  tags:
+  - command
+  - commit
+  - core
+  - create
+  - delete
+  - directory
+  - discovery
+  - execute
+  - file
+  - get
+  - git
+  - list
+  - meta
+  - move
+  - read
+  - workspace
+  - write
+- server_id: admin_tools
+  description: Administrative and governance tools
+  risk_level: dangerous
+  tags:
+  - admin
+  - get
+  - governance
+  - set
+tools:
+- tool_id: read_file
+  server_id: core_tools
+  description_1line: Read file contents from workspace.
+  description_full: 'Read file contents from workspace.
+
+    Supports text files with automatic encoding detection. Returns file contents as string.'
+  tags:
+  - core
+  - read
+  - file
+  - workspace
+  risk_level: safe
+  requires_permission: false
+  required_scopes:
+  - tool:read_file
+  - filesystem:read
+- tool_id: list_directory
+  server_id: core_tools
+  description_1line: List directory contents with type indicators.
+  description_full: 'List directory contents with type indicators.
+
+    Shows files and subdirectories with type indicators (F=file, D=directory). Helps navigate the workspace
+    structure.'
+  tags:
+  - core
+  - list
+  - directory
+  risk_level: safe
+  requires_permission: false
+  required_scopes:
+  - tool:list_directory
+  - filesystem:read
+- tool_id: write_file
+  server_id: core_tools
+  description_1line: Write content to file in workspace.
+  description_full: 'Write content to file in workspace.
+
+    Creates the file if it doesn''t exist. Creates parent directories automatically if needed.'
+  tags:
+  - core
+  - write
+  - file
+  - workspace
+  risk_level: sensitive
+  requires_permission: true
+  required_scopes:
+  - tool:write_file
+  - filesystem:write
+- tool_id: delete_file
+  server_id: core_tools
+  description_1line: Delete file from workspace.
+  description_full: 'Delete file from workspace.
+
+    Permanently removes the file. This operation cannot be undone. Requires governance approval.'
+  tags:
+  - core
+  - delete
+  - file
+  - workspace
+  risk_level: dangerous
+  requires_permission: true
+  required_scopes:
+  - tool:delete_file
+  - filesystem:delete
+- tool_id: create_directory
+  server_id: core_tools
+  description_1line: Create directory in workspace.
+  description_full: 'Create directory in workspace.
+
+    Creates all parent directories if they don''t exist. Safe operation that won''t fail if directory
+    already exists.'
+  tags:
+  - core
+  - create
+  - directory
+  - workspace
+  risk_level: sensitive
+  requires_permission: true
+  required_scopes:
+  - tool:create_directory
+  - filesystem:write
+- tool_id: move_file
+  server_id: core_tools
+  description_1line: Move or rename file within workspace.
+  description_full: 'Move or rename file within workspace.
+
+    Can move files between directories or rename in place. Overwrites destination if it exists.'
+  tags:
+  - core
+  - move
+  - file
+  - workspace
+  risk_level: sensitive
+  requires_permission: true
+  required_scopes:
+  - tool:move_file
+  - filesystem:write
+  - filesystem:delete
+- tool_id: remove_directory
+  server_id: core_tools
+  description_1line: Remove directory and all contents.
+  description_full: 'Remove directory and all contents from workspace.
+
+    WARNING: Recursively deletes directory and all contents. This operation cannot be undone.'
+  tags:
+  - core
+  - delete
+  - directory
+  - workspace
+  risk_level: dangerous
+  requires_permission: true
+  required_scopes:
+  - tool:remove_directory
+  - filesystem:delete
+- tool_id: execute_command
+  server_id: core_tools
+  description_1line: Execute shell command with timeout.
+  description_full: 'Execute shell command with timeout.
+
+    Runs command in workspace directory with 30-second timeout. Returns stdout, stderr, and exit code.'
+  tags:
+  - core
+  - execute
+  - command
+  risk_level: sensitive
+  requires_permission: true
+  required_scopes:
+  - tool:execute_command
+  - system:execute
+- tool_id: search_tools
+  server_id: core_tools
+  description_1line: Search for available tools by name or description.
+  description_full: 'Search for available tools by name or description.
+
+    Returns tool candidates with metadata but not schemas. Use get_tool_schema() to access full tool details.'
+  tags:
+  - core
+  - meta
+  - discovery
+  risk_level: safe
+  requires_permission: false
+  required_scopes:
+  - tool:search_tools
+  - meta:discovery
+- tool_id: get_tool_schema
+  server_id: core_tools
+  description_1line: Get JSON schema for a specific tool.
+  description_full: 'Get JSON schema for a specific tool.
+
+    This is the gateway to tool access - schemas are not visible until explicitly requested. Progressive
+    discovery mechanism.'
+  tags:
+  - core
+  - get
+  - meta
+  - discovery
+  risk_level: safe
+  requires_permission: false
+  required_scopes:
+  - tool:get_tool_schema
+  - meta:schema
+- tool_id: git_commit
+  server_id: core_tools
+  description_1line: Create a git commit with staged changes.
+  description_full: 'Create a git commit with staged changes.
+
+    Commits all staged changes with provided message. Requires changes to be staged first with git add.'
+  tags:
+  - git
+  - commit
+  risk_level: sensitive
+  requires_permission: true
+  required_scopes:
+  - tool:git_commit
+  - vcs:git
+  - vcs:write
+- tool_id: git_push
+  server_id: core_tools
+  description_1line: Push commits to remote repository.
+  description_full: 'Push commits to remote repository.
+
+    Pushes all commits from current branch to remote. Requires valid git credentials and remote configuration.'
+  tags:
+  - git
+  risk_level: sensitive
+  requires_permission: true
+  required_scopes:
+  - tool:git_push
+  - vcs:git
+  - vcs:write
+  - network:remote
+- tool_id: git_reset
+  server_id: core_tools
+  description_1line: Reset git repository to a specific state.
+  description_full: 'Reset git repository to a specific state.
+
+    Resets the repository to specified commit or state. Can be destructive - use with caution.'
+  tags:
+  - git
+  risk_level: dangerous
+  requires_permission: true
+  required_scopes:
+  - tool:git_reset
+  - vcs:git
+  - vcs:destructive
+- tool_id: set_governance_mode
+  server_id: admin_tools
+  description_1line: Set the governance execution mode.
+  description_full: 'Set the governance execution mode.
+
+    Switches between READ_ONLY, PERMISSION, and BYPASS modes. Affects all subsequent tool calls.'
+  tags:
+  - admin
+  - set
+  - governance
+  risk_level: sensitive
+  requires_permission: true
+  required_scopes:
+  - tool:set_governance_mode
+  - admin:governance
+  - admin:configure
+- tool_id: get_governance_status
+  server_id: admin_tools
+  description_1line: Get current governance mode and state.
+  description_full: 'Get current governance mode and state.
+
+    Returns current mode, active elevations, and governance statistics.'
+  tags:
+  - admin
+  - get
+  - governance
+  risk_level: safe
+  requires_permission: false
+  required_scopes:
+  - tool:get_governance_status
+  - admin:read
+- tool_id: revoke_all_elevations
+  server_id: admin_tools
+  description_1line: Revoke all active governance elevations.
+  description_full: 'Revoke all active governance elevations.
+
+    Clears all temporary permission grants. Resets all tools to base governance policy.'
+  tags:
+  - admin
+  - governance
+  risk_level: dangerous
+  requires_permission: true
+  required_scopes:
+  - tool:revoke_all_elevations
+  - admin:governance
+  - admin:security

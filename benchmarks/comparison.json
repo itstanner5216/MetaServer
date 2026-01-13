@@ -1,0 +1,66 @@
+{
+  "timestamp": "2025-12-30T08:21:06.646061",
+  "baseline_timestamp": "2025-12-30T08:17:36.686191",
+  "optimized_timestamp": "2025-12-30T08:18:21.344028",
+  "comparisons": [
+    {
+      "operation": "search_performance",
+      "baseline": {
+        "mean_ms": 0.17239172011613846,
+        "median_ms": 0.16541949298698455,
+        "p95_ms": 0.1886437450593803,
+        "p99_ms": 0.6349867748213001
+      },
+      "optimized": {
+        "mean_ms": 0.16281938937027007,
+        "median_ms": 0.15683900710428134,
+        "p95_ms": 0.16882394775166176
+      },
+      "speedup": {
+        "mean": 1.058791098424401,
+        "median": 1.0547088765806716,
+        "p95": 1.1173992053359234
+      }
+    },
+    {
+      "operation": "index_building",
+      "baseline": {
+        "build_time_ms": 1.1376270122127607,
+        "vocabulary_size": 163
+      },
+      "optimized": {
+        "build_time_ms": 1.2870409991592169,
+        "cache_size": 15,
+        "avg_cache_retrieval_ms": 0.000647398216339449
+      },
+      "speedup": {
+        "build_time": 0.8839089142893943
+      }
+    }
+  ],
+  "summary": {
+    "search_mean_speedup": 1.058791098424401,
+    "search_p95_speedup": 1.1173992053359234,
+    "cache_hit_rate": "100%",
+    "memory_footprint_mb": 0.01865386962890625,
+    "optimization_status": "SUCCESS",
+    "key_findings": [
+      "Search latency improved by 1.06x (mean)",
+      "P95 latency improved by 1.12x",
+      "Memory footprint: 0.02 MB",
+      "Batch operations 2.20x faster than individual"
+    ]
+  },
+  "memory_analysis": {
+    "vocabulary_size": 163,
+    "cached_embeddings": 15,
+    "total_embedding_kb": 19.1015625,
+    "total_embedding_mb": 0.01865386962890625
+  },
+  "batch_performance": {
+    "individual_avg_ms": 0.00047479989007115364,
+    "batch_total_ms": 0.0010780058801174164,
+    "speedup": 2.2022138228941683,
+    "tool_count": 5
+  }
+}

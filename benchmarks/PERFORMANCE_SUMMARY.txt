@@ -1,0 +1,84 @@
+======================================================================
+MetaMCP+ Performance Summary Report
+======================================================================
+Generated: 2025-12-30 08:21:54
+Baseline run: 2025-12-30T08:17:36.686191
+Optimized run: 2025-12-30T08:18:21.344028
+
+EXECUTIVE SUMMARY
+----------------------------------------------------------------------
+Overall Status: SUCCESS
+Search Performance Improvement: 1.06x
+P95 Latency Improvement: 1.12x
+Cache Hit Rate: 100%
+Memory Footprint: 0.02 MB
+
+KEY METRICS
+----------------------------------------------------------------------
+
+1. Registry Loading
+   Time: 8.84 ms
+   Tool Count: 15
+
+2. Search Performance (Baseline vs Optimized)
+
+   Metric          Baseline        Optimized       Improvement
+   --------------------------------------------------------------
+   Mean            0.172 ms        0.163 ms        1.06x
+   Median          0.165 ms        0.157 ms        1.05x
+   P95             0.189 ms        0.169 ms        1.12x
+   P99             0.635 ms        N/A             N/A
+
+3. Index Building & Embedding Cache
+   Build Time: 1.14 ms
+   Vocabulary Size: 163
+   Cache Size: 15 embeddings
+   Cache Hits: 15
+   Avg Cache Retrieval: 0.647 µs
+
+4. Tool Retrieval Performance
+   Mean: 0.107 µs
+   Median: 0.104 µs
+   Iterations: 1000
+
+MEMORY ANALYSIS
+----------------------------------------------------------------------
+Vocabulary Size: 163 terms
+Cached Embeddings: 15
+Bytes per Embedding: 1304
+Total Embedding Cache: 19.10 KB
+Total Embedding Cache: 0.019 MB
+
+CACHE PERFORMANCE
+----------------------------------------------------------------------
+Embedding Cache Hit Rate: 100.0%
+Cache Retrieval Time: 0.647 µs
+
+BATCH OPERATIONS
+----------------------------------------------------------------------
+Individual Operations (avg): 0.475 µs
+Batch Operations (total): 0.001 ms
+Speedup: 2.20x
+Tool Count: 5
+
+OPTIMIZATION GAINS
+----------------------------------------------------------------------
+  • Search latency improved by 1.06x (mean)
+  • P95 latency improved by 1.12x
+  • Memory footprint: 0.02 MB
+  • Batch operations 2.20x faster than individual
+
+PERFORMANCE BOTTLENECKS IDENTIFIED
+----------------------------------------------------------------------
+  • Search P99 latency (0.635 ms) is 3.7x higher than mean
+  • Registry loading time (8.84 ms) could be optimized
+
+RECOMMENDATIONS
+----------------------------------------------------------------------
+  • Memory footprint is excellent (<1 MB)
+  • Search latency is excellent (<0.2ms)
+  • Continue using batch operations where possible
+
+======================================================================
+End of Report
+======================================================================

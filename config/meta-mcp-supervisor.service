@@ -1,0 +1,76 @@
+# Meta MCP Supervisor - Systemd Service Unit
+#
+# This service runs the Meta MCP-2 Supervisor control plane as a persistent
+# system service on Linux.
+#
+# INSTALLATION:
+# 1. Copy this file to systemd:
+#    sudo cp /home/tanner/Projects/MCPServer/config/meta-mcp-supervisor.service /etc/systemd/system/
+#
+# 2. Reload systemd to recognize the new service:
+#    sudo systemctl daemon-reload
+#
+# 3. Enable service to start on boot:
+#    sudo systemctl enable meta-mcp-supervisor
+#
+# 4. Start the service now:
+#    sudo systemctl start meta-mcp-supervisor
+#
+# 5. Check service status:
+#    sudo systemctl status meta-mcp-supervisor
+#
+# 6. View live logs:
+#    journalctl -u meta-mcp-supervisor -f
+#
+# 7. Stop the service:
+#    sudo systemctl stop meta-mcp-supervisor
+#
+# 8. Restart the service (after code changes):
+#    sudo systemctl restart meta-mcp-supervisor
+
+[Unit]
+Description=Meta MCP Supervisor - Governance Control Plane
+Documentation=https://github.com/tanner/meta-mcp-server
+After=network.target docker.service
+Wants=docker.service
+
+[Service]
+Type=simple
+User=tanner
+Group=tanner
+WorkingDirectory=/home/tanner/Projects/MCPServer
+
+# Path setup - ensures Python and system binaries are available
+Environment="PATH=/home/tanner/Projects/MCPServer/.venv/bin:/usr/local/bin:/usr/bin:/bin"
+
+# Redis connection - connects to existing Redis container from litellm-deployment
+Environment="REDIS_URL=redis://localhost:6379"
+
+# Workspace root - where file operations are scoped
+Environment="WORKSPACE_ROOT=/home/tanner/Projects/MCPServer/workspace"
+
+# Audit log path - JSONL audit trail location
+Environment="AUDIT_LOG_PATH=/home/tanner/Projects/MCPServer/audit.jsonl"
+
+# Supervisor server configuration
+Environment="HOST=0.0.0.0"
+Environment="PORT=8001"
+
+# Start the supervisor using the virtual environment's Python
+ExecStart=/home/tanner/Projects/MCPServer/.venv/bin/python -m src.meta_mcp.supervisor
+
+# Restart policy - always restart on failure after 5 seconds
+Restart=always
+RestartSec=5
+
+# Security hardening
+NoNewPrivileges=true
+PrivateTmp=true
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=meta-mcp-supervisor
+
+[Install]
+WantedBy=multi-user.target

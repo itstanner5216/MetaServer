@@ -1,0 +1,107 @@
+# LiteLLM API Gateway Configuration
+#
+# Purpose: Route requests to external inference providers only.
+#
+# CRITICAL: LiteLLM is a GATEWAY ONLY
+# - NO local model inference
+# - NO tool filtering or governance decisions
+# - NO allow/deny lists
+# - Governance is handled by meta-supervisor MCP server
+#
+# Architecture:
+# Client → LiteLLM Gateway → External Provider (Anthropic/OpenAI)
+#                         ↓
+#                    MCP Server (meta-supervisor)
+#
+# API Keys Required:
+# - ANTHROPIC_API_KEY: For Claude models
+# - OPENAI_API_KEY: For GPT models
+#
+# Set via environment variables or .env file
+
+# ============================================================================
+# MODEL ROUTING (External Providers Only)
+# ============================================================================
+model_list:
+  # Claude Models (via Anthropic API)
+  - model_name: claude-3-5-sonnet
+    litellm_params:
+      model: anthropic/claude-3-5-sonnet-20241022
+      api_key: os.environ/ANTHROPIC_API_KEY
+
+  # GPT Models (via OpenAI API)
+  - model_name: gpt-4o
+    litellm_params:
+      model: openai/gpt-4o
+      api_key: os.environ/OPENAI_API_KEY
+
+  - model_name: gpt-4o-mini
+    litellm_params:
+      model: openai/gpt-4o-mini
+      api_key: os.environ/OPENAI_API_KEY
+
+  # Gemini Embedding Models (for RAG/Semantic Search)
+  - model_name: text-embedding-004
+    litellm_params:
+      model: gemini/text-embedding-004
+      api_key: os.environ/GEMINI_API_KEY
+
+  - model_name: embedding-001
+    litellm_params:
+      model: gemini/embedding-001
+      api_key: os.environ/GEMINI_API_KEY
+
+# ============================================================================
+# MCP SERVER CONFIGURATION
+# ============================================================================
+# Connect to meta-supervisor MCP server for tool execution and governance
+mcp_servers:
+  - server_name: meta-supervisor
+    base_url: http://host.docker.internal:8001/mcp
+    # Docker host.docker.internal resolves to host machine
+    # Allows container to reach services on host
+
+# ============================================================================
+# GATEWAY SETTINGS
+# ============================================================================
+litellm_settings:
+  # Drop unsupported parameters instead of erroring
+  drop_params: true
+
+  # Request timeout must exceed elicitation timeout (300s)
+  # This ensures approval requests don't timeout at gateway level
+  request_timeout: 600  # 10 minutes
+
+  # Disable telemetry
+  telemetry: false
+
+  # Success callback (optional, for logging)
+  # success_callback: []
+
+  # Failure callback (optional, for logging)
+  # failure_callback: []
+
+# ============================================================================
+# GENERAL SETTINGS
+# ============================================================================
+general_settings:
+  # Master key for LiteLLM proxy (optional)
+  # master_key: os.environ/LITELLM_MASTER_KEY
+
+  # Database URL for LiteLLM (optional, for request logging)
+  # database_url: postgresql://...
+
+  # Enable JSON logs
+  json_logs: true
+
+  # Set log level
+  set_verbose: false
+
+# ============================================================================
+# NOTES
+# ============================================================================
+# 1. NO tool filtering is configured - all governance handled by meta-supervisor
+# 2. NO local models - only external API providers
+# 3. request_timeout (600s) exceeds ELICITATION_TIMEOUT (300s) to prevent gateway timeouts
+# 4. MCP server URL uses host.docker.internal for Docker → host communication
+# 5. API keys must be set in environment before starting LiteLLM

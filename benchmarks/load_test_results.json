@@ -1,0 +1,74 @@
+{
+  "timestamp": "2025-12-30T08:22:48.686588",
+  "tests": [
+    {
+      "test": "concurrent_search",
+      "threads": 10,
+      "queries_per_thread": 50,
+      "total_queries": 500,
+      "total_time_s": 0.09476042700407561,
+      "throughput_qps": 5276.464192995829,
+      "mean_latency_ms": 0.41778801727923565,
+      "median_latency_ms": 0.16625099669909105,
+      "p95_latency_ms": 0.3547990010702051,
+      "min_latency_ms": 0.15507701027672738,
+      "max_latency_ms": 26.630081003531814,
+      "errors": 0
+    },
+    {
+      "test": "concurrent_retrieval",
+      "threads": 10,
+      "retrievals_per_thread": 100,
+      "total_retrievals": 1000,
+      "total_time_s": 0.001179936996777542,
+      "throughput_ops": 847502.8774680704,
+      "mean_latency_ms": 0.0001357980363536626,
+      "median_latency_ms": 0.00011100200936198235,
+      "p95_latency_ms": 0.00017895290511660278,
+      "min_latency_ms": 0.000100000761449337,
+      "max_latency_ms": 0.007079011993482709,
+      "errors": 0
+    },
+    {
+      "test": "batch_stress",
+      "batch_results": [
+        {
+          "batch_size": 5,
+          "iterations": 100,
+          "mean_time_ms": 0.00048035974032245576,
+          "median_time_ms": 0.000457002897746861,
+          "throughput_batches_per_sec": 2081773.1297146599,
+          "avg_time_per_item_ms": 9.607194806449115e-05
+        },
+        {
+          "batch_size": 10,
+          "iterations": 100,
+          "mean_time_ms": 0.000907450303202495,
+          "median_time_ms": 0.0008049973985180259,
+          "throughput_batches_per_sec": 1101988.7221050968,
+          "avg_time_per_item_ms": 9.07450303202495e-05
+        },
+        {
+          "batch_size": 15,
+          "iterations": 100,
+          "mean_time_ms": 0.0011189198994543403,
+          "median_time_ms": 0.0011080046533606946,
+          "throughput_batches_per_sec": 893719.0235759204,
+          "avg_time_per_item_ms": 7.459465996362269e-05
+        }
+      ],
+      "errors": 0
+    },
+    {
+      "test": "mixed_workload",
+      "duration_s": 5.000108334003016,
+      "total_operations": 54027,
+      "search_operations": 27014,
+      "retrieval_operations": 27013,
+      "throughput_ops": 10805.16588662525,
+      "search_mean_ms": 0.18375063147125043,
+      "retrieval_mean_ms": 0.0002416808402031104,
+      "errors": 0
+    }
+  ]
+}

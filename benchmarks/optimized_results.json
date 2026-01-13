@@ -1,0 +1,38 @@
+{
+  "timestamp": "2025-12-30T08:18:21.344028",
+  "benchmark_type": "optimized",
+  "results": [
+    {
+      "operation": "embedding_reuse",
+      "cache_size": 15,
+      "build_time_ms": 1.2870409991592169,
+      "avg_cache_retrieval_ms": 0.000647398216339449,
+      "cache_hits": 15
+    },
+    {
+      "operation": "cached_search",
+      "mean_ms": 0.16281938937027007,
+      "median_ms": 0.15683900710428134,
+      "p95_ms": 0.16882394775166176,
+      "min_ms": 0.15552699915133417,
+      "max_ms": 0.6246630073292181,
+      "iterations": 100
+    },
+    {
+      "operation": "batch_vs_individual",
+      "individual_total_ms": 0.002373999450355768,
+      "individual_avg_ms": 0.00047479989007115364,
+      "batch_total_ms": 0.0010780058801174164,
+      "speedup": 2.2022138228941683,
+      "tool_count": 5
+    },
+    {
+      "operation": "memory_footprint",
+      "vocabulary_size": 163,
+      "cached_embeddings": 15,
+      "bytes_per_embedding": 1304,
+      "total_embedding_kb": 19.1015625,
+      "total_embedding_mb": 0.01865386962890625
+    }
+  ]
+}

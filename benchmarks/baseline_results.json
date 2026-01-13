@@ -1,0 +1,32 @@
+{
+  "timestamp": "2025-12-30T08:17:36.686191",
+  "benchmark_type": "baseline",
+  "results": [
+    {
+      "operation": "registry_loading",
+      "time_ms": 8.842602008371614,
+      "tool_count": 15
+    },
+    {
+      "operation": "index_building",
+      "time_ms": 1.1376270122127607,
+      "vocabulary_size": 163
+    },
+    {
+      "operation": "search_latency",
+      "mean_ms": 0.17239172011613846,
+      "median_ms": 0.16541949298698455,
+      "p95_ms": 0.1886437450593803,
+      "p99_ms": 0.6349867748213001,
+      "min_ms": 0.16272699576802552,
+      "max_ms": 0.6392530049197376,
+      "iterations": 100
+    },
+    {
+      "operation": "tool_retrieval",
+      "mean_ms": 0.00010748497152235359,
+      "median_ms": 0.00010400253813713789,
+      "iterations": 1000
+    }
+  ]
+}
