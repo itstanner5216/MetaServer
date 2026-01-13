@@ -18,6 +18,7 @@ from .artifacts import (
     ArtifactGenerationError,
     get_artifact_generator,
 )
+from .permission import PermissionRequest
 from .policy import PolicyDecision, evaluate_policy
 from .tokens import decode_token, generate_token, verify_token
 
@@ -38,4 +39,5 @@ __all__ = [
     "ApprovalArtifactGenerator",
     "ArtifactGenerationError",
     "get_artifact_generator",
+    "PermissionRequest",
 ]
