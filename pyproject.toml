@@ -2,7 +2,7 @@
 name = "meta-mcp-server"
 version = "0.1.0"
 description = "Meta MCP Server - FastMCP-based server infrastructure"
-requires-python = ">=3.11"
+requires-python = ">=3.10"
 dependencies = [
     "fastmcp>=2.14.0",
     "pydantic>=2.0",
@@ -32,13 +32,65 @@ packages = ["src/meta_mcp"]
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
-python_files = ["test_*.py"]
+python_files = ["test_*.py", "*_test.py", "verify_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
+addopts = [
+    "--strict-markers",
+    "--strict-config",
+    "-ra",
+]
+markers = [
+    "slow: marks tests as slow",
+    "integration: marks tests as integration tests",
+    "unit: marks tests as unit tests",
+]
 
-[tool.uv]
-dev-dependencies = [
+[tool.coverage.run]
+source = ["src", "MetaServer"]
+omit = [
+    "*/tests/*",
+    "*/__pycache__/*",
+    "*/.venv/*",
+]
+branch = true
+
+[tool.coverage.report]
+precision = 2
+show_missing = true
+skip_covered = false
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "raise AssertionError",
+    "raise NotImplementedError",
+    "if __name__ == .__main__.:",
+    "if TYPE_CHECKING:",
+    "@abstractmethod",
+]
+
+[tool.pyright]
+include = ["src", "MetaServer"]
+exclude = [
+    "**/__pycache__",
+    ".venv",
+]
+pythonVersion = "3.10"
+typeCheckingMode = "basic"
+reportMissingImports = true
+reportMissingTypeStubs = false
+
+[tool.bandit]
+exclude_dirs = ["tests", ".venv"]
+skips = ["B101"]  # Allow assert in tests
+
+[dependency-groups]
+dev = [
     "pytest>=8.0",
     "pytest-asyncio>=0.23",
     "pytest-cov>=6.0",
+    "ruff>=0.6.0",
+    "pyright>=1.1.350",
+    "pre-commit>=3.6.0",
+    "bandit[toml]>=1.7.5",
 ]

@@ -1,5 +1,5 @@
 """Tests for tool registry."""
-import pytest
+
 from src.meta_mcp.registry import tool_registry
 from src.meta_mcp.registry.models import ToolCandidate, ToolRecord
 

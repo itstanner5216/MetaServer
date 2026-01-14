@@ -8,8 +8,10 @@ Tests the ToolLease dataclass:
 - Invariant enforcement
 """
 
+from datetime import datetime
+
 import pytest
-from datetime import datetime, timedelta
+
 from src.meta_mcp.leases.models import ToolLease
 
 
@@ -23,7 +25,7 @@ async def test_lease_creation():
         tool_id="read_file",
         ttl_seconds=300,
         calls_remaining=3,
-        mode_at_issue="PERMISSION"
+        mode_at_issue="PERMISSION",
     )
 
     assert lease.client_id == "test_session"
@@ -46,7 +48,7 @@ async def test_lease_expiration_check():
         tool_id="read_file",
         ttl_seconds=1,
         calls_remaining=5,
-        mode_at_issue="PERMISSION"
+        mode_at_issue="PERMISSION",
     )
 
     # Not expired initially
@@ -70,7 +72,7 @@ async def test_lease_can_consume():
         tool_id="read_file",
         ttl_seconds=300,
         calls_remaining=3,
-        mode_at_issue="PERMISSION"
+        mode_at_issue="PERMISSION",
     )
 
     # Can consume initially
@@ -93,7 +95,7 @@ async def test_lease_validation_errors():
             tool_id="read_file",
             ttl_seconds=0,  # Invalid
             calls_remaining=1,
-            mode_at_issue="PERMISSION"
+            mode_at_issue="PERMISSION",
         )
 
     # Invalid calls_remaining
@@ -103,7 +105,7 @@ async def test_lease_validation_errors():
             tool_id="read_file",
             ttl_seconds=300,
             calls_remaining=-1,  # Invalid
-            mode_at_issue="PERMISSION"
+            mode_at_issue="PERMISSION",
         )
 
     # Empty client_id
@@ -113,7 +115,7 @@ async def test_lease_validation_errors():
             tool_id="read_file",
             ttl_seconds=300,
             calls_remaining=1,
-            mode_at_issue="PERMISSION"
+            mode_at_issue="PERMISSION",
         )
 
 
@@ -122,8 +124,8 @@ async def test_lease_serialization():
     """
     Verify ToolLease can be serialized to/from dict for Redis storage.
     """
-    from dataclasses import asdict
     import json
+    from dataclasses import asdict
 
     # Create lease
     lease = ToolLease.create(
@@ -131,7 +133,7 @@ async def test_lease_serialization():
         tool_id="write_file",
         ttl_seconds=300,
         calls_remaining=1,
-        mode_at_issue="PERMISSION"
+        mode_at_issue="PERMISSION",
     )
 
     # Serialize

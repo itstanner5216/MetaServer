@@ -1,8 +1,9 @@
 """Tool registry implementation."""
+
 import os
-import yaml
 from pathlib import Path
-from typing import Dict, List, Optional
+
+import yaml
 
 from .models import ServerRecord, ToolCandidate, ToolRecord
 
@@ -22,8 +23,8 @@ class ToolRegistry:
 
     def __init__(self):
         """Initialize empty tool registry."""
-        self._tools: Dict[str, ToolRecord] = {}
-        self._servers: Dict[str, ServerRecord] = {}
+        self._tools: dict[str, ToolRecord] = {}
+        self._servers: dict[str, ServerRecord] = {}
         self._bootstrap_tools = {"search_tools", "get_tool_schema"}
 
     @classmethod
@@ -85,7 +86,7 @@ class ToolRegistry:
         """
         return tool_id in self._tools
 
-    def get(self, tool_id: str) -> Optional[ToolRecord]:
+    def get(self, tool_id: str) -> ToolRecord | None:
         """
         Get tool record by ID.
 
@@ -113,7 +114,7 @@ class ToolRegistry:
         tool.validate_invariants()
         self._tools[tool.tool_id] = tool
 
-    def search(self, query: str) -> List[ToolCandidate]:
+    def search(self, query: str) -> list[ToolCandidate]:
         """
         Search for tools using semantic or keyword matching.
 
@@ -133,18 +134,22 @@ class ToolRegistry:
 
         # Phase 2: Use semantic search if enabled
         from ..config import Config
+
         if Config.ENABLE_SEMANTIC_RETRIEVAL:
             try:
                 from ..retrieval import SemanticSearch
+
                 searcher = SemanticSearch(self)
                 return searcher.search(query, limit=8)
             except ImportError:
                 # Expected if retrieval module not available
                 import logging
+
                 logging.debug("Semantic search not available, falling back to keyword search")
             except Exception as e:
                 # Unexpected error - log it
                 import logging
+
                 logging.error(f"Semantic search failed: {e}", exc_info=True)
 
         # Fallback: Original keyword matching
@@ -155,22 +160,22 @@ class ToolRegistry:
             # Simple keyword matching in tool_id, description and tags
             score = 0.0
 
-            if query_lower in tool.tool_id.lower():
-                score = 1.0
-            elif query_lower in tool.description_1line.lower():
+            if query_lower in tool.tool_id.lower() or query_lower in tool.description_1line.lower():
                 score = 1.0
             elif any(query_lower in tag.lower() for tag in tool.tags):
                 score = 0.8
 
             if score > 0:
-                results.append(ToolCandidate(
-                    tool_id=tool.tool_id,
-                    server_id=tool.server_id,
-                    description_1line=tool.description_1line,
-                    tags=tool.tags,
-                    risk_level=tool.risk_level,
-                    relevance_score=score
-                ))
+                results.append(
+                    ToolCandidate(
+                        tool_id=tool.tool_id,
+                        server_id=tool.server_id,
+                        description_1line=tool.description_1line,
+                        tags=tool.tags,
+                        risk_level=tool.risk_level,
+                        relevance_score=score,
+                    )
+                )
 
         # Sort by relevance score (highest first)
         results.sort(key=lambda c: c.relevance_score, reverse=True)
@@ -193,7 +198,7 @@ class ToolRegistry:
         """
         return self._bootstrap_tools
 
-    def get_all_summaries(self) -> List[ToolRecord]:
+    def get_all_summaries(self) -> list[ToolRecord]:
         """
         Get all registered tool records.
 

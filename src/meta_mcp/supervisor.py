@@ -1,12 +1,10 @@
 """Main FastMCP supervisor server with governance middleware and discovery tools."""
 
-import asyncio
 import json
-import os
 import sys
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 from fastmcp import Context, FastMCP
 from fastmcp.exceptions import ToolError
@@ -23,11 +21,10 @@ from .governance.artifacts import get_artifact_generator
 from .governance.policy import evaluate_policy
 from .governance.tokens import generate_token
 from .leases import lease_manager
-from .registry import tool_registry
 from .middleware import GovernanceMiddleware
+from .registry import tool_registry
 from .state import governance_state
 from .validation import run_all_validations
-
 
 # Constants
 SERVER_NAME = "MetaSupervisor"
@@ -51,7 +48,7 @@ _loaded_tools: set[str] = set()  # Tools currently exposed to MCP clients
 _tool_instances: dict[str, Any] = {}  # Cached tool function instances
 
 
-async def _get_tool_function(tool_name: str) -> Optional[Any]:
+async def _get_tool_function(tool_name: str) -> Any | None:
     """
     Lazily retrieve FunctionTool instance from core_server or admin_server.
 
@@ -158,6 +155,7 @@ async def _expose_tool(tool_name: str) -> bool:
 # LIFECYCLE MANAGEMENT
 # ============================================================================
 
+
 @asynccontextmanager
 async def lifespan(app):
     """
@@ -210,9 +208,7 @@ async def lifespan(app):
         is_available = await provider.is_available()
 
         if is_available:
-            logger.info(
-                f"Approval provider: {provider.get_name()} - AVAILABLE ✓"
-            )
+            logger.info(f"Approval provider: {provider.get_name()} - AVAILABLE ✓")
         else:
             logger.warning(
                 f"Approval provider: {provider.get_name()} - NOT AVAILABLE (will retry at runtime)"
@@ -228,9 +224,7 @@ async def lifespan(app):
     # 6. Artifact generator initialization
     try:
         artifact_generator = get_artifact_generator()
-        logger.info(
-            f"Artifact generator initialized: {artifact_generator.artifacts_root}"
-        )
+        logger.info(f"Artifact generator initialized: {artifact_generator.artifacts_root}")
     except Exception as e:
         logger.error(
             f"Artifact generator initialization failed: {e}. "
@@ -240,7 +234,7 @@ async def lifespan(app):
     # 7. Log startup completion
     logger.info(f"{SERVER_NAME} startup complete")
     logger.info(f"Listening on {HOST}:{PORT}")
-    logger.info(f"Governance middleware: ACTIVE")
+    logger.info("Governance middleware: ACTIVE")
     logger.info(f"Audit logging: {audit_logger.log_path}")
 
     yield  # Server runs here
@@ -280,6 +274,7 @@ mcp = FastMCP(name=SERVER_NAME, middleware=[GovernanceMiddleware()], lifespan=li
 # ============================================================================
 # DISCOVERY TOOLS (Control Plane Only)
 # ============================================================================
+
 
 @mcp.tool()
 def search_tools(query: str) -> str:
@@ -387,20 +382,14 @@ async def get_tool_schema(tool_name: str, expand: bool = False, ctx: Context = N
     # Handle policy decision
     if policy_decision.action == "block":
         # Policy blocks access - deny immediately
-        logger.warning(
-            f"Policy blocked access to '{tool_name}': {policy_decision.reason}"
-        )
-        raise ToolError(
-            f"Access to '{tool_name}' blocked by policy: {policy_decision.reason}"
-        )
+        logger.warning(f"Policy blocked access to '{tool_name}': {policy_decision.reason}")
+        raise ToolError(f"Access to '{tool_name}' blocked by policy: {policy_decision.reason}")
 
-    elif policy_decision.action == "require_approval":
+    if policy_decision.action == "require_approval":
         # Policy requires approval - trigger elicitation
         # NOTE: This uses the existing middleware elicitation pattern
         # The middleware will handle approval request and elevation grant
-        logger.info(
-            f"Policy requires approval for '{tool_name}': {policy_decision.reason}"
-        )
+        logger.info(f"Policy requires approval for '{tool_name}': {policy_decision.reason}")
         raise ToolError(
             f"Access to '{tool_name}' requires approval. "
             f"The system will prompt for permission when you attempt to use this tool. "
@@ -451,9 +440,7 @@ async def get_tool_schema(tool_name: str, expand: bool = False, ctx: Context = N
         tool = await mcp.get_tool(tool_name)
 
         if not tool:
-            raise ToolError(
-                f"Tool '{tool_name}' not found in MCP registry after exposure"
-            )
+            raise ToolError(f"Tool '{tool_name}' not found in MCP registry after exposure")
 
         # Step 4: Convert to MCP format and extract schema
         mcp_tool = tool.to_mcp_tool()
@@ -506,6 +493,7 @@ async def get_tool_schema(tool_name: str, expand: bool = False, ctx: Context = N
 # ============================================================================
 # MAIN ENTRY POINT
 # ============================================================================
+
 
 def main():
     """

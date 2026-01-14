@@ -1,13 +1,13 @@
 """Test fail-safe defaults (Invariant #6, Task 16)."""
 
+from unittest.mock import AsyncMock, patch
+
 import pytest
 from fastmcp.exceptions import ToolError
-from unittest.mock import AsyncMock, MagicMock, patch
 from redis import asyncio as aioredis
 
 from src.meta_mcp.middleware import GovernanceMiddleware
 from src.meta_mcp.state import ExecutionMode, governance_state
-
 
 # ============================================================================
 # REDIS FAILURE TESTS

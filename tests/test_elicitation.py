@@ -1,12 +1,12 @@
 """Test human-in-the-loop approval flows (Invariant #6, Task 15)."""
 
+from unittest.mock import AsyncMock, MagicMock
+
 import pytest
 from fastmcp.exceptions import ToolError
-from unittest.mock import AsyncMock, MagicMock
 
 from src.meta_mcp.middleware import GovernanceMiddleware
 from tests.conftest import read_audit_log
-
 
 # ============================================================================
 # APPROVAL FLOW TESTS
@@ -265,6 +265,7 @@ async def test_approval_creates_audit_log(
 
     # Small delay to allow async logging to complete
     import asyncio
+
     await asyncio.sleep(0.2)
 
     # Read audit log from default location
@@ -306,11 +307,11 @@ async def test_substring_attacks_denied(
 
     # Test various substring attack attempts
     substring_attacks = [
-        "yokay",          # contains "ok" but not as standalone word
-        "yesno",          # contains "yes" but not as standalone word
-        "approve123",     # contains "approve" but with suffix
-        "xapprove",       # contains "approve" but with prefix
-        "acceptreject",   # contains "accept" but not standalone
+        "yokay",  # contains "ok" but not as standalone word
+        "yesno",  # contains "yes" but not as standalone word
+        "approve123",  # contains "approve" but with suffix
+        "xapprove",  # contains "approve" but with prefix
+        "acceptreject",  # contains "accept" but not standalone
     ]
 
     for attack_input in substring_attacks:
@@ -426,7 +427,9 @@ async def test_empty_and_whitespace_denied():
 
     for empty_input in empty_inputs:
         result = middleware._parse_approval_response(empty_input)
-        assert result is False, f"Empty/whitespace input '{repr(empty_input)}' was incorrectly approved"
+        assert result is False, (
+            f"Empty/whitespace input '{empty_input!r}' was incorrectly approved"
+        )
 
 
 @pytest.mark.asyncio
@@ -477,11 +480,11 @@ async def test_ambiguous_responses_fail_safe():
     # "yes but no" contains "yes" → approved
     # "maybe yes" contains "yes" → approved
     ambiguous_inputs = [
-        ("yes but no", True),        # Contains "yes" → approved
-        ("maybe yes", True),         # Contains "yes" → approved
-        ("I guess ok", True),        # Contains "ok" → approved
-        ("not really approve", True), # Contains "approve" → approved
-        ("no but yes", True),        # Contains "yes" → approved
+        ("yes but no", True),  # Contains "yes" → approved
+        ("maybe yes", True),  # Contains "yes" → approved
+        ("I guess ok", True),  # Contains "ok" → approved
+        ("not really approve", True),  # Contains "approve" → approved
+        ("no but yes", True),  # Contains "yes" → approved
     ]
 
     for ambiguous_input, expected in ambiguous_inputs:

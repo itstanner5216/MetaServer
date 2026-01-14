@@ -14,8 +14,10 @@ Security Invariants:
 """
 
 import asyncio
-import pytest
 from unittest.mock import AsyncMock, MagicMock
+
+import pytest
+
 from src.meta_mcp.leases.manager import lease_manager
 
 
@@ -63,7 +65,7 @@ async def test_lease_grant_emits_notification(redis_client):
             tool_id="write_file",
             ttl_seconds=300,
             calls_remaining=5,
-            mode_at_issue="PERMISSION"
+            mode_at_issue="PERMISSION",
         )
 
         # Emit notification manually (since grant doesn't auto-emit yet)
@@ -94,7 +96,7 @@ async def test_lease_revocation_emits_notification(redis_client):
         tool_id="write_file",
         ttl_seconds=300,
         calls_remaining=5,
-        mode_at_issue="PERMISSION"
+        mode_at_issue="PERMISSION",
     )
 
     # Register callback
@@ -132,7 +134,7 @@ async def test_lease_expiration_cleanup(redis_client):
         tool_id="write_file",
         ttl_seconds=1,
         calls_remaining=5,
-        mode_at_issue="PERMISSION"
+        mode_at_issue="PERMISSION",
     )
     assert lease is not None
 
@@ -170,7 +172,7 @@ async def test_multiple_clients_isolated_notifications(redis_client):
             tool_id="write_file",
             ttl_seconds=300,
             calls_remaining=5,
-            mode_at_issue="PERMISSION"
+            mode_at_issue="PERMISSION",
         )
 
         # Emit notification for Client A
@@ -266,7 +268,7 @@ async def test_notification_on_lease_exhaustion(redis_client):
         tool_id="write_file",
         ttl_seconds=300,
         calls_remaining=1,
-        mode_at_issue="PERMISSION"
+        mode_at_issue="PERMISSION",
     )
 
     # Register callback
@@ -308,7 +310,7 @@ async def test_multiple_notifications_same_client(redis_client):
             tool_id="write_file",
             ttl_seconds=300,
             calls_remaining=5,
-            mode_at_issue="PERMISSION"
+            mode_at_issue="PERMISSION",
         )
         await lease_manager._emit_list_changed("multi_notify_test")
 
@@ -322,7 +324,7 @@ async def test_multiple_notifications_same_client(redis_client):
             tool_id="read_file",
             ttl_seconds=300,
             calls_remaining=3,
-            mode_at_issue="PERMISSION"
+            mode_at_issue="PERMISSION",
         )
         await lease_manager._emit_list_changed("multi_notify_test")
 
@@ -352,7 +354,7 @@ async def test_notification_includes_correct_client_id(redis_client):
             tool_id="write_file",
             ttl_seconds=300,
             calls_remaining=5,
-            mode_at_issue="PERMISSION"
+            mode_at_issue="PERMISSION",
         )
         await lease_manager._emit_list_changed("client_alpha")
 
@@ -362,7 +364,7 @@ async def test_notification_includes_correct_client_id(redis_client):
             tool_id="read_file",
             ttl_seconds=300,
             calls_remaining=3,
-            mode_at_issue="PERMISSION"
+            mode_at_issue="PERMISSION",
         )
         await lease_manager._emit_list_changed("client_beta")
 
@@ -450,7 +452,7 @@ async def test_complete_notification_workflow(redis_client):
             tool_id="write_file",
             ttl_seconds=300,
             calls_remaining=5,
-            mode_at_issue="PERMISSION"
+            mode_at_issue="PERMISSION",
         )
 
         # Step 2: Emit notification

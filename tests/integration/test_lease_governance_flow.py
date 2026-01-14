@@ -15,14 +15,15 @@ Security Invariants:
 """
 
 import asyncio
-import pytest
 import time
-from src.meta_mcp.leases.manager import lease_manager
-from src.meta_mcp.leases.models import ToolLease
-from src.meta_mcp.governance.policy import evaluate_policy, PolicyDecision
-from src.meta_mcp.governance.tokens import generate_token, verify_token
-from src.meta_mcp.state import ExecutionMode, governance_state
+
+import pytest
+
 from src.meta_mcp.config import Config
+from src.meta_mcp.governance.policy import evaluate_policy
+from src.meta_mcp.governance.tokens import generate_token, verify_token
+from src.meta_mcp.leases.manager import lease_manager
+from src.meta_mcp.state import ExecutionMode, governance_state
 
 
 @pytest.mark.asyncio
@@ -36,28 +37,20 @@ async def test_policy_evaluation_read_only_mode(redis_client):
     - Dangerous tools: BLOCK
     """
     # Safe tool allowed
-    decision = evaluate_policy(
-        mode=ExecutionMode.READ_ONLY,
-        tool_risk="safe",
-        tool_id="read_file"
-    )
+    decision = evaluate_policy(mode=ExecutionMode.READ_ONLY, tool_risk="safe", tool_id="read_file")
     assert decision.action == "allow"
     assert not decision.requires_approval
 
     # Sensitive tool blocked
     decision = evaluate_policy(
-        mode=ExecutionMode.READ_ONLY,
-        tool_risk="sensitive",
-        tool_id="write_file"
+        mode=ExecutionMode.READ_ONLY, tool_risk="sensitive", tool_id="write_file"
     )
     assert decision.action == "block"
     assert not decision.requires_approval
 
     # Dangerous tool blocked
     decision = evaluate_policy(
-        mode=ExecutionMode.READ_ONLY,
-        tool_risk="dangerous",
-        tool_id="execute_command"
+        mode=ExecutionMode.READ_ONLY, tool_risk="dangerous", tool_id="execute_command"
     )
     assert decision.action == "block"
 
@@ -73,28 +66,20 @@ async def test_policy_evaluation_permission_mode(redis_client):
     - Dangerous tools: REQUIRE_APPROVAL
     """
     # Safe tool allowed
-    decision = evaluate_policy(
-        mode=ExecutionMode.PERMISSION,
-        tool_risk="safe",
-        tool_id="read_file"
-    )
+    decision = evaluate_policy(mode=ExecutionMode.PERMISSION, tool_risk="safe", tool_id="read_file")
     assert decision.action == "allow"
     assert not decision.requires_approval
 
     # Sensitive tool requires approval
     decision = evaluate_policy(
-        mode=ExecutionMode.PERMISSION,
-        tool_risk="sensitive",
-        tool_id="write_file"
+        mode=ExecutionMode.PERMISSION, tool_risk="sensitive", tool_id="write_file"
     )
     assert decision.action == "require_approval"
     assert decision.requires_approval
 
     # Dangerous tool requires approval
     decision = evaluate_policy(
-        mode=ExecutionMode.PERMISSION,
-        tool_risk="dangerous",
-        tool_id="execute_command"
+        mode=ExecutionMode.PERMISSION, tool_risk="dangerous", tool_id="execute_command"
     )
     assert decision.action == "require_approval"
     assert decision.requires_approval
@@ -112,11 +97,7 @@ async def test_policy_evaluation_bypass_mode(redis_client):
     """
     # All tools allowed in BYPASS mode
     for risk in ["safe", "sensitive", "dangerous"]:
-        decision = evaluate_policy(
-            mode=ExecutionMode.BYPASS,
-            tool_risk=risk,
-            tool_id="any_tool"
-        )
+        decision = evaluate_policy(mode=ExecutionMode.BYPASS, tool_risk=risk, tool_id="any_tool")
         assert decision.action == "allow"
         assert not decision.requires_approval
 
@@ -130,19 +111,11 @@ async def test_bootstrap_tools_always_allowed(redis_client):
     """
     for mode in [ExecutionMode.READ_ONLY, ExecutionMode.PERMISSION, ExecutionMode.BYPASS]:
         # search_tools always allowed
-        decision = evaluate_policy(
-            mode=mode,
-            tool_risk="safe",
-            tool_id="search_tools"
-        )
+        decision = evaluate_policy(mode=mode, tool_risk="safe", tool_id="search_tools")
         assert decision.action == "allow"
 
         # get_tool_schema always allowed
-        decision = evaluate_policy(
-            mode=mode,
-            tool_risk="safe",
-            tool_id="get_tool_schema"
-        )
+        decision = evaluate_policy(mode=mode, tool_risk="safe", tool_id="get_tool_schema")
         assert decision.action == "allow"
 
 
@@ -162,7 +135,7 @@ async def test_lease_grant_and_validate(redis_client):
         tool_id="read_file",
         ttl_seconds=300,
         calls_remaining=5,
-        mode_at_issue="PERMISSION"
+        mode_at_issue="PERMISSION",
     )
 
     assert lease is not None
@@ -190,7 +163,7 @@ async def test_lease_scoped_to_client_and_tool(redis_client):
         tool_id="write_file",
         ttl_seconds=300,
         calls_remaining=3,
-        mode_at_issue="PERMISSION"
+        mode_at_issue="PERMISSION",
     )
     assert lease_a is not None
 
@@ -220,7 +193,7 @@ async def test_lease_consume_decrements_calls(redis_client):
         tool_id="read_file",
         ttl_seconds=300,
         calls_remaining=3,
-        mode_at_issue="PERMISSION"
+        mode_at_issue="PERMISSION",
     )
 
     # Consume first call
@@ -256,7 +229,7 @@ async def test_lease_expiration_via_ttl(redis_client):
         tool_id="read_file",
         ttl_seconds=1,
         calls_remaining=5,
-        mode_at_issue="PERMISSION"
+        mode_at_issue="PERMISSION",
     )
     assert lease is not None
 
@@ -288,7 +261,7 @@ async def test_lease_revocation(redis_client):
         tool_id="write_file",
         ttl_seconds=300,
         calls_remaining=5,
-        mode_at_issue="PERMISSION"
+        mode_at_issue="PERMISSION",
     )
 
     # Verify lease exists
@@ -316,10 +289,7 @@ async def test_capability_token_generation_and_verification(redis_client):
     """
     # Generate token
     token = generate_token(
-        client_id="token_test",
-        tool_id="write_file",
-        ttl_seconds=300,
-        secret=Config.HMAC_SECRET
+        client_id="token_test", tool_id="write_file", ttl_seconds=300, secret=Config.HMAC_SECRET
     )
 
     assert token is not None
@@ -327,28 +297,19 @@ async def test_capability_token_generation_and_verification(redis_client):
 
     # Verify with correct parameters
     valid = verify_token(
-        token=token,
-        client_id="token_test",
-        tool_id="write_file",
-        secret=Config.HMAC_SECRET
+        token=token, client_id="token_test", tool_id="write_file", secret=Config.HMAC_SECRET
     )
     assert valid is True
 
     # Reject with wrong client_id
     invalid = verify_token(
-        token=token,
-        client_id="wrong_client",
-        tool_id="write_file",
-        secret=Config.HMAC_SECRET
+        token=token, client_id="wrong_client", tool_id="write_file", secret=Config.HMAC_SECRET
     )
     assert invalid is False
 
     # Reject with wrong tool_id
     invalid = verify_token(
-        token=token,
-        client_id="token_test",
-        tool_id="wrong_tool",
-        secret=Config.HMAC_SECRET
+        token=token, client_id="token_test", tool_id="wrong_tool", secret=Config.HMAC_SECRET
     )
     assert invalid is False
 
@@ -369,15 +330,12 @@ async def test_capability_token_expiration(redis_client):
         client_id="expire_token_test",
         tool_id="write_file",
         ttl_seconds=1,
-        secret=Config.HMAC_SECRET
+        secret=Config.HMAC_SECRET,
     )
 
     # Immediate verification succeeds
     valid = verify_token(
-        token=token,
-        client_id="expire_token_test",
-        tool_id="write_file",
-        secret=Config.HMAC_SECRET
+        token=token, client_id="expire_token_test", tool_id="write_file", secret=Config.HMAC_SECRET
     )
     assert valid is True
 
@@ -386,10 +344,7 @@ async def test_capability_token_expiration(redis_client):
 
     # Verification should fail
     expired = verify_token(
-        token=token,
-        client_id="expire_token_test",
-        tool_id="write_file",
-        secret=Config.HMAC_SECRET
+        token=token, client_id="expire_token_test", tool_id="write_file", secret=Config.HMAC_SECRET
     )
     assert expired is False
 
@@ -410,7 +365,7 @@ async def test_lease_with_capability_token(redis_client):
         client_id="lease_token_test",
         tool_id="write_file",
         ttl_seconds=300,
-        secret=Config.HMAC_SECRET
+        secret=Config.HMAC_SECRET,
     )
 
     # Grant lease with token
@@ -420,7 +375,7 @@ async def test_lease_with_capability_token(redis_client):
         ttl_seconds=300,
         calls_remaining=5,
         mode_at_issue="PERMISSION",
-        capability_token=token
+        capability_token=token,
     )
 
     assert lease is not None
@@ -431,7 +386,7 @@ async def test_lease_with_capability_token(redis_client):
         token=lease.capability_token,
         client_id="lease_token_test",
         tool_id="write_file",
-        secret=Config.HMAC_SECRET
+        secret=Config.HMAC_SECRET,
     )
     assert valid is True
 
@@ -458,7 +413,7 @@ async def test_mode_change_doesnt_affect_existing_leases(redis_client):
         tool_id="write_file",
         ttl_seconds=300,
         calls_remaining=5,
-        mode_at_issue="PERMISSION"
+        mode_at_issue="PERMISSION",
     )
     assert lease is not None
     assert lease.mode_at_issue == "PERMISSION"
@@ -477,7 +432,7 @@ async def test_mode_change_doesnt_affect_existing_leases(redis_client):
         tool_id="read_file",
         ttl_seconds=300,
         calls_remaining=3,
-        mode_at_issue="READ_ONLY"
+        mode_at_issue="READ_ONLY",
     )
     assert new_lease.mode_at_issue == "READ_ONLY"
 
@@ -495,7 +450,7 @@ async def test_empty_client_id_rejected(redis_client):
         tool_id="write_file",
         ttl_seconds=300,
         calls_remaining=5,
-        mode_at_issue="PERMISSION"
+        mode_at_issue="PERMISSION",
     )
     assert lease is None
 
@@ -505,7 +460,7 @@ async def test_empty_client_id_rejected(redis_client):
         tool_id="write_file",
         ttl_seconds=300,
         calls_remaining=5,
-        mode_at_issue="PERMISSION"
+        mode_at_issue="PERMISSION",
     )
     assert lease is None
 
@@ -525,9 +480,7 @@ async def test_complete_governance_lease_workflow(redis_client):
     """
     # Step 1: Policy check
     decision = evaluate_policy(
-        mode=ExecutionMode.PERMISSION,
-        tool_risk="sensitive",
-        tool_id="write_file"
+        mode=ExecutionMode.PERMISSION, tool_risk="sensitive", tool_id="write_file"
     )
     assert decision.requires_approval
 
@@ -536,7 +489,7 @@ async def test_complete_governance_lease_workflow(redis_client):
         client_id="complete_flow_test",
         tool_id="write_file",
         ttl_seconds=300,
-        secret=Config.HMAC_SECRET
+        secret=Config.HMAC_SECRET,
     )
 
     # Step 3: Grant lease
@@ -546,7 +499,7 @@ async def test_complete_governance_lease_workflow(redis_client):
         ttl_seconds=300,
         calls_remaining=2,
         mode_at_issue="PERMISSION",
-        capability_token=token
+        capability_token=token,
     )
     assert lease is not None
 
@@ -559,7 +512,7 @@ async def test_complete_governance_lease_workflow(redis_client):
         token=consumed.capability_token,
         client_id="complete_flow_test",
         tool_id="write_file",
-        secret=Config.HMAC_SECRET
+        secret=Config.HMAC_SECRET,
     )
     assert valid is True
 

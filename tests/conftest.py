@@ -1,17 +1,14 @@
 """Pytest fixtures and test utilities for Meta MCP Server test suite."""
 
 import asyncio
-import tempfile
 from pathlib import Path
-from typing import Any, Dict, Optional
-from unittest.mock import AsyncMock, MagicMock, Mock, patch
+from typing import Any
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from redis import asyncio as aioredis
 
-from src.meta_mcp.audit import AuditLogger
 from src.meta_mcp.state import ExecutionMode, governance_state
-
 
 # ============================================================================
 # REDIS FIXTURES
@@ -142,6 +139,7 @@ def mock_fastmcp_context():
         - session_id (kept in sync with request_context.session_id)
         - elicit() async method
     """
+
     class MockContext:
         def __init__(self):
             self.request_context = MagicMock()
@@ -269,9 +267,7 @@ async def granted_elevation(redis_client):
         Callable that grants elevation: grant(tool_name, context_key, session_id, ttl=300)
     """
 
-    async def _grant(
-        tool_name: str, context_key: str, session_id: str, ttl: int = 300
-    ) -> str:
+    async def _grant(tool_name: str, context_key: str, session_id: str, ttl: int = 300) -> str:
         """
         Grant elevation and return the hash key.
 
@@ -356,7 +352,7 @@ async def lease_for_tool(redis_client):
         calls: int = 5,
         ttl: int = 300,
         mode: str = "PERMISSION",
-        client_id: Optional[str] = None,
+        client_id: str | None = None,
     ) -> None:
         """
         Grant lease for a tool.
@@ -389,7 +385,7 @@ async def lease_for_tool(redis_client):
 # ============================================================================
 
 
-def read_audit_log(log_path: Path) -> list[Dict[str, Any]]:
+def read_audit_log(log_path: Path) -> list[dict[str, Any]]:
     """
     Read and parse audit log file.
 
@@ -405,7 +401,7 @@ def read_audit_log(log_path: Path) -> list[Dict[str, Any]]:
         return []
 
     entries = []
-    with open(log_path, "r") as f:
+    with open(log_path) as f:
         for line in f:
             if line.strip():
                 entries.append(json.loads(line))
@@ -414,18 +410,18 @@ def read_audit_log(log_path: Path) -> list[Dict[str, Any]]:
 
 # Export helper for use in tests
 __all__ = [
-    "redis_client",
-    "governance_in_read_only",
+    "audit_log_path",
     "governance_in_bypass",
     "governance_in_permission",
-    "mock_fastmcp_context",
-    "mock_elicit_approve",
-    "mock_elicit_deny",
-    "mock_elicit_timeout",
-    "mock_elicit_declined",
-    "mock_elicit_cancelled",
+    "governance_in_read_only",
     "granted_elevation",
     "lease_for_tool",
-    "audit_log_path",
+    "mock_elicit_approve",
+    "mock_elicit_cancelled",
+    "mock_elicit_declined",
+    "mock_elicit_deny",
+    "mock_elicit_timeout",
+    "mock_fastmcp_context",
     "read_audit_log",
+    "redis_client",
 ]
