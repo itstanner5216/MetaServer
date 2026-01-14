@@ -2,7 +2,7 @@
 name = "meta-mcp-server"
 version = "0.1.0"
 description = "Meta MCP Server - FastMCP-based server infrastructure"
-requires-python = ">=3.11"
+requires-python = ">=3.10"
 dependencies = [
     "fastmcp>=2.14.0",
     "pydantic>=2.0",
