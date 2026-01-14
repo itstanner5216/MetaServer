@@ -1,0 +1,21 @@
+# Default owners for everything
+* @itstanner5216
+
+# Workflows require review
+/.github/workflows/ @itstanner5216
+
+# Security configurations
+/codecov.yml @itstanner5216
+/.github/dependabot.yml @itstanner5216
+
+# Core source code
+/src/ @itstanner5216
+/MetaServer/ @itstanner5216
+
+# Tests can have broader access
+/tests/ @itstanner5216
+
+# Configuration files
+*.toml @itstanner5216
+*.yml @itstanner5216
+*.yaml @itstanner5216

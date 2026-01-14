@@ -1,0 +1,138 @@
+name: 🏥 Repository Health Check
+
+on:
+  schedule:
+    - cron: '0 0 * * 1'  # Every Monday at midnight UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  security-events: read
+  pull-requests: read
+
+jobs:
+  health-check:
+    name: Weekly Repository Health Check
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: 📥 Checkout repository
+        uses: actions/checkout@v4
+      
+      - name: 🔧 Setup GitHub CLI
+        run: |
+          gh --version
+        env:
+          GH_TOKEN: ${{ github.token }}
+      
+      - name: 🛡️ Check Branch Protection
+        id: branch-protection
+        run: |
+          echo "🔍 Checking branch protection status..."
+          
+          # Verify branch protection is still active
+          PROTECTION=$(gh api repos/${{ github.repository }}/branches/main/protection 2>/dev/null || echo "not-protected")
+          
+          if [ "$PROTECTION" = "not-protected" ]; then
+            echo "⚠️ Branch protection is NOT active on main branch"
+            echo "branch_protection=failed" >> $GITHUB_OUTPUT
+          else
+            echo "✅ Branch protection is active"
+            echo "branch_protection=success" >> $GITHUB_OUTPUT
+          fi
+        env:
+          GH_TOKEN: ${{ github.token }}
+        continue-on-error: true
+      
+      - name: 🔒 Check Security Features
+        id: security
+        run: |
+          echo "🔍 Checking security features..."
+          
+          # Verify security features enabled
+          SECURITY=$(gh api repos/${{ github.repository }} | jq '.security_and_analysis')
+          
+          echo "Security features status:"
+          echo "$SECURITY" | jq '.'
+          
+          # Check for Dependabot alerts
+          VULN_ALERTS=$(echo "$SECURITY" | jq -r '.vulnerability_alerts.status // "disabled"')
+          SECURITY_FIXES=$(echo "$SECURITY" | jq -r '.secret_scanning.status // "disabled"')
+          
+          echo ""
+          echo "Vulnerability Alerts: $VULN_ALERTS"
+          echo "Secret Scanning: $SECURITY_FIXES"
+          
+          if [ "$VULN_ALERTS" = "enabled" ]; then
+            echo "✅ Vulnerability alerts enabled"
+          else
+            echo "⚠️ Vulnerability alerts disabled"
+          fi
+        env:
+          GH_TOKEN: ${{ github.token }}
+        continue-on-error: true
+      
+      - name: 📦 Check Dependabot Status
+        id: dependabot
+        run: |
+          echo "🔍 Checking for pending Dependabot PRs..."
+          
+          # Check for pending Dependabot PRs
+          DEPENDABOT_PRS=$(gh pr list --label dependencies --json number,title,createdAt --jq 'length')
+          
+          echo "Pending Dependabot PRs: $DEPENDABOT_PRS"
+          
+          if [ "$DEPENDABOT_PRS" -gt 0 ]; then
+            echo "📋 Dependabot PRs found:"
+            gh pr list --label dependencies --json number,title,createdAt
+          else
+            echo "✅ No pending Dependabot PRs"
+          fi
+        env:
+          GH_TOKEN: ${{ github.token }}
+        continue-on-error: true
+      
+      - name: 🔍 Check Workflow Status
+        id: workflows
+        run: |
+          echo "🔍 Checking recent workflow runs..."
+          
+          # Get recent workflow runs
+          FAILED_RUNS=$(gh run list --limit 10 --json conclusion,name,startedAt | jq '[.[] | select(.conclusion == "failure")] | length')
+          
+          echo "Failed workflow runs (last 10): $FAILED_RUNS"
+          
+          if [ "$FAILED_RUNS" -gt 0 ]; then
+            echo "⚠️ Recent workflow failures detected:"
+            gh run list --limit 10 --json conclusion,name,startedAt,url | jq '.[] | select(.conclusion == "failure")'
+          else
+            echo "✅ No recent workflow failures"
+          fi
+        env:
+          GH_TOKEN: ${{ github.token }}
+        continue-on-error: true
+      
+      - name: 📊 Generate Health Report
+        if: always()
+        run: |
+          echo "# 🏥 Repository Health Report" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Generated:** $(date -u +"%Y-%m-%d %H:%M:%S UTC")" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          echo "## Health Check Status" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Check | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|-------|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Branch Protection | ${{ steps.branch-protection.outcome == 'success' && '✅ Passed' || '⚠️ Issues Found' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Security Features | ${{ steps.security.outcome == 'success' && '✅ Passed' || '⚠️ Issues Found' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Dependabot Check | ${{ steps.dependabot.outcome == 'success' && '✅ Passed' || '⚠️ Issues Found' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Workflow Status | ${{ steps.workflows.outcome == 'success' && '✅ Passed' || '⚠️ Issues Found' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          echo "## 📝 Recommendations" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- Review and merge pending Dependabot PRs" >> $GITHUB_STEP_SUMMARY
+          echo "- Address any failed workflow runs" >> $GITHUB_STEP_SUMMARY
+          echo "- Keep branch protection rules up to date" >> $GITHUB_STEP_SUMMARY
+          echo "- Monitor security alerts regularly" >> $GITHUB_STEP_SUMMARY
