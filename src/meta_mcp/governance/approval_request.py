@@ -1,4 +1,4 @@
-"""Helpers for constructing approval requests."""
+"""Build approval requests for permission elicitation."""
 
 import hashlib
 import time
@@ -13,7 +13,7 @@ from .approval import ApprovalRequest
 from .artifacts import get_artifact_generator
 
 
-def extract_context_key(tool_name: str, arguments: Dict[str, Any]) -> str:
+def _extract_context_key(tool_name: str, arguments: Dict[str, Any]) -> str:
     """
     Extract context key for scoped elevation.
 
@@ -57,7 +57,7 @@ def extract_context_key(tool_name: str, arguments: Dict[str, Any]) -> str:
     return tool_name
 
 
-def generate_request_id(session_id: str, tool_name: str, context_key: str) -> str:
+def _generate_request_id(session_id: str, tool_name: str, context_key: str) -> str:
     """
     Generate stable request ID for approval requests.
 
@@ -83,7 +83,7 @@ def generate_request_id(session_id: str, tool_name: str, context_key: str) -> st
     return f"{session_hash}_{tool_name}_{context_hash}_{timestamp_ms}"
 
 
-def get_required_scopes(tool_name: str, arguments: Dict[str, Any]) -> List[str]:
+def _get_required_scopes(tool_name: str, arguments: Dict[str, Any]) -> List[str]:
     """
     Get required permission scopes for a tool operation.
 
@@ -139,7 +139,7 @@ def get_required_scopes(tool_name: str, arguments: Dict[str, Any]) -> List[str]:
     return base_scopes
 
 
-def format_approval_request(tool_name: str, arguments: Dict[str, Any]) -> str:
+def _format_approval_request(tool_name: str, arguments: Dict[str, Any]) -> str:
     """
     Format approval request in Markdown.
 
@@ -195,10 +195,10 @@ def build_permission_request(
         ApprovalRequest with precomputed request_id, message, scopes, and artifacts.
     """
     session_id = str(ctx.session_id)
-    context_key = extract_context_key(tool_name, arguments)
-    request_id = generate_request_id(session_id, tool_name, context_key)
-    required_scopes = get_required_scopes(tool_name, arguments)
-    request_message = format_approval_request(tool_name, arguments)
+    context_key = _extract_context_key(tool_name, arguments)
+    request_id = _generate_request_id(session_id, tool_name, context_key)
+    required_scopes = _get_required_scopes(tool_name, arguments)
+    request_message = _format_approval_request(tool_name, arguments)
 
     artifacts_path: Optional[str] = None
     try:
