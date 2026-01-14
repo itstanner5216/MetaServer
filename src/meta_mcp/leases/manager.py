@@ -309,6 +309,58 @@ class LeaseManager:
             logger.error(f"Unexpected error in consume: {e}")
             return None
 
+    async def restore_consumed_call(self, lease: ToolLease) -> bool:
+        """
+        Restore a consumed call back to the lease.
+
+        Args:
+            lease: Lease that was previously consumed
+
+        Returns:
+            True if restored successfully, False otherwise
+        """
+        if not lease.client_id or not lease.client_id.strip():
+            logger.warning("Cannot restore lease with empty client_id")
+            return False
+
+        try:
+            redis = await self._get_redis()
+            key = self._lease_key(lease.client_id, lease.tool_id)
+
+            ttl = await redis.ttl(key)
+            if ttl <= 0:
+                ttl = int(
+                    (lease.expires_at - datetime.now(timezone.utc)).total_seconds()
+                )
+            if ttl <= 0:
+                return False
+
+            lease.calls_remaining += 1
+            lease_dict = {
+                "client_id": lease.client_id,
+                "tool_id": lease.tool_id,
+                "granted_at": lease.granted_at.isoformat(),
+                "expires_at": lease.expires_at.isoformat(),
+                "calls_remaining": lease.calls_remaining,
+                "mode_at_issue": lease.mode_at_issue,
+                "capability_token": lease.capability_token,
+            }
+            lease_json = json.dumps(lease_dict)
+            await redis.setex(key, ttl, lease_json)
+
+            logger.info(
+                f"Restored lease for {lease.client_id}:{lease.tool_id} "
+                f"(remaining={lease.calls_remaining})"
+            )
+            return True
+
+        except (aioredis.ConnectionError, aioredis.TimeoutError) as e:
+            logger.error(f"Redis connection failed in restore_consumed_call: {e}")
+            return False
+        except Exception as e:
+            logger.error(f"Unexpected error in restore_consumed_call: {e}")
+            return False
+
     async def acquire_inflight(
         self, client_id: str, tool_id: str, max_inflight: int
     ) -> bool:
