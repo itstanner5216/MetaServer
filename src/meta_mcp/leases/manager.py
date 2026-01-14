@@ -309,16 +309,13 @@ class LeaseManager:
             logger.error(f"Unexpected error in consume: {e}")
             return None
 
-    async def acquire_inflight(
-        self, client_id: str, tool_id: str, max_inflight: int
-    ) -> bool:
+    async def acquire_inflight(self, client_id: str, tool_id: str) -> bool:
         """
         Acquire an inflight slot for a lease-backed tool call.
 
         Args:
             client_id: Session identifier
             tool_id: Tool identifier
-            max_inflight: Maximum concurrent calls allowed (calls_remaining)
 
         Returns:
             True if a slot was acquired, False otherwise
@@ -333,23 +330,38 @@ class LeaseManager:
 
         try:
             redis = await self._get_redis()
+            lease_key = self._lease_key(client_id, tool_id)
             inflight_key = self._inflight_key(client_id, tool_id)
 
-            inflight = await redis.incr(inflight_key)
+            script = """
+            local lease_json = redis.call("GET", KEYS[1])
+            if not lease_json then
+                return 0
+            end
+            local lease = cjson.decode(lease_json)
+            if not lease["calls_remaining"] or lease["calls_remaining"] <= 0 then
+                return 0
+            end
+            local inflight = redis.call("INCR", KEYS[2])
+            if inflight == 1 then
+                local ttl = redis.call("TTL", KEYS[1])
+                if ttl > 0 then
+                    redis.call("EXPIRE", KEYS[2], ttl)
+                end
+            end
+            if inflight > lease["calls_remaining"] then
+                redis.call("DECR", KEYS[2])
+                local inflight_after = redis.call("GET", KEYS[2])
+                if not inflight_after or tonumber(inflight_after) <= 0 then
+                    redis.call("DEL", KEYS[2])
+                end
+                return 0
+            end
+            return 1
+            """
 
-            if inflight == 1:
-                lease_ttl = await redis.ttl(self._lease_key(client_id, tool_id))
-                if lease_ttl > 0:
-                    await redis.expire(inflight_key, lease_ttl)
-
-            if inflight > max_inflight:
-                await redis.decr(inflight_key)
-                inflight_after = await redis.get(inflight_key)
-                if inflight_after is None or int(inflight_after) <= 0:
-                    await redis.delete(inflight_key)
-                return False
-
-            return True
+            acquired = await redis.eval(script, 2, lease_key, inflight_key)
+            return bool(acquired)
 
         except (aioredis.ConnectionError, aioredis.TimeoutError) as e:
             logger.error(f"Redis connection failed in acquire_inflight: {e}")
