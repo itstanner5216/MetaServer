@@ -710,6 +710,23 @@ class GovernanceMiddleware(Middleware):
                     f"Lease exhausted for tool '{tool_name}'. "
                     f"Please request a new lease via get_tool_schema('{tool_name}')."
                 )
+            else:
+                # Re-validate lease after acquiring inflight to avoid races where
+                # another request consumed the last call between validate and acquire.
+                lease_after_inflight = await lease_manager.validate(
+                    client_id, tool_name
+                )
+                if lease_after_inflight is None:
+                    await lease_manager.release_inflight(client_id, tool_name)
+                    inflight_acquired = False
+                    logger.warning(
+                        f"Lease exhausted after inflight acquire for {tool_name} "
+                        f"(client: {client_id}, session: {session_id})"
+                    )
+                    raise ToolError(
+                        f"Lease exhausted for tool '{tool_name}'. "
+                        f"Please request a new lease via get_tool_schema('{tool_name}')."
+                    )
 
         async def _execute_tool() -> Any:
             try:
