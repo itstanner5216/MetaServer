@@ -118,15 +118,18 @@ jobs:
         run: |
           echo "📦 Checking PyPI configuration..."
           
+          # Get project name from pyproject.toml
+          PROJECT_NAME=$(grep -E "^name\s*=" pyproject.toml | head -1 | sed 's/.*"\(.*\)".*/\1/' || echo "metaserver")
+          
           # Provide PyPI setup instructions
-          cat << 'EOF'
+          cat << EOF
           ⚠️  PyPI Trusted Publishing requires manual setup
           
           📝 Configuration steps:
           1. Visit: https://pypi.org/manage/account/publishing/
           2. Click 'Add a new publisher'
           3. Fill in:
-             - PyPI Project Name: metaserver
+             - PyPI Project Name: $PROJECT_NAME
              - Owner: ${{ github.repository_owner }}
              - Repository: ${{ github.repository }}
              - Workflow: release.yml
@@ -331,28 +334,31 @@ jobs:
         run: |
           echo "👥 Configuring code owners..."
           
-          cat > .github/CODEOWNERS << 'EOF'
+          # Use repository owner as default code owner
+          OWNER="${{ github.repository_owner }}"
+          
+          cat > .github/CODEOWNERS << EOF
           # Default owners for everything
-          * @itstanner5216
+          * @$OWNER
           
           # Workflows require review
-          /.github/workflows/ @itstanner5216
+          /.github/workflows/ @$OWNER
           
           # Security configurations
-          /codecov.yml @itstanner5216
-          /.github/dependabot.yml @itstanner5216
+          /codecov.yml @$OWNER
+          /.github/dependabot.yml @$OWNER
           
           # Core source code
-          /src/ @itstanner5216
-          /MetaServer/ @itstanner5216
+          /src/ @$OWNER
+          /MetaServer/ @$OWNER
           
           # Tests can have broader access
-          /tests/ @itstanner5216
+          /tests/ @$OWNER
           
           # Configuration files
-          *.toml @itstanner5216
-          *.yml @itstanner5216
-          *.yaml @itstanner5216
+          *.toml @$OWNER
+          *.yml @$OWNER
+          *.yaml @$OWNER
           EOF
           
           echo "✅ Code owners configured"
