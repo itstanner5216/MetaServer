@@ -17,13 +17,12 @@ from servers.core_tools import core_server
 
 from .audit import audit_logger
 from .config import Config
-from .discovery import format_search_results
 from .governance.approval import get_approval_provider
 from .governance.artifacts import get_artifact_generator
 from .governance.policy import evaluate_policy
 from .governance.tokens import generate_token
 from .leases import lease_manager
-from .registry import tool_registry
+from .registry import format_search_results, tool_registry
 from .middleware import GovernanceMiddleware
 from .state import governance_state
 from .validation import run_all_validations
@@ -165,7 +164,7 @@ async def lifespan(app):
 
     Startup:
     1. Redis connectivity verification (graceful degradation to PERMISSION mode)
-    2. Core tools registration in discovery registry
+    2. Tool registry loaded from config/tools.yaml
     3. Workspace directory creation
     4. Compliance validations (bootstrap tools, progressive discovery)
     5. Approval provider health check
@@ -190,8 +189,7 @@ async def lifespan(app):
         # governance_state.get_mode() already handles fail-safe to PERMISSION
         # No need to crash - system will operate in PERMISSION mode
 
-    # 2. Register core tools in discovery registry
-    # (Already done via auto-registration in discovery.py on import)
+    # 2. Tool registry loaded from config/tools.yaml (single source of truth)
     all_tools = tool_registry.get_all_summaries()
     logger.info(f"Tool registry initialized with {len(all_tools)} tools")
 

@@ -2,20 +2,18 @@
 Discovery utilities and legacy registry for backward compatibility.
 
 Module Status:
-- format_search_results(): ACTIVE - Formats search results for agent consumption
+- format_search_results(): MOVED - use meta_mcp.registry.format_search_results
 - ToolRegistry: DEPRECATED - Use registry.registry.ToolRegistry instead
 - ToolSummary: DEPRECATED - Use ToolRecord/ToolCandidate from registry instead
 - tool_registry instance: DEPRECATED - Use registry.tool_registry instead
-
-Active Components:
-- format_search_results(results) -> str
-  Formats tool search results for display to agents. Used by supervisor.py.
-  Accepts both legacy ToolSummary and new ToolCandidate objects.
 
 Deprecated Components (kept for backward compatibility):
 - ToolRegistry class (replaced by registry/registry.py with config/tools.yaml)
 - ToolSummary dataclass (replaced by ToolRecord/ToolCandidate)
 - tool_registry singleton (replaced by registry.tool_registry)
+
+Source of Truth:
+- Tool definitions are loaded from config/tools.yaml via meta_mcp.registry
 
 Migration Path:
 - OLD: from meta_mcp.discovery import tool_registry
@@ -24,6 +22,7 @@ Migration Path:
 
 from dataclasses import dataclass
 from typing import List
+from warnings import warn
 
 
 @dataclass
@@ -53,6 +52,12 @@ class ToolRegistry:
 
     def __init__(self):
         """Initialize empty tool registry."""
+        warn(
+            "meta_mcp.discovery.ToolRegistry is deprecated; use "
+            "meta_mcp.registry.ToolRegistry loaded from config/tools.yaml.",
+            UserWarning,
+            stacklevel=2,
+        )
         self._tools: dict[str, ToolSummary] = {}
 
     def register(
@@ -286,57 +291,6 @@ def register_core_tools():
     )
 
 
-def format_search_results(results) -> str:
-    """
-    Format search results for agent consumption.
-
-    ACTIVE UTILITY: This function is NOT deprecated and is actively used by supervisor.py.
-
-    Returns ONLY:
-    - Tool name
-    - One-sentence description
-    - Sensitivity flag
-
-    Does NOT include:
-    - Arguments or schemas
-    - Examples or usage hints
-    - Recommendations or rankings
-
-    Args:
-        results: List of ToolSummary or ToolCandidate objects
-
-    Returns:
-        Formatted string with minimal metadata
-
-    Note:
-        Accepts both legacy ToolSummary and new ToolCandidate objects
-        for backward compatibility during migration.
-    """
-    if not results:
-        return "No tools found matching your query."
-
-    lines = [f"Found {len(results)} tool(s):\n"]
-
-    for tool in results:
-        # Handle both ToolSummary (old) and ToolCandidate (new)
-        if hasattr(tool, 'sensitive'):
-            # Old ToolSummary
-            sensitivity = "[SENSITIVE]" if tool.sensitive else "[SAFE]"
-            tool_name = tool.name
-            description = tool.description
-        else:
-            # New ToolCandidate
-            sensitivity = "[SAFE]" if tool.risk_level == "safe" else "[SENSITIVE]"
-            tool_name = tool.tool_id
-            description = tool.description_1line
-
-        lines.append(f"• {tool_name} {sensitivity}")
-        lines.append(f"  {description}")
-        lines.append("")  # Blank line between tools
-
-    return "\n".join(lines).strip()
-
-
 # ============================================================================
 # DEPRECATED REGISTRY INSTANCE
 # ============================================================================
@@ -362,6 +316,12 @@ def format_search_results(results) -> str:
 
 # Module-level singleton (DEPRECATED - use registry.tool_registry instead)
 tool_registry = ToolRegistry()
+warn(
+    "meta_mcp.discovery.tool_registry is deprecated; use "
+    "meta_mcp.registry.tool_registry loaded from config/tools.yaml.",
+    UserWarning,
+    stacklevel=2,
+)
 
 # Auto-register core tools on import (DEPRECATED)
 register_core_tools()

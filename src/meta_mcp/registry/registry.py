@@ -11,7 +11,7 @@ class ToolRegistry:
     """
     Static tool registry loaded from YAML.
 
-    Replaces the dynamic discovery.ToolRegistry for Phase 1+.
+    config/tools.yaml is the single source of truth for tool definitions.
 
     Features:
     - Static tool definitions from YAML
@@ -29,7 +29,7 @@ class ToolRegistry:
     @classmethod
     def from_yaml(cls, yaml_path: str) -> "ToolRegistry":
         """
-        Load registry from YAML file.
+        Load registry from YAML file (config/tools.yaml is canonical).
 
         Args:
             yaml_path: Path to tools.yaml configuration file
@@ -208,3 +208,37 @@ _default_tools_path = os.getenv("TOOLS_YAML_PATH") or str(
     Path(__file__).parent.parent.parent / "config" / "tools.yaml"
 )
 tool_registry = ToolRegistry.from_yaml(_default_tools_path)
+
+
+def format_search_results(results: List[ToolCandidate]) -> str:
+    """
+    Format search results for agent consumption.
+
+    Returns ONLY:
+    - Tool name
+    - One-sentence description
+    - Sensitivity flag
+
+    Does NOT include:
+    - Arguments or schemas
+    - Examples or usage hints
+    - Recommendations or rankings
+
+    Args:
+        results: List of ToolCandidate objects
+
+    Returns:
+        Formatted string with minimal metadata
+    """
+    if not results:
+        return "No tools found matching your query."
+
+    lines = [f"Found {len(results)} tool(s):\n"]
+
+    for tool in results:
+        sensitivity = "[SAFE]" if tool.risk_level == "safe" else "[SENSITIVE]"
+        lines.append(f"• {tool.tool_id} {sensitivity}")
+        lines.append(f"  {tool.description_1line}")
+        lines.append("")  # Blank line between tools
+
+    return "\n".join(lines).strip()

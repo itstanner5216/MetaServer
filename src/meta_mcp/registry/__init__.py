@@ -1,5 +1,11 @@
 """Tool registry package."""
 from .models import ServerRecord, ToolCandidate, ToolRecord
-from .registry import tool_registry
+from .registry import format_search_results, tool_registry
 
-__all__ = ["tool_registry", "ToolRecord", "ServerRecord", "ToolCandidate"]
+__all__ = [
+    "format_search_results",
+    "tool_registry",
+    "ToolRecord",
+    "ServerRecord",
+    "ToolCandidate",
+]
