@@ -10,6 +10,7 @@ from fastmcp import FastMCP
 from fastmcp.exceptions import ToolError
 from loguru import logger
 
+# Import the installed package to keep server startup working in editable/wheel installs.
 from meta_mcp.config import Config
 
 
