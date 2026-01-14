@@ -146,6 +146,7 @@ async def test_bootstrap_tools_always_allowed(redis_client):
         assert decision.action == "allow"
 
 
+
 @pytest.mark.asyncio
 async def test_lease_grant_and_validate(redis_client):
     """

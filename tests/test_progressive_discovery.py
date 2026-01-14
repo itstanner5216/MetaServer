@@ -23,6 +23,7 @@ async def test_initial_exposure_minimal():
     At startup, only bootstrap tools should be exposed:
     - search_tools
     - get_tool_schema
+    
     """
     # Get initial tool list
     tools = await mcp.get_tools()

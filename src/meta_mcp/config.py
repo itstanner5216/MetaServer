@@ -81,6 +81,9 @@ class Config:
     ENABLE_LEASE_MANAGEMENT: bool = True     # Phase 3
     ENABLE_PROGRESSIVE_SCHEMAS: bool = False # Phase 5
     ENABLE_MACROS: bool = True               # Phase 7
+    ENABLE_SCHEMA_LEASE_COMPAT: bool = os.getenv(
+        "ENABLE_SCHEMA_LEASE_COMPAT", "false"
+    ).lower() in {"1", "true", "yes"}
 
     @classmethod
     def validate(cls) -> bool:

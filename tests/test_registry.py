@@ -82,7 +82,7 @@ def test_get_tool_not_found():
 def test_all_tools_have_required_fields():
     """All tools should have required metadata fields."""
     summaries = tool_registry.get_all_summaries()
-    assert len(summaries) == 15  # Total tools from YAML
+    assert len(summaries) == 16  # Total tools from YAML
 
     for tool in summaries:
         assert tool.tool_id

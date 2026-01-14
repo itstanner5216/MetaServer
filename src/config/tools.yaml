@@ -193,8 +193,7 @@ tools:
   description_1line: Get JSON schema for a specific tool.
   description_full: 'Get JSON schema for a specific tool.
 
-    This is the gateway to tool access - schemas are not visible until explicitly requested. Progressive
-    discovery mechanism.'
+    Schemas are not visible until explicitly requested. Progressive discovery mechanism.'
   tags:
   - core
   - get
@@ -205,6 +204,22 @@ tools:
   required_scopes:
   - tool:get_tool_schema
   - meta:schema
+- tool_id: request_tool_access
+  server_id: core_tools
+  description_1line: Request authorization to call a tool.
+  description_full: 'Request authorization to call a tool.
+
+    Grants a time-limited lease for tool invocation after governance checks.'
+  tags:
+  - core
+  - meta
+  - access
+  - lease
+  risk_level: safe
+  requires_permission: false
+  required_scopes:
+  - tool:request_tool_access
+  - meta:access
 - tool_id: git_commit
   server_id: core_tools
   description_1line: Create a git commit with staged changes.
