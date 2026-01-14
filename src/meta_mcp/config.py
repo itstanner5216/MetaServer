@@ -1,6 +1,7 @@
 """Centralized configuration for MetaMCP."""
 import os
-from typing import Dict
+import re
+from typing import Dict, List
 
 
 class Config:
@@ -22,6 +23,12 @@ class Config:
         except ValueError as e:
             raise ValueError(f"Invalid PORT environment variable: {e}")
 
+    @staticmethod
+    def _parse_list(value: str) -> List[str]:
+        if not value:
+            return []
+        return [item.strip() for item in value.split(",") if item.strip()]
+
     # ========================================================================
     # Server Configuration
     # ========================================================================
@@ -42,6 +49,13 @@ class Config:
     DEFAULT_EXECUTION_MODE: str = os.getenv("DEFAULT_MODE", "PERMISSION")
     DEFAULT_ELEVATION_TTL: int = 300  # 5 minutes
     ELICITATION_TIMEOUT: int = 300  # 5 minutes
+    COMMAND_TIMEOUT_SECONDS: int = int(os.getenv("COMMAND_TIMEOUT_SECONDS", "30"))
+    COMMAND_ALLOW_PATTERNS: List[str] = _parse_list.__func__(
+        os.getenv("COMMAND_ALLOW_PATTERNS", "")
+    )
+    COMMAND_DENY_PATTERNS: List[str] = _parse_list.__func__(
+        os.getenv("COMMAND_DENY_PATTERNS", "")
+    )
 
     # ========================================================================
     # Lease Configuration (Phase 3)
@@ -133,6 +147,23 @@ class Config:
         # Validate ELICITATION_TIMEOUT
         if cls.ELICITATION_TIMEOUT <= 0:
             errors.append(f"ELICITATION_TIMEOUT must be > 0, got {cls.ELICITATION_TIMEOUT}")
+
+        if cls.COMMAND_TIMEOUT_SECONDS <= 0:
+            errors.append(
+                f"COMMAND_TIMEOUT_SECONDS must be > 0, got {cls.COMMAND_TIMEOUT_SECONDS}"
+            )
+
+        for pattern in cls.COMMAND_ALLOW_PATTERNS:
+            try:
+                re.compile(pattern)
+            except re.error as e:
+                errors.append(f"Invalid COMMAND_ALLOW_PATTERNS regex '{pattern}': {e}")
+
+        for pattern in cls.COMMAND_DENY_PATTERNS:
+            try:
+                re.compile(pattern)
+            except re.error as e:
+                errors.append(f"Invalid COMMAND_DENY_PATTERNS regex '{pattern}': {e}")
 
         if errors:
             raise ValueError(f"Config validation failed: {'; '.join(errors)}")
