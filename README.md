@@ -118,6 +118,31 @@ Sensitive operations trigger approval flows with:
 - Scoped elevations (per-tool, per-resource, per-session)
 - Audit logging of all decisions
 
+#### FastMCP `ctx.elicit()` Response Format
+
+When using the FastMCP approval provider, clients must respond to `ctx.elicit()` with
+structured data that includes `selected_scopes` and `lease_seconds`. The server accepts
+either JSON or key-value formats:
+
+**JSON**
+```json
+{
+  "decision": "approved",
+  "selected_scopes": ["tool:write_file", "resource:path:/path/to/file"],
+  "lease_seconds": 300
+}
+```
+
+**Key-value (newline or semicolon separated)**
+```
+decision=approved
+selected_scopes=tool:write_file, resource:path:/path/to/file
+lease_seconds=300
+```
+
+Set `lease_seconds` to `0` for single-use approval. The middleware still enforces that
+all required scopes must be selected and rejects any extra scopes.
+
 ## Documentation
 
 ### Core Documentation

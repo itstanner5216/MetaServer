@@ -1,6 +1,7 @@
 """Pytest fixtures and test utilities for Meta MCP Server test suite."""
 
 import asyncio
+import json
 import tempfile
 from pathlib import Path
 from typing import Any, Dict, Optional
@@ -178,7 +179,16 @@ def mock_elicit_approve():
     async def _approve(*args, **kwargs):
         # Return mock AcceptedElicitation with approval response
         result = MagicMock()
-        result.data = "approve"
+        result.data = json.dumps(
+            {
+                "decision": "approved",
+                "selected_scopes": [
+                    "tool:write_file",
+                    "resource:path:test.txt",
+                ],
+                "lease_seconds": 300,
+            }
+        )
         return result
 
     return AsyncMock(side_effect=_approve)
@@ -196,7 +206,13 @@ def mock_elicit_deny():
     async def _deny(*args, **kwargs):
         # Return mock AcceptedElicitation with denial response
         result = MagicMock()
-        result.data = "deny"
+        result.data = json.dumps(
+            {
+                "decision": "denied",
+                "selected_scopes": [],
+                "lease_seconds": 0,
+            }
+        )
         return result
 
     return AsyncMock(side_effect=_deny)

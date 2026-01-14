@@ -329,42 +329,6 @@ class GovernanceMiddleware(Middleware):
 
         return "\n".join(lines)
 
-    @staticmethod
-    def _parse_approval_response(response: str) -> bool:
-        """
-        Parse approval response from user with strict word boundary matching.
-
-        Args:
-            response: User response string
-
-        Returns:
-            True if approved, False if denied
-
-        Security:
-            Uses word boundary matching to prevent substring attacks
-            (e.g., "yokay" will NOT match "ok", only standalone "ok" matches)
-        """
-        if not response:
-            return False
-
-        normalized = response.strip().lower()
-
-        # Approval indicators (exact word matches only)
-        approval_indicators = {"approve", "yes", "accept", "ok", "allow", "y"}
-
-        # Split response into words (whitespace-separated tokens)
-        words = normalized.split()
-
-        # Check if any word exactly matches an approval indicator
-        for word in words:
-            # Remove common punctuation from word boundaries
-            cleaned_word = word.strip(".,!?;:'\"")
-            if cleaned_word in approval_indicators:
-                return True
-
-        # Denial is default (fail-safe)
-        return False
-
     async def _elicit_approval(
         self, ctx: Context, tool_name: str, arguments: Dict[str, Any]
     ) -> tuple[bool, int, List[str]]:
