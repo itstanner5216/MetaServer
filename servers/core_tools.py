@@ -10,7 +10,7 @@ from fastmcp import FastMCP
 from fastmcp.exceptions import ToolError
 from loguru import logger
 
-from meta_mcp.config import Config
+from meta_mcp.config import Config  # Use installed package path; avoid src.meta_mcp import.
 
 
 # Create FastMCP server instance
