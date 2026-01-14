@@ -1,0 +1,558 @@
+name: 🤖 AI-Powered PR Review Pipeline
+
+on:
+  workflow_dispatch:
+    inputs:
+      pr_numbers:
+        description: 'Comma-separated PR numbers (leave empty for all open PRs)'
+        required: false
+        type: string
+      agent_mode:
+        description: 'Agent operation mode'
+        required: true
+        default: 'review_and_fix'
+        type: choice
+        options:
+          - review_only
+          - review_and_fix
+          - fix_only
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+
+concurrency:
+  group: ai-pr-review-${{ github.workflow }}-${{ github.event.inputs.pr_numbers || 'all' }}
+  cancel-in-progress: false
+
+jobs:
+  collect-prs:
+    runs-on: ubuntu-latest
+    outputs:
+      pr_matrix: ${{ steps.collect.outputs.matrix }}
+      pr_count: ${{ steps.collect.outputs.count }}
+    steps:
+      - name: Collect open PRs
+        id: collect
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const input = '${{ inputs.pr_numbers }}';
+            let prs;
+            
+            if (input && input.trim()) {
+              const numbers = input.split(',').map(n => parseInt(n.trim()));
+              prs = await Promise.all(numbers.map(async (num) => {
+                try {
+                  const { data } = await github.rest.pulls.get({
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                    pull_number: num
+                  });
+                  return { number: data.number, title: data.title, branch: data.head.ref };
+                } catch (error) {
+                  core.warning(`Failed to fetch PR #${num}: ${error.message}`);
+                  return null;
+                }
+              }));
+              prs = prs.filter(pr => pr !== null);
+            } else {
+              const { data } = await github.rest.pulls.list({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                state: 'open',
+                per_page: 100
+              });
+              prs = data.map(pr => ({ number: pr.number, title: pr.title, branch: pr.head.ref }));
+            }
+            
+            core.info(`Found ${prs.length} PRs to review`);
+            core.setOutput('matrix', JSON.stringify({ pr: prs }));
+            core.setOutput('count', prs.length);
+
+  validation-agent:
+    needs: collect-prs
+    if: needs.collect-prs.outputs.pr_count > 0
+    runs-on: ubuntu-latest
+    strategy:
+      matrix: ${{ fromJson(needs.collect-prs.outputs.pr_matrix) }}
+      fail-fast: false
+      max-parallel: 3
+    steps:
+      - name: Rate limit delay
+        run: sleep $((RANDOM % 10 + 5))
+      
+      - name: 🔍 Validation Agent Review
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const pr = ${{ toJson(matrix.pr) }};
+            
+            const reviewBody = [
+              '## 🔍 Validation Agent Review',
+              '',
+              '@github-copilot Please review this PR for:',
+              '',
+              '### 1. Code Quality',
+              '- ✓ Proper async/await patterns throughout the codebase',
+              '- ✓ Type hints on function signatures',
+              '- ✓ Error handling with ToolError exceptions',
+              '- ✓ Consistent import paths (use `meta_mcp` not `src.meta_mcp` for installed packages)',
+              '',
+              '### 2. MetaServer Architecture Compliance',
+              '**Governance Middleware Patterns** (reference: `src/meta_mcp/middleware.py`)',
+              '- ✓ Tool governance follows tri-state mode (READ_ONLY, PERMISSION, BYPASS)',
+              '- ✓ Sensitive tools in PERMISSION mode require approval',
+              '- ✓ Bootstrap tools (`search_tools`, `get_tool_schema`) remain exempt',
+              '',
+              '**Lease Management Patterns** (reference: `src/meta_mcp/leases/manager.py`)',
+              '- ✓ Leases follow reserve → execute → consume/refund pattern',
+              '- ✓ Leases are consumed only AFTER successful execution',
+              '- ✓ Proper refund on failure cases',
+              '- ✓ Redis operations use proper TTL handling',
+              '',
+              '**Audit Logging** (reference: `src/meta_mcp/audit.py`)',
+              '- ✓ All governance decisions are logged via audit_logger.log()',
+              '- ✓ Approval requests and responses are audited',
+              '',
+              '**Policy Evaluation** (reference: `src/meta_mcp/governance/policy.py`)',
+              '- ✓ Governance evaluation occurs AFTER before_tool hooks',
+              '- ✓ Hook mutations trigger re-evaluation if needed',
+              '',
+              '### 3. Security Checks',
+              '- ✓ Sensitive tool handling follows the SENSITIVE_TOOLS pattern',
+              '- ✓ Capability token validation is preserved',
+              '- ✓ before_tool hooks cannot bypass governance after evaluation',
+              '- ✓ Progressive discovery principles are respected',
+              '',
+              '### 4. Governance Flow Verification',
+              'Ensure the 5-step flow is maintained:',
+              '1. before_tool hooks execute',
+              '2. Governance evaluation (against post-hook tool_call)',
+              '3. Lease validation',
+              '4. Tool execution',
+              '5. after_tool hooks + TOON encoding',
+              '',
+              'Please provide a structured review with:',
+              '- ✅ **Compliant areas** - What looks good',
+              '- ⚠️ **Warnings** - Non-blocking issues to address',
+              '- ❌ **Blockers** - Must fix before merge',
+              '',
+              '---',
+              '*This review was automated by the AI-Powered PR Review Pipeline*'
+            ].join('\n');
+            
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: pr.number,
+              body: reviewBody
+            });
+            
+            core.info(`Posted validation review to PR #${pr.number}`);
+
+  remediation-agent:
+    needs: [collect-prs, validation-agent]
+    if: |
+      always() &&
+      needs.collect-prs.outputs.pr_count > 0 &&
+      inputs.agent_mode != 'review_only'
+    runs-on: ubuntu-latest
+    strategy:
+      matrix: ${{ fromJson(needs.collect-prs.outputs.pr_matrix) }}
+      fail-fast: false
+      max-parallel: 3
+    steps:
+      - name: Rate limit delay
+        run: sleep $((RANDOM % 10 + 5))
+      
+      - name: 🔧 Remediation Agent Fix
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const pr = ${{ toJson(matrix.pr) }};
+            
+            const remediationBody = [
+              '## 🔧 Remediation Agent',
+              '',
+              '@github-copilot Please fix the following common issues in this PR:',
+              '',
+              '### Common Issues to Fix',
+              '',
+              '1. **Import Paths**',
+              '   - Change any `from src.meta_mcp` to `from meta_mcp` for package compatibility',
+              '   - Ensure all imports are consistent with the installed package structure',
+              '',
+              '2. **Missing Type Hints**',
+              '   - Add type annotations to function parameters and returns',
+              '   - Use proper types from `typing` module (e.g., `Dict`, `List`, `Optional`)',
+              '',
+              '3. **Audit Logging**',
+              '   - Ensure all governance decisions call `audit_logger.log()`',
+              '   - Include proper event types and metadata',
+              '',
+              '4. **Lease Handling**',
+              '   - Verify reserve/consume/refund pattern is followed correctly',
+              '   - Ensure leases are consumed ONLY after successful execution',
+              '   - Add proper refund calls in exception handlers',
+              '',
+              '5. **Exception Handling**',
+              '   - Wrap errors in `ToolError` with descriptive messages',
+              '   - Ensure proper error propagation',
+              '',
+              '6. **Async/Await Consistency**',
+              '   - Add `await` to all async function calls',
+              '   - Ensure functions that call async code are marked as `async`',
+              '',
+              '7. **Missing Test Stubs**',
+              '   - Many PRs note "No automated tests were executed"',
+              '   - Add basic test stubs for new functionality if missing',
+              '',
+              '### Instructions',
+              `If you find issues, please push fixes directly to the PR branch: \`${pr.branch}\``,
+              '',
+              'After making fixes, add a comment summarizing:',
+              '- 🔧 Issues fixed',
+              '- 📝 Files modified',
+              '- ✅ Verification steps taken',
+              '',
+              '---',
+              '*This remediation was automated by the AI-Powered PR Review Pipeline*'
+            ].join('\n');
+            
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: pr.number,
+              body: remediationBody
+            });
+            
+            core.info(`Posted remediation request to PR #${pr.number}`);
+
+  architectural-guardian:
+    needs: [collect-prs, remediation-agent]
+    if: always() && needs.collect-prs.outputs.pr_count > 0
+    runs-on: ubuntu-latest
+    strategy:
+      matrix: ${{ fromJson(needs.collect-prs.outputs.pr_matrix) }}
+      fail-fast: false
+      max-parallel: 3
+    steps:
+      - name: Rate limit delay
+        run: sleep $((RANDOM % 10 + 5))
+      
+      - name: 🏛️ Architectural Guardian Analysis
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const pr = ${{ toJson(matrix.pr) }};
+            
+            const architecturalBody = [
+              '## 🏛️ Architectural Guardian',
+              '',
+              '@github-copilot Please verify this PR maintains architectural integrity:',
+              '',
+              '### Governance Flow Invariants',
+              'Verify the 6-step governance flow is preserved:',
+              '',
+              '1. **before_tool hooks run BEFORE governance evaluation**',
+              '   - Hooks can mutate tool_call parameters',
+              '   - Mutations are NOT visible to subsequent hooks',
+              '',
+              '2. **Governance decisions computed against post-hook tool_call**',
+              '   - Policy evaluation sees the final tool_call state',
+              '   - Re-evaluation occurs if hooks mutated the request',
+              '',
+              '3. **Lease validation occurs after governance approval**',
+              '   - Only approved tools consume leases',
+              '   - Leases are reserved but not consumed until after execution',
+              '',
+              '4. **Tool execution only after all checks pass**',
+              '   - Governance approved',
+              '   - Leases available',
+              '   - No capability token violations',
+              '',
+              '5. **after_tool hooks run on result**',
+              '   - Hooks can transform the result',
+              '   - Lease consumption happens AFTER successful execution',
+              '',
+              '6. **TOON encoding applied if enabled**',
+              '   - Large outputs are compressed',
+              '   - Progressive discovery is maintained',
+              '',
+              '### Breaking Change Detection',
+              'Check for the following:',
+              '',
+              '**Function Signature Changes**',
+              '- Have any public API function signatures changed?',
+              '- Are parameter types or return types different?',
+              '- Have default values been modified?',
+              '',
+              '**Governance Bypass Risks**',
+              '- Do any new code paths bypass governance?',
+              '- Are sensitive tools still gated by PERMISSION mode?',
+              '- Is capability token validation still enforced?',
+              '',
+              '**Bootstrap Tool Integrity**',
+              '- Are `search_tools` and `get_tool_schema` still exempt?',
+              '- Do they remain accessible in all modes?',
+              '',
+              '### Architectural Invariants (Critical)',
+              '- ✓ Bootstrap tools are ALWAYS allowed',
+              '- ✓ Sensitive tools require approval in PERMISSION mode',
+              '- ✓ Leases consumed only AFTER successful execution',
+              '- ✓ before_tool hooks cannot bypass governance post-evaluation',
+              '- ✓ All governance decisions are audited',
+              '',
+              '### Classification',
+              'Provide your architectural verdict:',
+              '',
+              '- 🟢 **SAFE**: Bug fixes, logging improvements, error handling only',
+              '- 🟡 **REVIEW**: Refactoring, performance changes, new features',
+              '- 🔴 **REJECT**: Breaking changes, governance bypasses, architectural violations',
+              '',
+              'Please provide:',
+              '1. Your classification (🟢/🟡/🔴)',
+              '2. Detailed reasoning',
+              '3. Specific concerns if any',
+              '4. Recommendation for merge approval',
+              '',
+              '---',
+              '*This analysis was automated by the AI-Powered PR Review Pipeline*'
+            ].join('\n');
+            
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: pr.number,
+              body: architecturalBody
+            });
+            
+            core.info(`Posted architectural review to PR #${pr.number}`);
+
+  functional-verifier:
+    needs: [collect-prs, architectural-guardian]
+    if: always() && needs.collect-prs.outputs.pr_count > 0
+    runs-on: ubuntu-latest
+    strategy:
+      matrix: ${{ fromJson(needs.collect-prs.outputs.pr_matrix) }}
+      fail-fast: false
+      max-parallel: 3
+    steps:
+      - name: Checkout PR
+        uses: actions/checkout@v4
+        with:
+          ref: refs/pull/${{ matrix.pr.number }}/head
+          fetch-depth: 0
+      
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+      
+      - name: Install dependencies
+        run: |
+          pip install -e ".[dev]"
+          pip install pytest pytest-asyncio pytest-cov
+      
+      - name: Start Redis
+        run: |
+          docker run -d -p 6379:6379 redis:7-alpine
+          sleep 3
+      
+      - name: Run Tests
+        id: tests
+        continue-on-error: true
+        run: |
+          pytest tests/ -v --tb=short --maxfail=5 2>&1 | tee test_output.txt
+          echo "exit_code=${PIPESTATUS[0]}" >> $GITHUB_OUTPUT
+      
+      - name: ✅ Post Test Results
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const pr = ${{ toJson(matrix.pr) }};
+            const exitCode = '${{ steps.tests.outputs.exit_code }}';
+            
+            let testOutput = 'No test output captured';
+            try {
+              testOutput = fs.readFileSync('test_output.txt', 'utf8');
+              if (testOutput.length > 3000) {
+                testOutput = testOutput.slice(0, 3000) + '\n... [truncated - see workflow logs for full output]';
+              }
+            } catch (e) {
+              core.warning(`Failed to read test output: ${e.message}`);
+            }
+            
+            const status = exitCode === '0' ? '✅ PASSED' : '❌ FAILED';
+            const emoji = exitCode === '0' ? '✅' : '❌';
+            
+            const testBody = [
+              `## ${emoji} Functional Verifier Results`,
+              '',
+              `**Test Status:** ${status}`,
+              `**Exit Code:** ${exitCode}`,
+              '',
+              '<details>',
+              '<summary>Test Output (click to expand)</summary>',
+              '',
+              '```',
+              testOutput,
+              '```',
+              '',
+              '</details>',
+              '',
+              '@github-copilot Based on these test results, please:',
+              '',
+              '1. **Identify Test Failures**',
+              '   - Which tests failed and why?',
+              '   - Are failures related to this PR\'s changes?',
+              '   - Are there any pre-existing test failures unrelated to this PR?',
+              '',
+              '2. **Suggest Fixes**',
+              '   - What changes are needed to fix failing tests?',
+              '   - Are there edge cases not being handled?',
+              '   - Do any mocks or fixtures need updating?',
+              '',
+              '3. **Merge Readiness Assessment**',
+              '   - Is this PR ready for merge?',
+              '   - What additional testing is recommended?',
+              '   - Are there any concerns about the changes?',
+              '',
+              '---',
+              '*This verification was automated by the AI-Powered PR Review Pipeline*'
+            ].join('\n');
+            
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: pr.number,
+              body: testBody
+            });
+            
+            core.info(`Posted test results to PR #${pr.number}`);
+
+  summary:
+    needs: [collect-prs, validation-agent, remediation-agent, architectural-guardian, functional-verifier]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: 📊 Generate Summary
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const prMatrix = '${{ needs.collect-prs.outputs.pr_matrix }}';
+            const prCount = '${{ needs.collect-prs.outputs.pr_count }}';
+            
+            let prs = [];
+            try {
+              prs = JSON.parse(prMatrix).pr || [];
+            } catch (e) {
+              core.warning('No PRs to summarize');
+            }
+            
+            const mode = '${{ inputs.agent_mode }}';
+            const timestamp = new Date().toISOString();
+            
+            const validationStatus = '${{ needs.validation-agent.result }}';
+            const remediationStatus = '${{ needs.remediation-agent.result }}';
+            const architecturalStatus = '${{ needs.architectural-guardian.result }}';
+            const functionalStatus = '${{ needs.functional-verifier.result }}';
+            
+            let summary = '# 🤖 AI Agent Pipeline Summary\n\n';
+            summary += `**Run Date:** ${timestamp}\n`;
+            summary += `**Mode:** ${mode}\n`;
+            summary += `**PRs Reviewed:** ${prCount}\n\n`;
+            
+            summary += '## Agent Status\n\n';
+            summary += '| Agent | Status |\n';
+            summary += '|-------|--------|\n';
+            summary += `| 🔍 Validation Agent | ${validationStatus} |\n`;
+            summary += `| 🔧 Remediation Agent | ${remediationStatus} |\n`;
+            summary += `| 🏛️ Architectural Guardian | ${architecturalStatus} |\n`;
+            summary += `| ✅ Functional Verifier | ${functionalStatus} |\n\n`;
+            
+            if (prs.length > 0) {
+              summary += '## PR Status\n\n';
+              summary += '| PR | Title | Agents Completed |\n';
+              summary += '|----|-------|------------------|\n';
+              
+              for (const pr of prs) {
+                const title = pr.title.length > 50 ? pr.title.slice(0, 50) + '...' : pr.title;
+                summary += `| #${pr.number} | ${title} | 🔍🔧🏛️✅ |\n`;
+              }
+            }
+            
+            summary += '\n## Next Steps\n\n';
+            summary += '1. Review agent comments on each PR\n';
+            summary += '2. Address any ❌ blockers identified by agents\n';
+            summary += '3. Verify fixes made by the remediation agent\n';
+            summary += '4. Ensure architectural guidelines are followed\n';
+            summary += '5. Merge PRs with all ✅ statuses\n\n';
+            
+            summary += '## Important Notes\n\n';
+            summary += '- This pipeline uses GitHub Copilot agents via PR comments\n';
+            summary += '- Check each PR for detailed agent feedback\n';
+            summary += '- Agents may have pushed fixes directly to PR branches (if in fix mode)\n';
+            summary += '- Review all automated changes before merging\n';
+            
+            core.summary.addRaw(summary);
+            await core.summary.write();
+            
+            core.info('Summary generated successfully');
+
+  save-artifacts:
+    needs: [collect-prs, validation-agent, remediation-agent, architectural-guardian, functional-verifier]
+    if: always() && needs.collect-prs.outputs.pr_count > 0
+    runs-on: ubuntu-latest
+    steps:
+      - name: Create audit log
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            
+            const prMatrix = '${{ needs.collect-prs.outputs.pr_matrix }}';
+            const mode = '${{ inputs.agent_mode }}';
+            
+            let prs = [];
+            try {
+              prs = JSON.parse(prMatrix).pr || [];
+            } catch (e) {
+              prs = [];
+            }
+            
+            const auditLog = {
+              workflow: 'ai-pr-review-pipeline',
+              timestamp: new Date().toISOString(),
+              mode: mode,
+              pr_count: prs.length,
+              prs: prs,
+              jobs: {
+                validation: '${{ needs.validation-agent.result }}',
+                remediation: '${{ needs.remediation-agent.result }}',
+                architectural: '${{ needs.architectural-guardian.result }}',
+                functional: '${{ needs.functional-verifier.result }}'
+              },
+              run_id: '${{ github.run_id }}',
+              run_number: '${{ github.run_number }}'
+            };
+            
+            fs.mkdirSync('reports', { recursive: true });
+            fs.writeFileSync(
+              'reports/ai-pipeline-audit.json',
+              JSON.stringify(auditLog, null, 2)
+            );
+            
+            core.info('Audit log created');
+      
+      - name: Upload audit artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ai-pipeline-audit-${{ github.run_id }}
+          path: reports/
+          retention-days: 90
+          if-no-files-found: warn
