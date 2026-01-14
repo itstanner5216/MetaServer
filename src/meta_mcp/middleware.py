@@ -190,7 +190,7 @@ class GovernanceMiddleware(Middleware):
 
     async def _run_before_tool_hooks(
         self, context: Context, tool_name: str, arguments: Dict[str, Any]
-    ) -> tuple[ToolCall, RunContext]:
+    ) -> tuple[ToolCall, RunContext, bool]:
         session_id = str(context.session_id)
         run_context = RunContext(
             session_id=session_id,
@@ -215,7 +215,235 @@ class GovernanceMiddleware(Middleware):
                 arguments=tool_call.arguments,
             )
 
-        return tool_call, run_context
+        mutated = (
+            tool_call.tool_name != tool_name
+            or tool_call.arguments != arguments
+        )
+
+        return tool_call, run_context, mutated
+
+    async def _handle_tool_call(
+        self,
+        context: Context,
+        call_next,
+        tool_call: ToolCall,
+        run_context: RunContext,
+    ) -> Any:
+        tool_name = tool_call.tool_name
+        arguments = tool_call.arguments
+        session_id = str(context.session_id)
+
+        # PHASE 3+4 INTEGRATION: Validate lease and token before governance checks
+        # Note: Bootstrap tools bypass lease checks
+        # CRITICAL: Skip lease checks if ENABLE_LEASE_MANAGEMENT is False
+        bootstrap_tools = {"search_tools", "get_tool_schema"}
+
+        if Config.ENABLE_LEASE_MANAGEMENT and tool_name not in bootstrap_tools:
+            # Extract client_id from FastMCP session context
+            # In FastMCP/MCP protocol, session_id is the stable client connection identifier
+            client_id = str(context.session_id)
+
+            # Validate lease exists
+            lease = await lease_manager.validate(client_id, tool_name)
+            if lease is None:
+                logger.warning(
+                    f"No valid lease for {tool_name} (client: {client_id}, session: {session_id})"
+                )
+                raise ToolError(
+                    f"No valid lease for tool '{tool_name}'. "
+                    f"Please request tool schema first via get_tool_schema('{tool_name}')."
+                )
+
+            # PHASE 4: Verify capability token if present
+            if lease.capability_token:
+                token_valid = verify_token(
+                    token=lease.capability_token,
+                    client_id=client_id,
+                    tool_id=tool_name,
+                    secret=Config.HMAC_SECRET,
+                    context_key=None,  # No additional context scoping for now
+                )
+
+                if not token_valid:
+                    logger.error(
+                        f"Capability token verification failed for {tool_name} "
+                        f"(client: {client_id}, session: {session_id})"
+                    )
+                    # Revoke invalid lease
+                    await lease_manager.revoke(client_id, tool_name)
+                    raise ToolError(
+                        f"Access to '{tool_name}' denied: Invalid capability token. "
+                        f"Lease has been revoked for security."
+                    )
+
+                logger.debug(
+                    f"Capability token verified for {tool_name} "
+                    f"(client: {client_id})"
+                )
+
+            # Consume lease (decrement calls_remaining)
+            consumed_lease = await lease_manager.consume(client_id, tool_name)
+            if consumed_lease is None:
+                logger.warning(
+                    f"Failed to consume lease for {tool_name} "
+                    f"(client: {client_id}, session: {session_id})"
+                )
+                raise ToolError(
+                    f"Lease exhausted for tool '{tool_name}'. "
+                    f"Please request a new lease via get_tool_schema('{tool_name}')."
+                )
+
+            logger.info(
+                f"Lease consumed for {tool_name} "
+                f"(client: {client_id}, remaining={consumed_lease.calls_remaining})"
+            )
+
+        # Get current governance mode
+        mode = await governance_state.get_mode()
+
+        # Audit tool invocation
+        audit_logger.log_tool_call(
+            tool_name=tool_name,
+            arguments=arguments,
+            session_id=session_id,
+            mode=mode.value,
+        )
+
+        # Path 1: BYPASS mode - execute all tools
+        if mode == ExecutionMode.BYPASS:
+            logger.warning(
+                f"BYPASS mode: Executing {tool_name} without governance (session: {session_id})"
+            )
+            audit_logger.log_bypass(
+                tool_name=tool_name,
+                arguments=arguments,
+                session_id=session_id,
+            )
+            result = await self.invoke_tool(
+                context,
+                call_next,
+                tool_name,
+                arguments,
+                tool_call=tool_call,
+                run_context=run_context,
+                run_before_hooks=False,
+            )
+            return self._apply_toon_encoding(result)
+
+        # Path 2: Non-sensitive tools - pass through
+        if tool_name not in SENSITIVE_TOOLS:
+            logger.debug(f"Non-sensitive tool {tool_name}, passing through")
+            result = await self.invoke_tool(
+                context,
+                call_next,
+                tool_name,
+                arguments,
+                tool_call=tool_call,
+                run_context=run_context,
+                run_before_hooks=False,
+            )
+            return self._apply_toon_encoding(result)
+
+        # Path 3: READ_ONLY mode - block sensitive operations
+        if mode == ExecutionMode.READ_ONLY:
+            logger.warning(
+                f"READ_ONLY mode: Blocking {tool_name} (session: {session_id})"
+            )
+            audit_logger.log_blocked(
+                tool_name=tool_name,
+                arguments=arguments,
+                session_id=session_id,
+                reason="read_only_mode",
+            )
+            raise ToolError(
+                f"Operation '{tool_name}' blocked: System is in READ_ONLY mode"
+            )
+
+        # Path 4: PERMISSION mode - check elevation or elicit
+        if mode == ExecutionMode.PERMISSION:
+            # Check if scoped elevation exists
+            has_elevation = await self._check_elevation(
+                tool_name, arguments, session_id
+            )
+
+            if has_elevation:
+                # Elevation exists, allow execution
+                context_key = self._extract_context_key(tool_name, arguments)
+                logger.info(
+                    f"Using scoped elevation for {tool_name} (context: {context_key}, session: {session_id})"
+                )
+                audit_logger.log_elevation_used(
+                    tool_name=tool_name,
+                    context_key=context_key,
+                    session_id=session_id,
+                )
+                result = await self.invoke_tool(
+                    context,
+                    call_next,
+                    tool_name,
+                    arguments,
+                    tool_call=tool_call,
+                    run_context=run_context,
+                    run_before_hooks=False,
+                )
+                return self._apply_toon_encoding(result)
+
+            # No elevation, elicit approval
+            logger.info(
+                f"Eliciting approval for {tool_name} (session: {session_id})"
+            )
+            approved, lease_seconds, selected_scopes = await self._elicit_approval(
+                context, tool_name, arguments
+            )
+
+            if approved:
+                # Honor user-specified lease duration
+                # If lease_seconds == 0, skip elevation grant (single-use approval)
+                if lease_seconds > 0:
+                    # Grant scoped elevation with user-specified TTL
+                    await self._grant_elevation(
+                        tool_name, arguments, session_id, ttl=lease_seconds
+                    )
+                    logger.info(
+                        f"Approval granted with elevation for {tool_name} "
+                        f"(session: {session_id}, ttl: {lease_seconds}s, scopes: {selected_scopes})"
+                    )
+                else:
+                    # Single-use approval (no elevation grant)
+                    logger.info(
+                        f"Approval granted (single-use, no elevation) for {tool_name} "
+                        f"(session: {session_id}, scopes: {selected_scopes})"
+                    )
+
+                # Execute tool
+                result = await self.invoke_tool(
+                    context,
+                    call_next,
+                    tool_name,
+                    arguments,
+                    tool_call=tool_call,
+                    run_context=run_context,
+                    run_before_hooks=False,
+                )
+                return self._apply_toon_encoding(result)
+            else:
+                # Denied - audit already logged in _elicit_approval
+                logger.warning(f"Approval denied for {tool_name} (session: {session_id})")
+                raise ToolError(
+                    f"Operation '{tool_name}' denied: User did not approve"
+                )
+
+        # Fail-safe: Unknown mode - deny
+        logger.error(f"Unknown governance mode: {mode}, denying {tool_name}")
+        audit_logger.log_blocked(
+            tool_name=tool_name,
+            arguments=arguments,
+            session_id=session_id,
+            reason=f"unknown_mode_{mode}",
+        )
+        raise ToolError(
+            f"Operation '{tool_name}' denied: Unknown governance mode"
+        )
 
     @staticmethod
     def _extract_context_key(tool_name: str, arguments: Dict[str, Any]) -> str:
@@ -775,221 +1003,22 @@ class GovernanceMiddleware(Middleware):
         """
         tool_name = context.request_context.tool_name
         arguments = context.request_context.arguments or {}
-        tool_call, run_context = await self._run_before_tool_hooks(
+        original_tool_name = tool_name
+        original_arguments = arguments
+        tool_call, run_context, mutated = await self._run_before_tool_hooks(
             context, tool_name, arguments
         )
-        tool_name = tool_call.tool_name
-        arguments = tool_call.arguments
-        session_id = str(context.session_id)
-
-        # PHASE 3+4 INTEGRATION: Validate lease and token before governance checks
-        # Note: Bootstrap tools bypass lease checks
-        # CRITICAL: Skip lease checks if ENABLE_LEASE_MANAGEMENT is False
-        bootstrap_tools = {"search_tools", "get_tool_schema"}
-
-        if Config.ENABLE_LEASE_MANAGEMENT and tool_name not in bootstrap_tools:
-            # Extract client_id from FastMCP session context
-            # In FastMCP/MCP protocol, session_id is the stable client connection identifier
-            client_id = str(context.session_id)
-
-            # Validate lease exists
-            lease = await lease_manager.validate(client_id, tool_name)
-            if lease is None:
-                logger.warning(
-                    f"No valid lease for {tool_name} (client: {client_id}, session: {session_id})"
-                )
-                raise ToolError(
-                    f"No valid lease for tool '{tool_name}'. "
-                    f"Please request tool schema first via get_tool_schema('{tool_name}')."
-                )
-
-            # PHASE 4: Verify capability token if present
-            if lease.capability_token:
-                token_valid = verify_token(
-                    token=lease.capability_token,
-                    client_id=client_id,
-                    tool_id=tool_name,
-                    secret=Config.HMAC_SECRET,
-                    context_key=None,  # No additional context scoping for now
-                )
-
-                if not token_valid:
-                    logger.error(
-                        f"Capability token verification failed for {tool_name} "
-                        f"(client: {client_id}, session: {session_id})"
-                    )
-                    # Revoke invalid lease
-                    await lease_manager.revoke(client_id, tool_name)
-                    raise ToolError(
-                        f"Access to '{tool_name}' denied: Invalid capability token. "
-                        f"Lease has been revoked for security."
-                    )
-
-                logger.debug(
-                    f"Capability token verified for {tool_name} "
-                    f"(client: {client_id})"
-                )
-
-            # Consume lease (decrement calls_remaining)
-            consumed_lease = await lease_manager.consume(client_id, tool_name)
-            if consumed_lease is None:
-                logger.warning(
-                    f"Failed to consume lease for {tool_name} "
-                    f"(client: {client_id}, session: {session_id})"
-                )
-                raise ToolError(
-                    f"Lease exhausted for tool '{tool_name}'. "
-                    f"Please request a new lease via get_tool_schema('{tool_name}')."
-                )
-
+        if mutated:
             logger.info(
-                f"Lease consumed for {tool_name} "
-                f"(client: {client_id}, remaining={consumed_lease.calls_remaining})"
+                "before_tool hook mutated tool call; recomputing governance "
+                f"(from {original_tool_name} to {tool_call.tool_name})"
             )
+            if tool_call.arguments != original_arguments:
+                logger.debug("before_tool hook mutated tool arguments")
 
-        # Get current governance mode
-        mode = await governance_state.get_mode()
-
-        # Audit tool invocation
-        audit_logger.log_tool_call(
-            tool_name=tool_name,
-            arguments=arguments,
-            session_id=session_id,
-            mode=mode.value,
-        )
-
-        # Path 1: BYPASS mode - execute all tools
-        if mode == ExecutionMode.BYPASS:
-            logger.warning(
-                f"BYPASS mode: Executing {tool_name} without governance (session: {session_id})"
-            )
-            audit_logger.log_bypass(
-                tool_name=tool_name,
-                arguments=arguments,
-                session_id=session_id,
-            )
-            result = await self.invoke_tool(
-                context,
-                call_next,
-                tool_name,
-                arguments,
-                tool_call=tool_call,
-                run_context=run_context,
-                run_before_hooks=False,
-            )
-            return self._apply_toon_encoding(result)
-
-        # Path 2: Non-sensitive tools - pass through
-        if tool_name not in SENSITIVE_TOOLS:
-            logger.debug(f"Non-sensitive tool {tool_name}, passing through")
-            result = await self.invoke_tool(
-                context,
-                call_next,
-                tool_name,
-                arguments,
-                tool_call=tool_call,
-                run_context=run_context,
-                run_before_hooks=False,
-            )
-            return self._apply_toon_encoding(result)
-
-        # Path 3: READ_ONLY mode - block sensitive operations
-        if mode == ExecutionMode.READ_ONLY:
-            logger.warning(
-                f"READ_ONLY mode: Blocking {tool_name} (session: {session_id})"
-            )
-            audit_logger.log_blocked(
-                tool_name=tool_name,
-                arguments=arguments,
-                session_id=session_id,
-                reason="read_only_mode",
-            )
-            raise ToolError(
-                f"Operation '{tool_name}' blocked: System is in READ_ONLY mode"
-            )
-
-        # Path 4: PERMISSION mode - check elevation or elicit
-        if mode == ExecutionMode.PERMISSION:
-            # Check if scoped elevation exists
-            has_elevation = await self._check_elevation(
-                tool_name, arguments, session_id
-            )
-
-            if has_elevation:
-                # Elevation exists, allow execution
-                context_key = self._extract_context_key(tool_name, arguments)
-                logger.info(
-                    f"Using scoped elevation for {tool_name} (context: {context_key}, session: {session_id})"
-                )
-                audit_logger.log_elevation_used(
-                    tool_name=tool_name,
-                    context_key=context_key,
-                    session_id=session_id,
-                )
-                result = await self.invoke_tool(
-                    context,
-                    call_next,
-                    tool_name,
-                    arguments,
-                    tool_call=tool_call,
-                    run_context=run_context,
-                    run_before_hooks=False,
-                )
-                return self._apply_toon_encoding(result)
-
-            # No elevation, elicit approval
-            logger.info(
-                f"Eliciting approval for {tool_name} (session: {session_id})"
-            )
-            approved, lease_seconds, selected_scopes = await self._elicit_approval(
-                context, tool_name, arguments
-            )
-
-            if approved:
-                # Honor user-specified lease duration
-                # If lease_seconds == 0, skip elevation grant (single-use approval)
-                if lease_seconds > 0:
-                    # Grant scoped elevation with user-specified TTL
-                    await self._grant_elevation(
-                        tool_name, arguments, session_id, ttl=lease_seconds
-                    )
-                    logger.info(
-                        f"Approval granted with elevation for {tool_name} "
-                        f"(session: {session_id}, ttl: {lease_seconds}s, scopes: {selected_scopes})"
-                    )
-                else:
-                    # Single-use approval (no elevation grant)
-                    logger.info(
-                        f"Approval granted (single-use, no elevation) for {tool_name} "
-                        f"(session: {session_id}, scopes: {selected_scopes})"
-                    )
-
-                # Execute tool
-                result = await self.invoke_tool(
-                    context,
-                    call_next,
-                    tool_name,
-                    arguments,
-                    tool_call=tool_call,
-                    run_context=run_context,
-                    run_before_hooks=False,
-                )
-                return self._apply_toon_encoding(result)
-            else:
-                # Denied - audit already logged in _elicit_approval
-                logger.warning(f"Approval denied for {tool_name} (session: {session_id})")
-                raise ToolError(
-                    f"Operation '{tool_name}' denied: User did not approve"
-                )
-
-        # Fail-safe: Unknown mode - deny
-        logger.error(f"Unknown governance mode: {mode}, denying {tool_name}")
-        audit_logger.log_blocked(
-            tool_name=tool_name,
-            arguments=arguments,
-            session_id=session_id,
-            reason=f"unknown_mode_{mode}",
-        )
-        raise ToolError(
-            f"Operation '{tool_name}' denied: Unknown governance mode"
+        return await self._handle_tool_call(
+            context,
+            call_next,
+            tool_call,
+            run_context,
         )
