@@ -190,7 +190,7 @@ class GovernanceMiddleware(Middleware):
 
     async def _run_before_tool_hooks(
         self, context: Context, tool_name: str, arguments: Dict[str, Any]
-    ) -> tuple[ToolCall, RunContext]:
+    ) -> tuple[ToolCall, RunContext, bool]:
         session_id = str(context.session_id)
         run_context = RunContext(
             session_id=session_id,
@@ -215,7 +215,11 @@ class GovernanceMiddleware(Middleware):
                 arguments=tool_call.arguments,
             )
 
-        return tool_call, run_context
+        was_mutated = (
+            tool_call.tool_name != tool_name
+            or tool_call.arguments != arguments
+        )
+        return tool_call, run_context, was_mutated
 
     @staticmethod
     def _extract_context_key(tool_name: str, arguments: Dict[str, Any]) -> str:
@@ -775,9 +779,13 @@ class GovernanceMiddleware(Middleware):
         """
         tool_name = context.request_context.tool_name
         arguments = context.request_context.arguments or {}
-        tool_call, run_context = await self._run_before_tool_hooks(
+        tool_call, run_context, was_mutated = await self._run_before_tool_hooks(
             context, tool_name, arguments
         )
+        if was_mutated:
+            logger.info(
+                "before_tool hook mutated tool call; re-evaluating governance with updated values."
+            )
         tool_name = tool_call.tool_name
         arguments = tool_call.arguments
         session_id = str(context.session_id)
