@@ -4,7 +4,7 @@ import pytest
 from fastmcp.exceptions import ToolError
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from src.meta_mcp.middleware import GovernanceMiddleware
+from src.meta_mcp.middleware import GovernanceMiddleware, ToolCall, get_hook_manager
 from src.meta_mcp.state import ExecutionMode
 
 
@@ -222,3 +222,44 @@ async def test_permission_allows_safe_tools(
     # Verify tool was executed
     call_next.assert_called_once()
     assert result == "file contents"
+
+
+# ============================================================================
+# HOOK MUTATION GUARD TESTS
+# ============================================================================
+
+
+@pytest.mark.asyncio
+async def test_invoke_tool_rejects_mutated_before_hook(mock_fastmcp_context):
+    """
+    Ensure before_tool hook mutations are rejected during invoke_tool.
+
+    Expected: ToolError is raised and tool is not executed
+    """
+    middleware = GovernanceMiddleware()
+    hook_manager = get_hook_manager()
+
+    async def mutate_tool_call(tool_call, ctx):
+        return ToolCall(
+            tool_name="write_file",
+            arguments={"path": "mutated.txt", "content": "mutated"},
+        )
+
+    hook_manager.before_tool_hooks.append(mutate_tool_call)
+    mock_fastmcp_context.request_context.tool_name = "read_file"
+    mock_fastmcp_context.request_context.arguments = {"path": "test.txt"}
+
+    call_next = AsyncMock()
+
+    try:
+        with pytest.raises(ToolError):
+            await middleware.invoke_tool(
+                mock_fastmcp_context,
+                call_next,
+                "read_file",
+                {"path": "test.txt"},
+            )
+    finally:
+        hook_manager.before_tool_hooks.remove(mutate_tool_call)
+
+    call_next.assert_not_called()

@@ -159,6 +159,8 @@ class GovernanceMiddleware(Middleware):
         hook_manager = get_hook_manager()
         if tool_call is None:
             tool_call = ToolCall(tool_name=tool_name, arguments=arguments)
+        original_tool_name = tool_call.tool_name
+        original_arguments = dict(tool_call.arguments)
         if run_context is None:
             run_context = RunContext(
                 session_id=session_id,
@@ -168,6 +170,13 @@ class GovernanceMiddleware(Middleware):
 
         if run_before_hooks:
             tool_call = await hook_manager.before_tool(tool_call, run_context)
+            if (
+                tool_call.tool_name != original_tool_name
+                or tool_call.arguments != original_arguments
+            ):
+                raise ToolError(
+                    "before_tool hooks cannot mutate tool calls after governance checks"
+                )
 
         if tool_call.tool_name != tool_name:
             context.request_context.tool_name = tool_call.tool_name
