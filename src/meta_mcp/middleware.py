@@ -649,8 +649,8 @@ class GovernanceMiddleware(Middleware):
         # Note: Bootstrap tools bypass lease checks
         # CRITICAL: Skip lease checks if ENABLE_LEASE_MANAGEMENT is False
         bootstrap_tools = {"search_tools", "get_tool_schema"}
-        should_consume_lease = False
         client_id = None
+        reserved_lease = None
 
         inflight_acquired = False
 
@@ -658,7 +658,6 @@ class GovernanceMiddleware(Middleware):
             # Extract client_id from FastMCP session context
             # In FastMCP/MCP protocol, session_id is the stable client connection identifier
             client_id = str(context.session_id)
-            should_consume_lease = True
 
             # Validate lease exists
             lease = await lease_manager.validate(client_id, tool_name)
@@ -711,28 +710,41 @@ class GovernanceMiddleware(Middleware):
                     f"Please request a new lease via get_tool_schema('{tool_name}')."
                 )
 
+            reserved_lease = await lease_manager.reserve(client_id, tool_name)
+            if reserved_lease is None:
+                logger.warning(
+                    f"Failed to reserve lease for {tool_name} "
+                    f"(client: {client_id}, session: {session_id})"
+                )
+                if inflight_acquired:
+                    await lease_manager.release_inflight(client_id, tool_name)
+                raise ToolError(
+                    f"Lease exhausted for tool '{tool_name}'. "
+                    f"Please request a new lease via get_tool_schema('{tool_name}')."
+                )
+
         async def _execute_tool() -> Any:
             try:
                 result = await call_next()
-                if should_consume_lease and client_id is not None:
-                    consumed_lease = await lease_manager.consume(client_id, tool_name)
-                    if consumed_lease is None:
-                        logger.warning(
-                            f"Failed to consume lease for {tool_name} "
-                            f"(client: {client_id}, session: {session_id})"
-                        )
-                        raise ToolError(
-                            f"Lease exhausted for tool '{tool_name}'. "
-                            f"Please request a new lease via get_tool_schema('{tool_name}')."
-                        )
-
+                if reserved_lease is not None and client_id is not None:
+                    if reserved_lease.calls_remaining <= 0:
+                        await lease_manager.finalize_consumption(client_id, tool_name)
                     logger.info(
                         f"Lease consumed for {tool_name} "
-                        f"(client: {client_id}, remaining={consumed_lease.calls_remaining})"
+                        f"(client: {client_id}, remaining={reserved_lease.calls_remaining})"
                     )
                 return self._apply_toon_encoding(result)
+            except Exception:
+                if reserved_lease is not None and client_id is not None:
+                    refunded_lease = await lease_manager.refund(client_id, tool_name)
+                    if refunded_lease is None:
+                        logger.warning(
+                            f"Failed to refund lease for {tool_name} "
+                            f"(client: {client_id}, session: {session_id})"
+                        )
+                raise
             finally:
-                if should_consume_lease and client_id is not None and inflight_acquired:
+                if client_id is not None and inflight_acquired:
                     await lease_manager.release_inflight(client_id, tool_name)
 
         # Get current governance mode

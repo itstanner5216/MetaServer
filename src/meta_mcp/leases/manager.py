@@ -7,6 +7,7 @@ from typing import Optional
 
 from loguru import logger
 from redis import asyncio as aioredis
+from redis.exceptions import WatchError
 
 from ..config import Config
 from ..state import governance_state
@@ -308,6 +309,197 @@ class LeaseManager:
         except Exception as e:
             logger.error(f"Unexpected error in consume: {e}")
             return None
+
+    async def reserve(
+        self, client_id: str, tool_id: str
+    ) -> Optional[ToolLease]:
+        """
+        Reserve a call by decrementing calls_remaining before execution.
+
+        Args:
+            client_id: Session identifier
+            tool_id: Tool identifier
+
+        Returns:
+            Updated ToolLease if reserved successfully, None otherwise
+
+        Security:
+        - Validates client_id is not empty
+        - Uses Redis watch to prevent concurrent over-reservation
+        - Leaves lease at 0 calls until finalize/rollback
+        """
+        if not client_id or not client_id.strip():
+            logger.warning("Cannot reserve lease with empty client_id")
+            return None
+
+        redis = await self._get_redis()
+        key = self._lease_key(client_id, tool_id)
+
+        while True:
+            pipe = redis.pipeline()
+            try:
+                await pipe.watch(key)
+                lease_json = await pipe.get(key)
+                if lease_json is None:
+                    await pipe.reset()
+                    return None
+
+                lease_dict = json.loads(lease_json)
+                lease = ToolLease(
+                    client_id=lease_dict["client_id"],
+                    tool_id=lease_dict["tool_id"],
+                    granted_at=datetime.fromisoformat(lease_dict["granted_at"]),
+                    expires_at=datetime.fromisoformat(lease_dict["expires_at"]),
+                    calls_remaining=lease_dict["calls_remaining"],
+                    mode_at_issue=lease_dict["mode_at_issue"],
+                    capability_token=lease_dict.get("capability_token"),
+                )
+
+                if lease.is_expired():
+                    await pipe.multi()
+                    await pipe.delete(key)
+                    await pipe.execute()
+                    logger.warning(f"Lease expired for {client_id}:{tool_id}")
+                    return None
+
+                if not lease.can_consume():
+                    await pipe.reset()
+                    return None
+
+                lease.calls_remaining -= 1
+                lease_dict["calls_remaining"] = lease.calls_remaining
+                ttl = await pipe.ttl(key)
+
+                await pipe.multi()
+                if ttl > 0:
+                    await pipe.setex(key, ttl, json.dumps(lease_dict))
+                else:
+                    await pipe.delete(key)
+                    await pipe.execute()
+                    return None
+
+                await pipe.execute()
+                logger.info(
+                    f"Reserved lease for {client_id}:{tool_id} "
+                    f"(remaining={lease.calls_remaining})"
+                )
+                return lease
+            except WatchError:
+                continue
+            except (aioredis.ConnectionError, aioredis.TimeoutError) as e:
+                logger.error(f"Redis connection failed in reserve: {e}")
+                return None
+            except Exception as e:
+                logger.error(f"Unexpected error in reserve: {e}")
+                return None
+            finally:
+                await pipe.reset()
+
+    async def refund(
+        self, client_id: str, tool_id: str
+    ) -> Optional[ToolLease]:
+        """
+        Refund a previously reserved call (increment calls_remaining).
+
+        Args:
+            client_id: Session identifier
+            tool_id: Tool identifier
+
+        Returns:
+            Updated ToolLease if refunded successfully, None otherwise
+        """
+        if not client_id or not client_id.strip():
+            logger.warning("Cannot refund lease with empty client_id")
+            return None
+
+        redis = await self._get_redis()
+        key = self._lease_key(client_id, tool_id)
+
+        while True:
+            pipe = redis.pipeline()
+            try:
+                await pipe.watch(key)
+                lease_json = await pipe.get(key)
+                if lease_json is None:
+                    await pipe.reset()
+                    return None
+
+                lease_dict = json.loads(lease_json)
+                lease = ToolLease(
+                    client_id=lease_dict["client_id"],
+                    tool_id=lease_dict["tool_id"],
+                    granted_at=datetime.fromisoformat(lease_dict["granted_at"]),
+                    expires_at=datetime.fromisoformat(lease_dict["expires_at"]),
+                    calls_remaining=lease_dict["calls_remaining"],
+                    mode_at_issue=lease_dict["mode_at_issue"],
+                    capability_token=lease_dict.get("capability_token"),
+                )
+
+                if lease.is_expired():
+                    await pipe.multi()
+                    await pipe.delete(key)
+                    await pipe.execute()
+                    logger.warning(f"Lease expired for {client_id}:{tool_id}")
+                    return None
+
+                lease.calls_remaining += 1
+                lease_dict["calls_remaining"] = lease.calls_remaining
+                ttl = await pipe.ttl(key)
+
+                await pipe.multi()
+                if ttl > 0:
+                    await pipe.setex(key, ttl, json.dumps(lease_dict))
+                else:
+                    await pipe.delete(key)
+                    await pipe.execute()
+                    return None
+
+                await pipe.execute()
+                logger.info(
+                    f"Refunded lease for {client_id}:{tool_id} "
+                    f"(remaining={lease.calls_remaining})"
+                )
+                return lease
+            except WatchError:
+                continue
+            except (aioredis.ConnectionError, aioredis.TimeoutError) as e:
+                logger.error(f"Redis connection failed in refund: {e}")
+                return None
+            except Exception as e:
+                logger.error(f"Unexpected error in refund: {e}")
+                return None
+            finally:
+                await pipe.reset()
+
+    async def finalize_consumption(self, client_id: str, tool_id: str) -> None:
+        """
+        Finalize a successful reserved call by deleting exhausted leases.
+
+        Args:
+            client_id: Session identifier
+            tool_id: Tool identifier
+        """
+        if not client_id or not client_id.strip():
+            logger.warning("Cannot finalize lease with empty client_id")
+            return
+
+        try:
+            redis = await self._get_redis()
+            key = self._lease_key(client_id, tool_id)
+            lease_json = await redis.get(key)
+            if lease_json is None:
+                return
+
+            lease_dict = json.loads(lease_json)
+            if lease_dict.get("calls_remaining", 0) <= 0:
+                await redis.delete(key)
+                logger.info(
+                    f"Lease exhausted and deleted for {client_id}:{tool_id}"
+                )
+        except (aioredis.ConnectionError, aioredis.TimeoutError) as e:
+            logger.error(f"Redis connection failed in finalize_consumption: {e}")
+        except Exception as e:
+            logger.error(f"Unexpected error in finalize_consumption: {e}")
 
     async def acquire_inflight(
         self, client_id: str, tool_id: str, max_inflight: int
