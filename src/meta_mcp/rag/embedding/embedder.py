@@ -3,12 +3,12 @@
 Gemini API embedding adapter with batching, retry, and rate limiting.
 """
 
-import google.generativeai as genai
-import time
-from typing import List, Dict, Optional
-from dataclasses import dataclass
 import logging
+import time
+from dataclasses import dataclass
 from threading import Lock
+
+import google.generativeai as genai
 
 logger = logging.getLogger(__name__)
 
@@ -16,7 +16,8 @@ logger = logging.getLogger(__name__)
 @dataclass
 class EmbeddingResult:
     """Result of an embedding operation."""
-    vector: List[float]
+
+    vector: list[float]
     token_count: int
     model: str
     model_version: str
@@ -62,7 +63,7 @@ class GeminiEmbedderAdapter:
         batch_size: int = 100,
         max_retries: int = 3,
         retry_base_delay: int = 60,
-        calls_per_minute: int = 60
+        calls_per_minute: int = 60,
     ):
         genai.configure(api_key=api_key)
         self.model = model
@@ -79,7 +80,7 @@ class GeminiEmbedderAdapter:
         self.token_count = 0
         self.error_count = 0
 
-    def embed_batch(self, texts: List[str]) -> List[EmbeddingResult]:
+    def embed_batch(self, texts: list[str]) -> list[EmbeddingResult]:
         """
         Batch embed texts via Gemini API with retry.
 
@@ -92,13 +93,13 @@ class GeminiEmbedderAdapter:
         results = []
 
         for i in range(0, len(texts), self.batch_size):
-            batch = texts[i:i + self.batch_size]
+            batch = texts[i : i + self.batch_size]
             batch_results = self._embed_with_retry(batch)
             results.extend(batch_results)
 
         return results
 
-    def _embed_with_retry(self, texts: List[str]) -> List[EmbeddingResult]:
+    def _embed_with_retry(self, texts: list[str]) -> list[EmbeddingResult]:
         """Embed a single batch with retry logic."""
 
         retry_count = 0
@@ -111,9 +112,7 @@ class GeminiEmbedderAdapter:
 
                 # Make API call
                 response = genai.embed_content(
-                    model=self.model,
-                    content=texts,
-                    task_type="retrieval_document"
+                    model=self.model, content=texts, task_type="retrieval_document"
                 )
 
                 # Track usage
@@ -122,7 +121,7 @@ class GeminiEmbedderAdapter:
                 self.token_count += batch_tokens
 
                 # Parse response
-                embeddings = response['embedding']
+                embeddings = response["embedding"]
 
                 # Handle single vs batch response
                 if not isinstance(embeddings[0], list):
@@ -130,12 +129,14 @@ class GeminiEmbedderAdapter:
 
                 results = []
                 for text, embedding in zip(texts, embeddings):
-                    results.append(EmbeddingResult(
-                        vector=embedding,
-                        token_count=len(text.split()),  # Approximate
-                        model=self.model,
-                        model_version=self.model_version
-                    ))
+                    results.append(
+                        EmbeddingResult(
+                            vector=embedding,
+                            token_count=len(text.split()),  # Approximate
+                            model=self.model,
+                            model_version=self.model_version,
+                        )
+                    )
 
                 logger.debug(f"Embedded batch of {len(texts)} texts")
                 return results
@@ -145,9 +146,15 @@ class GeminiEmbedderAdapter:
                 last_error = e
 
                 # Check for rate limit errors
-                if "429" in error_str or "quota" in error_str.lower() or "rate" in error_str.lower():
-                    wait_time = self.retry_base_delay * (2 ** retry_count)
-                    logger.warning(f"Rate limit hit, waiting {wait_time}s before retry {retry_count + 1}/{self.max_retries}")
+                if (
+                    "429" in error_str
+                    or "quota" in error_str.lower()
+                    or "rate" in error_str.lower()
+                ):
+                    wait_time = self.retry_base_delay * (2**retry_count)
+                    logger.warning(
+                        f"Rate limit hit, waiting {wait_time}s before retry {retry_count + 1}/{self.max_retries}"
+                    )
                     time.sleep(wait_time)
                     retry_count += 1
                     self.error_count += 1
@@ -157,14 +164,14 @@ class GeminiEmbedderAdapter:
                     raise
                 else:
                     # Other errors - retry with shorter delay
-                    wait_time = 5 * (2 ** retry_count)
+                    wait_time = 5 * (2**retry_count)
                     logger.warning(f"Embedding error: {e}. Retrying in {wait_time}s")
                     time.sleep(wait_time)
                     retry_count += 1
                     self.error_count += 1
 
         # All retries exhausted
-        logger.error(f"All retries exhausted for batch embedding")
+        logger.error("All retries exhausted for batch embedding")
         raise last_error
 
     def embed_query(self, query: str) -> EmbeddingResult:
@@ -177,19 +184,17 @@ class GeminiEmbedderAdapter:
 
         try:
             response = genai.embed_content(
-                model=self.model,
-                content=query,
-                task_type="retrieval_query"
+                model=self.model, content=query, task_type="retrieval_query"
             )
 
             self.call_count += 1
             self.token_count += len(query.split())
 
             return EmbeddingResult(
-                vector=response['embedding'],
+                vector=response["embedding"],
                 token_count=len(query.split()),
                 model=self.model,
-                model_version=self.model_version
+                model_version=self.model_version,
             )
 
         except Exception as e:
@@ -197,14 +202,14 @@ class GeminiEmbedderAdapter:
             logger.error(f"Query embedding failed: {e}")
             raise
 
-    def get_usage(self) -> Dict:
+    def get_usage(self) -> dict:
         """Get usage statistics."""
         return {
             "call_count": self.call_count,
             "token_count": self.token_count,
             "error_count": self.error_count,
             "model": self.model,
-            "model_version": self.model_version
+            "model_version": self.model_version,
         }
 
     def reset_usage(self):

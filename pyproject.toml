@@ -84,8 +84,8 @@ reportMissingTypeStubs = false
 exclude_dirs = ["tests", ".venv"]
 skips = ["B101"]  # Allow assert in tests
 
-[tool.uv]
-dev-dependencies = [
+[dependency-groups]
+dev = [
     "pytest>=8.0",
     "pytest-asyncio>=0.23",
     "pytest-cov>=6.0",

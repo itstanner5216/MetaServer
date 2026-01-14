@@ -14,8 +14,8 @@ Security Requirements:
 3. Schema only returned when lease is successfully granted
 """
 
+
 import pytest
-import json
 
 pytestmark = pytest.mark.skip(reason="Phase 4 not yet implemented")
 
@@ -72,7 +72,6 @@ async def test_blocked_tool_no_schema():
     #     assert "properties" not in error_msg.lower()
     #     assert "inputSchema" not in error_msg
 
-    pass
 
 
 @pytest.mark.asyncio
@@ -124,7 +123,6 @@ async def test_approval_required_no_schema():
     #            "token" in response_data, \
     #            "approval_required response should include token"
 
-    pass
 
 
 @pytest.mark.asyncio
@@ -161,7 +159,6 @@ async def test_schema_only_after_lease_grant():
     # lease = await lease_manager.validate("test_client_id", "read_file")
     # assert lease is not None, "Lease should be created when schema returned"
 
-    pass
 
 
 @pytest.mark.asyncio
@@ -201,7 +198,6 @@ async def test_schema_minimal_before_expansion():
     #     assert response_data.get("expansion_available") is True, \
     #            "Should indicate full schema is available"
 
-    pass
 
 
 @pytest.mark.asyncio
@@ -233,7 +229,6 @@ async def test_error_message_no_schema_leak():
     #     assert "type" not in error_msg or "file" in error_msg, \
     #            "Error message leaked schema types"
 
-    pass
 
 
 @pytest.mark.asyncio
@@ -268,7 +263,6 @@ async def test_search_results_no_schema():
     #         assert "properties" not in result, \
     #                "Search result leaked properties"
 
-    pass
 
 
 @pytest.mark.asyncio
@@ -299,7 +293,6 @@ async def test_bootstrap_tools_schema_always_available():
     # assert "inputSchema" in response_data or "schema" in response_data, \
     #        "Bootstrap tools should always return schema"
 
-    pass
 
 
 @pytest.mark.asyncio
@@ -336,7 +329,6 @@ async def test_schema_stripped_from_denial_response():
     #     assert keyword not in response_str, \
     #            f"SECURITY BREACH: Schema keyword '{keyword}' found in denial response"
 
-    pass
 
 
 @pytest.mark.asyncio
@@ -378,7 +370,6 @@ async def test_partial_schema_leak_in_json():
     #
     # check_no_schema(response_data)
 
-    pass
 
 
 @pytest.mark.asyncio
@@ -393,4 +384,3 @@ async def test_schema_not_in_logs():
     # This test would need to capture log output and verify
     # no schema information is logged for blocked tools
 
-    pass

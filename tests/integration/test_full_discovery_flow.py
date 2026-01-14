@@ -15,8 +15,8 @@ Security Invariants:
 """
 
 import pytest
+
 from src.meta_mcp.registry import tool_registry
-from src.meta_mcp.registry.registry import ToolRegistry
 from src.meta_mcp.schemas.expander import expand_schema
 from src.meta_mcp.toon.encoder import encode_output
 
@@ -198,7 +198,7 @@ async def test_toon_encoding_nested_structures(redis_client):
     nested = {
         "directories": {
             "src": ["file1.py", "file2.py"],
-            "tests": [f"test_{i}.py" for i in range(10)]
+            "tests": [f"test_{i}.py" for i in range(10)],
         }
     }
 
@@ -333,13 +333,7 @@ async def test_toon_preserves_primitive_types(redis_client):
 
     Primitives: str, int, float, bool, None
     """
-    primitives = {
-        "string": "hello",
-        "integer": 42,
-        "float": 3.14,
-        "boolean": True,
-        "null": None
-    }
+    primitives = {"string": "hello", "integer": 42, "float": 3.14, "boolean": True, "null": None}
 
     encoded = encode_output(primitives, threshold=5)
 

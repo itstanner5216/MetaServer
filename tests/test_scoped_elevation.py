@@ -1,13 +1,12 @@
 """Test TTL-based scoped elevation cache (Invariant #6)."""
 
 import asyncio
+from unittest.mock import AsyncMock
 
 import pytest
-from unittest.mock import AsyncMock
 
 from src.meta_mcp.middleware import GovernanceMiddleware
 from src.meta_mcp.state import governance_state
-
 
 # ============================================================================
 # ELEVATION GRANT AND AUTO-APPROVAL TESTS

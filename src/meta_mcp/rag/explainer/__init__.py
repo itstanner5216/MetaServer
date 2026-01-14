@@ -27,13 +27,13 @@ Latency: ~500-800ms for LLM call (depending on model)
 """
 
 from .explainer import (
-    RetrievalExplainer,
     ExplainerOutput,
+    RetrievalExplainer,
     create_explainer,
 )
 
 __all__ = [
-    "RetrievalExplainer",
     "ExplainerOutput",
+    "RetrievalExplainer",
     "create_explainer",
 ]

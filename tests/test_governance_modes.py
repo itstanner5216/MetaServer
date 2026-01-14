@@ -1,12 +1,11 @@
 """Test tri-state governance mode enforcement (Invariant #4)."""
 
+from unittest.mock import AsyncMock
+
 import pytest
 from fastmcp.exceptions import ToolError
-from unittest.mock import AsyncMock, MagicMock, patch
 
 from src.meta_mcp.middleware import GovernanceMiddleware
-from src.meta_mcp.state import ExecutionMode
-
 
 # ============================================================================
 # READ_ONLY MODE TESTS

@@ -7,15 +7,15 @@ Provides the source of truth for document lifecycle management
 while vectors are stored in Qdrant.
 """
 
-import sqlite3
 import json
-import uuid
 import logging
-from datetime import datetime, timezone
-from typing import Dict, List, Optional, Any
-from dataclasses import dataclass
+import sqlite3
+import uuid
 from contextlib import contextmanager
+from dataclasses import dataclass
+from datetime import datetime, timezone
 from pathlib import Path
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -28,17 +28,19 @@ logger = logging.getLogger(__name__)
 @dataclass
 class DocumentRef:
     """Reference to a document for ingestion."""
+
     path: str
     mime_type: str
     scope: str
     source_mtime: datetime
     file_hash: str
-    metadata: Optional[Dict[str, Any]] = None
+    metadata: dict[str, Any] | None = None
 
 
 @dataclass
 class ChunkRecord:
     """Record of a document chunk."""
+
     doc_id: str
     chunk_index: int
     offset_start: int
@@ -53,6 +55,7 @@ class ChunkRecord:
 @dataclass
 class EmbeddingRecord:
     """Record of a chunk embedding."""
+
     chunk_id: str
     embedding_model: str
     embedding_model_version: str
@@ -164,7 +167,7 @@ class ManifestDB:
             db_path: Path to SQLite database file. Use ":memory:" for testing.
         """
         self.db_path = db_path
-        self._persistent_conn: Optional[sqlite3.Connection] = None
+        self._persistent_conn: sqlite3.Connection | None = None
 
         # Create parent directory if needed
         if db_path != ":memory:":
@@ -243,7 +246,7 @@ class ManifestDB:
                 self._apply_migrations(cursor, current_version)
                 cursor.execute(
                     "INSERT INTO schema_version (version, applied_at) VALUES (?, ?)",
-                    (SCHEMA_VERSION, self._utcnow().isoformat())
+                    (SCHEMA_VERSION, self._utcnow().isoformat()),
                 )
 
     def _apply_migrations(self, cursor: sqlite3.Cursor, from_version: int):
@@ -296,14 +299,14 @@ class ManifestDB:
                     doc.file_hash,
                     json.dumps(doc.metadata) if doc.metadata else None,
                     self._utcnow().isoformat(),
-                    "pending"
-                )
+                    "pending",
+                ),
             )
 
         logger.debug(f"Added document {doc_id}: {doc.path}")
         return doc_id
 
-    def get_document(self, doc_id: str) -> Optional[Dict]:
+    def get_document(self, doc_id: str) -> dict | None:
         """
         Get document by ID.
 
@@ -315,17 +318,14 @@ class ManifestDB:
         """
         with self._get_connection() as conn:
             cursor = conn.cursor()
-            cursor.execute(
-                "SELECT * FROM documents WHERE doc_id = ?",
-                (doc_id,)
-            )
+            cursor.execute("SELECT * FROM documents WHERE doc_id = ?", (doc_id,))
             row = cursor.fetchone()
 
             if row:
                 return self._row_to_document_dict(row)
             return None
 
-    def get_document_by_path(self, path: str) -> Optional[Dict]:
+    def get_document_by_path(self, path: str) -> dict | None:
         """
         Get document by file path.
 
@@ -337,10 +337,7 @@ class ManifestDB:
         """
         with self._get_connection() as conn:
             cursor = conn.cursor()
-            cursor.execute(
-                "SELECT * FROM documents WHERE path = ?",
-                (path,)
-            )
+            cursor.execute("SELECT * FROM documents WHERE path = ?", (path,))
             row = cursor.fetchone()
 
             if row:
@@ -355,16 +352,13 @@ class ManifestDB:
             doc_id: Document UUID
             status: New status ('pending', 'ingested', 'failed', 'stale')
         """
-        valid_statuses = {'pending', 'ingested', 'failed', 'stale'}
+        valid_statuses = {"pending", "ingested", "failed", "stale"}
         if status not in valid_statuses:
             raise ValueError(f"Invalid status: {status}. Must be one of {valid_statuses}")
 
         with self._get_connection() as conn:
             cursor = conn.cursor()
-            cursor.execute(
-                "UPDATE documents SET status = ? WHERE doc_id = ?",
-                (status, doc_id)
-            )
+            cursor.execute("UPDATE documents SET status = ? WHERE doc_id = ?", (status, doc_id))
 
             if cursor.rowcount == 0:
                 logger.warning(f"Document not found for status update: {doc_id}")
@@ -381,10 +375,8 @@ class ManifestDB:
         self.update_document_status(doc_id, "stale")
 
     def list_documents(
-        self,
-        scope: Optional[str] = None,
-        status: Optional[str] = None
-    ) -> List[Dict]:
+        self, scope: str | None = None, status: str | None = None
+    ) -> list[dict]:
         """
         List documents with optional filtering.
 
@@ -425,17 +417,14 @@ class ManifestDB:
         """
         with self._get_connection() as conn:
             cursor = conn.cursor()
-            cursor.execute(
-                "DELETE FROM documents WHERE doc_id = ?",
-                (doc_id,)
-            )
+            cursor.execute("DELETE FROM documents WHERE doc_id = ?", (doc_id,))
 
             if cursor.rowcount > 0:
                 logger.info(f"Deleted document {doc_id} (cascaded to chunks/embeddings)")
             else:
                 logger.warning(f"Document not found for deletion: {doc_id}")
 
-    def _row_to_document_dict(self, row: sqlite3.Row) -> Dict:
+    def _row_to_document_dict(self, row: sqlite3.Row) -> dict:
         """Convert a document row to a dictionary."""
         return {
             "doc_id": row["doc_id"],
@@ -446,7 +435,7 @@ class ManifestDB:
             "file_hash": row["file_hash"],
             "metadata": json.loads(row["metadata"]) if row["metadata"] else None,
             "ingested_at": datetime.fromisoformat(row["ingested_at"]),
-            "status": row["status"]
+            "status": row["status"],
         }
 
     # -------------------------------------------------------------------------
@@ -485,14 +474,14 @@ class ManifestDB:
                     chunk.extractor,
                     chunk.extractor_version,
                     chunk.scope,
-                    self._utcnow().isoformat()
-                )
+                    self._utcnow().isoformat(),
+                ),
             )
 
         logger.debug(f"Added chunk {chunk_id} for document {chunk.doc_id}")
         return chunk_id
 
-    def get_chunks_for_document(self, doc_id: str) -> List[Dict]:
+    def get_chunks_for_document(self, doc_id: str) -> list[dict]:
         """
         Get all chunks for a document.
 
@@ -504,15 +493,12 @@ class ManifestDB:
         """
         with self._get_connection() as conn:
             cursor = conn.cursor()
-            cursor.execute(
-                "SELECT * FROM chunks WHERE doc_id = ? ORDER BY chunk_index",
-                (doc_id,)
-            )
+            cursor.execute("SELECT * FROM chunks WHERE doc_id = ? ORDER BY chunk_index", (doc_id,))
             rows = cursor.fetchall()
 
             return [self._row_to_chunk_dict(row) for row in rows]
 
-    def get_chunk(self, chunk_id: str) -> Optional[Dict]:
+    def get_chunk(self, chunk_id: str) -> dict | None:
         """
         Get chunk by ID.
 
@@ -524,10 +510,7 @@ class ManifestDB:
         """
         with self._get_connection() as conn:
             cursor = conn.cursor()
-            cursor.execute(
-                "SELECT * FROM chunks WHERE chunk_id = ?",
-                (chunk_id,)
-            )
+            cursor.execute("SELECT * FROM chunks WHERE chunk_id = ?", (chunk_id,))
             row = cursor.fetchone()
 
             if row:
@@ -545,16 +528,13 @@ class ManifestDB:
         """
         with self._get_connection() as conn:
             cursor = conn.cursor()
-            cursor.execute(
-                "DELETE FROM chunks WHERE doc_id = ?",
-                (doc_id,)
-            )
+            cursor.execute("DELETE FROM chunks WHERE doc_id = ?", (doc_id,))
 
             deleted = cursor.rowcount
             if deleted > 0:
                 logger.debug(f"Deleted {deleted} chunks for document {doc_id}")
 
-    def _row_to_chunk_dict(self, row: sqlite3.Row) -> Dict:
+    def _row_to_chunk_dict(self, row: sqlite3.Row) -> dict:
         """Convert a chunk row to a dictionary."""
         return {
             "chunk_id": row["chunk_id"],
@@ -567,7 +547,7 @@ class ManifestDB:
             "extractor": row["extractor"],
             "extractor_version": row["extractor_version"],
             "scope": row["scope"],
-            "created_at": datetime.fromisoformat(row["created_at"])
+            "created_at": datetime.fromisoformat(row["created_at"]),
         }
 
     # -------------------------------------------------------------------------
@@ -601,14 +581,14 @@ class ManifestDB:
                     embedding.embedding_model,
                     embedding.embedding_model_version,
                     self._utcnow().isoformat(),
-                    embedding.qdrant_point_id
-                )
+                    embedding.qdrant_point_id,
+                ),
             )
 
         logger.debug(f"Added embedding {embedding_id} for chunk {embedding.chunk_id}")
         return embedding_id
 
-    def get_embedding_for_chunk(self, chunk_id: str) -> Optional[Dict]:
+    def get_embedding_for_chunk(self, chunk_id: str) -> dict | None:
         """
         Get embedding for a chunk.
 
@@ -620,10 +600,7 @@ class ManifestDB:
         """
         with self._get_connection() as conn:
             cursor = conn.cursor()
-            cursor.execute(
-                "SELECT * FROM embeddings WHERE chunk_id = ?",
-                (chunk_id,)
-            )
+            cursor.execute("SELECT * FROM embeddings WHERE chunk_id = ?", (chunk_id,))
             row = cursor.fetchone()
 
             if row:
@@ -649,7 +626,7 @@ class ManifestDB:
                 SELECT 1 FROM embeddings
                 WHERE chunk_id = ? AND embedding_model = ? AND embedding_model_version = ?
                 """,
-                (chunk_id, model, version)
+                (chunk_id, model, version),
             )
             row = cursor.fetchone()
 
@@ -669,14 +646,14 @@ class ManifestDB:
                 DELETE FROM embeddings
                 WHERE chunk_id IN (SELECT chunk_id FROM chunks WHERE doc_id = ?)
                 """,
-                (doc_id,)
+                (doc_id,),
             )
 
             deleted = cursor.rowcount
             if deleted > 0:
                 logger.debug(f"Deleted {deleted} embeddings for document {doc_id}")
 
-    def _row_to_embedding_dict(self, row: sqlite3.Row) -> Dict:
+    def _row_to_embedding_dict(self, row: sqlite3.Row) -> dict:
         """Convert an embedding row to a dictionary."""
         return {
             "embedding_id": row["embedding_id"],
@@ -684,7 +661,7 @@ class ManifestDB:
             "embedding_model": row["embedding_model"],
             "embedding_model_version": row["embedding_model_version"],
             "embedded_at": datetime.fromisoformat(row["embedded_at"]),
-            "qdrant_point_id": row["qdrant_point_id"]
+            "qdrant_point_id": row["qdrant_point_id"],
         }
 
     # -------------------------------------------------------------------------
@@ -708,19 +685,13 @@ class ManifestDB:
                 (job_id, started_at, status, docs_processed, chunks_created, embeddings_created)
                 VALUES (?, ?, 'running', 0, 0, 0)
                 """,
-                (job_id, self._utcnow().isoformat())
+                (job_id, self._utcnow().isoformat()),
             )
 
         logger.info(f"Started ingest job {job_id}")
         return job_id
 
-    def update_ingest_job(
-        self,
-        job_id: str,
-        docs: int,
-        chunks: int,
-        embeddings: int
-    ):
+    def update_ingest_job(self, job_id: str, docs: int, chunks: int, embeddings: int):
         """
         Update ingest job progress.
 
@@ -738,18 +709,13 @@ class ManifestDB:
                 SET docs_processed = ?, chunks_created = ?, embeddings_created = ?
                 WHERE job_id = ?
                 """,
-                (docs, chunks, embeddings, job_id)
+                (docs, chunks, embeddings, job_id),
             )
 
             if cursor.rowcount == 0:
                 logger.warning(f"Ingest job not found for update: {job_id}")
 
-    def complete_ingest_job(
-        self,
-        job_id: str,
-        status: str,
-        error: Optional[str] = None
-    ):
+    def complete_ingest_job(self, job_id: str, status: str, error: str | None = None):
         """
         Mark ingest job as completed.
 
@@ -758,7 +724,7 @@ class ManifestDB:
             status: Final status ('completed', 'failed')
             error: Error message if failed
         """
-        valid_statuses = {'completed', 'failed'}
+        valid_statuses = {"completed", "failed"}
         if status not in valid_statuses:
             raise ValueError(f"Invalid status: {status}. Must be one of {valid_statuses}")
 
@@ -770,7 +736,7 @@ class ManifestDB:
                 SET completed_at = ?, status = ?, error_message = ?
                 WHERE job_id = ?
                 """,
-                (self._utcnow().isoformat(), status, error, job_id)
+                (self._utcnow().isoformat(), status, error, job_id),
             )
 
             if cursor.rowcount == 0:
@@ -778,7 +744,7 @@ class ManifestDB:
             else:
                 logger.info(f"Completed ingest job {job_id} with status {status}")
 
-    def get_ingest_job(self, job_id: str) -> Optional[Dict]:
+    def get_ingest_job(self, job_id: str) -> dict | None:
         """
         Get ingest job by ID.
 
@@ -790,34 +756,33 @@ class ManifestDB:
         """
         with self._get_connection() as conn:
             cursor = conn.cursor()
-            cursor.execute(
-                "SELECT * FROM ingest_jobs WHERE job_id = ?",
-                (job_id,)
-            )
+            cursor.execute("SELECT * FROM ingest_jobs WHERE job_id = ?", (job_id,))
             row = cursor.fetchone()
 
             if row:
                 return self._row_to_job_dict(row)
             return None
 
-    def _row_to_job_dict(self, row: sqlite3.Row) -> Dict:
+    def _row_to_job_dict(self, row: sqlite3.Row) -> dict:
         """Convert a job row to a dictionary."""
         return {
             "job_id": row["job_id"],
             "started_at": datetime.fromisoformat(row["started_at"]),
-            "completed_at": datetime.fromisoformat(row["completed_at"]) if row["completed_at"] else None,
+            "completed_at": datetime.fromisoformat(row["completed_at"])
+            if row["completed_at"]
+            else None,
             "status": row["status"],
             "docs_processed": row["docs_processed"],
             "chunks_created": row["chunks_created"],
             "embeddings_created": row["embeddings_created"],
-            "error_message": row["error_message"]
+            "error_message": row["error_message"],
         }
 
     # -------------------------------------------------------------------------
     # Query Operations
     # -------------------------------------------------------------------------
 
-    def get_stale_documents(self) -> List[Dict]:
+    def get_stale_documents(self) -> list[dict]:
         """
         Get documents that need re-ingestion.
 
@@ -826,7 +791,7 @@ class ManifestDB:
         """
         return self.list_documents(status="stale")
 
-    def get_statistics(self) -> Dict:
+    def get_statistics(self) -> dict:
         """
         Get database statistics.
 
@@ -847,10 +812,7 @@ class ManifestDB:
                 """
             )
             doc_stats = {row["status"]: row["count"] for row in cursor.fetchall()}
-            stats["documents"] = {
-                "total": sum(doc_stats.values()),
-                "by_status": doc_stats
-            }
+            stats["documents"] = {"total": sum(doc_stats.values()), "by_status": doc_stats}
 
             # Document counts by scope
             cursor.execute(
@@ -881,10 +843,7 @@ class ManifestDB:
                 """
             )
             job_stats = {row["status"]: row["count"] for row in cursor.fetchall()}
-            stats["ingest_jobs"] = {
-                "total": sum(job_stats.values()),
-                "by_status": job_stats
-            }
+            stats["ingest_jobs"] = {"total": sum(job_stats.values()), "by_status": job_stats}
 
             return stats
 

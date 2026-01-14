@@ -1,5 +1,7 @@
 """Tests for centralized Config class."""
+
 import pytest
+
 from src.meta_mcp.config import Config
 
 
