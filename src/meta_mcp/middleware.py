@@ -711,6 +711,19 @@ class GovernanceMiddleware(Middleware):
                     f"Please request a new lease via get_tool_schema('{tool_name}')."
                 )
 
+            lease = await lease_manager.validate(client_id, tool_name)
+            if lease is None:
+                logger.warning(
+                    f"Lease invalidated before execution for {tool_name} "
+                    f"(client: {client_id}, session: {session_id})"
+                )
+                await lease_manager.release_inflight(client_id, tool_name)
+                inflight_acquired = False
+                raise ToolError(
+                    f"Lease exhausted for tool '{tool_name}'. "
+                    f"Please request a new lease via get_tool_schema('{tool_name}')."
+                )
+
         async def _execute_tool() -> Any:
             try:
                 result = await call_next()
