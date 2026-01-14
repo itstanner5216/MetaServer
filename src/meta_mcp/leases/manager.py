@@ -309,6 +309,87 @@ class LeaseManager:
             logger.error(f"Unexpected error in consume: {e}")
             return None
 
+    async def refund_call(self, lease: ToolLease) -> Optional[ToolLease]:
+        """
+        Refund a previously consumed call back to a lease.
+
+        Args:
+            lease: Lease state after consumption
+
+        Returns:
+            Updated ToolLease if refunded successfully, None on failure
+        """
+        if not lease.client_id or not lease.client_id.strip():
+            logger.warning("Cannot refund lease with empty client_id")
+            return None
+
+        try:
+            redis = await self._get_redis()
+            key = self._lease_key(lease.client_id, lease.tool_id)
+
+            now = datetime.now(timezone.utc)
+            remaining_ttl = int((lease.expires_at - now).total_seconds())
+            if remaining_ttl <= 0:
+                logger.warning(
+                    f"Cannot refund expired lease for {lease.client_id}:{lease.tool_id}"
+                )
+                return None
+
+            lease_json = await redis.get(key)
+            if lease_json is not None:
+                lease_dict = json.loads(lease_json)
+                lease_dict["calls_remaining"] = int(lease_dict["calls_remaining"]) + 1
+                lease_dict["expires_at"] = lease.expires_at.isoformat()
+                lease_dict["granted_at"] = lease.granted_at.isoformat()
+                lease_dict["mode_at_issue"] = lease.mode_at_issue
+                lease_dict["capability_token"] = lease.capability_token
+                lease_json = json.dumps(lease_dict)
+                ttl = await redis.ttl(key)
+                if ttl <= 0:
+                    ttl = remaining_ttl
+                await redis.setex(key, ttl, lease_json)
+            else:
+                restored_calls = lease.calls_remaining + 1
+                if restored_calls <= 0:
+                    logger.warning(
+                        f"Cannot refund exhausted lease for {lease.client_id}:{lease.tool_id}"
+                    )
+                    return None
+
+                lease_dict = {
+                    "client_id": lease.client_id,
+                    "tool_id": lease.tool_id,
+                    "granted_at": lease.granted_at.isoformat(),
+                    "expires_at": lease.expires_at.isoformat(),
+                    "calls_remaining": restored_calls,
+                    "mode_at_issue": lease.mode_at_issue,
+                    "capability_token": lease.capability_token,
+                }
+                lease_json = json.dumps(lease_dict)
+                await redis.setex(key, remaining_ttl, lease_json)
+
+            refunded_lease = ToolLease(
+                client_id=lease.client_id,
+                tool_id=lease.tool_id,
+                granted_at=lease.granted_at,
+                expires_at=lease.expires_at,
+                calls_remaining=lease.calls_remaining + 1,
+                mode_at_issue=lease.mode_at_issue,
+                capability_token=lease.capability_token,
+            )
+            logger.info(
+                f"Refunded lease for {lease.client_id}:{lease.tool_id} "
+                f"(remaining={refunded_lease.calls_remaining})"
+            )
+            return refunded_lease
+
+        except (aioredis.ConnectionError, aioredis.TimeoutError) as e:
+            logger.error(f"Redis connection failed in refund_call: {e}")
+            return None
+        except Exception as e:
+            logger.error(f"Unexpected error in refund_call: {e}")
+            return None
+
     async def acquire_inflight(
         self, client_id: str, tool_id: str, max_inflight: int
     ) -> bool:
