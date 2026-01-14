@@ -55,13 +55,13 @@ jobs:
           echo "Security features status:"
           echo "$SECURITY" | jq '.'
           
-          # Check for Dependabot alerts
+          # Check for security features
           VULN_ALERTS=$(echo "$SECURITY" | jq -r '.vulnerability_alerts.status // "disabled"')
-          SECURITY_FIXES=$(echo "$SECURITY" | jq -r '.secret_scanning.status // "disabled"')
+          SECRET_SCANNING=$(echo "$SECURITY" | jq -r '.secret_scanning.status // "disabled"')
           
           echo ""
           echo "Vulnerability Alerts: $VULN_ALERTS"
-          echo "Secret Scanning: $SECURITY_FIXES"
+          echo "Secret Scanning: $SECRET_SCANNING"
           
           if [ "$VULN_ALERTS" = "enabled" ]; then
             echo "✅ Vulnerability alerts enabled"

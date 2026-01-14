@@ -61,12 +61,12 @@ jobs:
           echo "🛡️ Setting up branch protection..."
           
           # Configure branch protection for main branch
+          # Note: Status checks are set to an empty array initially and can be updated
+          # once the CI workflow is in place. Add specific checks like:
+          # 'CI / test (3.10)', 'CI / test (3.11)', 'CI / test (3.12)', 'CodeQL / Analyze (python)'
           gh api -X PUT repos/${{ github.repository }}/branches/main/protection \
             -f required_status_checks[strict]=true \
-            -f required_status_checks[contexts][]='CI / test (3.10)' \
-            -f required_status_checks[contexts][]='CI / test (3.11)' \
-            -f required_status_checks[contexts][]='CI / test (3.12)' \
-            -f required_status_checks[contexts][]='CodeQL / Analyze (python)' \
+            -f required_status_checks[contexts][]='CodeQL Advanced / Analyze (python)' \
             -f enforce_admins=false \
             -f required_pull_request_reviews[dismiss_stale_reviews]=true \
             -f required_pull_request_reviews[require_code_owner_reviews]=false \
@@ -79,6 +79,7 @@ jobs:
             -f required_conversation_resolution=true
           
           echo "✅ Branch protection configured"
+          echo "ℹ️  Update status check contexts when CI workflow is added"
         env:
           GH_TOKEN: ${{ github.token }}
         continue-on-error: true
@@ -118,8 +119,8 @@ jobs:
         run: |
           echo "📦 Checking PyPI configuration..."
           
-          # Get project name from pyproject.toml
-          PROJECT_NAME=$(grep -E "^name\s*=" pyproject.toml | head -1 | sed 's/.*"\(.*\)".*/\1/' || echo "metaserver")
+          # Get project name from pyproject.toml - handle both quoted and unquoted values
+          PROJECT_NAME=$(grep -E "^name\s*=" pyproject.toml | head -1 | sed -E 's/^name\s*=\s*"?([^"]+)"?/\1/' || echo "meta-mcp-server")
           
           # Provide PyPI setup instructions
           cat << EOF
