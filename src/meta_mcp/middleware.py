@@ -651,8 +651,10 @@ class GovernanceMiddleware(Middleware):
         bootstrap_tools = {"search_tools", "get_tool_schema"}
         should_consume_lease = False
         client_id = None
+        validated_lease = None
 
         inflight_acquired = False
+        lease_reserved = False
 
         if Config.ENABLE_LEASE_MANAGEMENT and tool_name not in bootstrap_tools:
             # Extract client_id from FastMCP session context
@@ -661,8 +663,8 @@ class GovernanceMiddleware(Middleware):
             should_consume_lease = True
 
             # Validate lease exists
-            lease = await lease_manager.validate(client_id, tool_name)
-            if lease is None:
+            validated_lease = await lease_manager.validate(client_id, tool_name)
+            if validated_lease is None:
                 logger.warning(
                     f"No valid lease for {tool_name} (client: {client_id}, session: {session_id})"
                 )
@@ -672,9 +674,9 @@ class GovernanceMiddleware(Middleware):
                 )
 
             # PHASE 4: Verify capability token if present
-            if lease.capability_token:
+            if validated_lease.capability_token:
                 token_valid = verify_token(
-                    token=lease.capability_token,
+                    token=validated_lease.capability_token,
                     client_id=client_id,
                     tool_id=tool_name,
                     secret=Config.HMAC_SECRET,
@@ -699,7 +701,7 @@ class GovernanceMiddleware(Middleware):
                 )
 
             inflight_acquired = await lease_manager.acquire_inflight(
-                client_id, tool_name, lease.calls_remaining
+                client_id, tool_name, validated_lease.calls_remaining
             )
             if not inflight_acquired:
                 logger.warning(
@@ -712,25 +714,45 @@ class GovernanceMiddleware(Middleware):
                 )
 
         async def _execute_tool() -> Any:
+            nonlocal lease_reserved
             try:
-                result = await call_next()
                 if should_consume_lease and client_id is not None:
                     consumed_lease = await lease_manager.consume(client_id, tool_name)
                     if consumed_lease is None:
                         logger.warning(
-                            f"Failed to consume lease for {tool_name} "
+                            f"Failed to reserve lease for {tool_name} "
                             f"(client: {client_id}, session: {session_id})"
                         )
                         raise ToolError(
                             f"Lease exhausted for tool '{tool_name}'. "
                             f"Please request a new lease via get_tool_schema('{tool_name}')."
                         )
-
+                    lease_reserved = True
                     logger.info(
-                        f"Lease consumed for {tool_name} "
+                        f"Lease reserved for {tool_name} "
                         f"(client: {client_id}, remaining={consumed_lease.calls_remaining})"
                     )
+
+                result = await call_next()
                 return self._apply_toon_encoding(result)
+            except Exception:
+                if (
+                    lease_reserved
+                    and validated_lease is not None
+                    and client_id is not None
+                ):
+                    restored = await lease_manager.restore_call(validated_lease)
+                    if restored:
+                        logger.info(
+                            f"Lease restored for {tool_name} "
+                            f"(client: {client_id}, session: {session_id})"
+                        )
+                    else:
+                        logger.warning(
+                            f"Failed to restore lease for {tool_name} "
+                            f"(client: {client_id}, session: {session_id})"
+                        )
+                raise
             finally:
                 if should_consume_lease and client_id is not None and inflight_acquired:
                     await lease_manager.release_inflight(client_id, tool_name)

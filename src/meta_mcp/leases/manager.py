@@ -309,6 +309,79 @@ class LeaseManager:
             logger.error(f"Unexpected error in consume: {e}")
             return None
 
+    async def restore_call(self, lease: ToolLease) -> bool:
+        """
+        Restore a consumed call to a lease.
+
+        Args:
+            lease: Lease snapshot from before consumption
+
+        Returns:
+            True if restored successfully, False otherwise
+
+        Security:
+        - Validates client_id is not empty
+        - Restores only if the lease is still valid (not expired)
+        """
+        if not lease.client_id or not lease.client_id.strip():
+            logger.warning("Cannot restore lease with empty client_id")
+            return False
+
+        ttl_seconds = int(
+            (lease.expires_at - datetime.now(timezone.utc)).total_seconds()
+        )
+        if ttl_seconds <= 0:
+            logger.warning(
+                f"Cannot restore expired lease for {lease.client_id}:{lease.tool_id}"
+            )
+            return False
+
+        try:
+            redis = await self._get_redis()
+            key = self._lease_key(lease.client_id, lease.tool_id)
+            existing_json = await redis.get(key)
+
+            if existing_json is None:
+                lease_dict = {
+                    "client_id": lease.client_id,
+                    "tool_id": lease.tool_id,
+                    "granted_at": lease.granted_at.isoformat(),
+                    "expires_at": lease.expires_at.isoformat(),
+                    "calls_remaining": lease.calls_remaining,
+                    "mode_at_issue": lease.mode_at_issue,
+                    "capability_token": lease.capability_token,
+                }
+                lease_json = json.dumps(lease_dict)
+                await redis.setex(key, ttl_seconds, lease_json)
+                logger.info(
+                    f"Restored deleted lease for {lease.client_id}:{lease.tool_id} "
+                    f"(remaining={lease.calls_remaining})"
+                )
+                return True
+
+            lease_dict = json.loads(existing_json)
+            lease_dict["calls_remaining"] = lease_dict.get("calls_remaining", 0) + 1
+            updated_lease_json = json.dumps(lease_dict)
+
+            ttl = await redis.ttl(key)
+            if ttl > 0:
+                await redis.setex(key, ttl, updated_lease_json)
+            else:
+                await redis.setex(key, ttl_seconds, updated_lease_json)
+
+            logger.info(
+                f"Restored lease call for {lease.client_id}:{lease.tool_id} "
+                f"(remaining={lease_dict['calls_remaining']})"
+            )
+            return True
+
+        except (aioredis.ConnectionError, aioredis.TimeoutError) as e:
+            logger.error(f"Redis connection failed in restore_call: {e}")
+            return False
+        except Exception as e:
+            logger.error(f"Unexpected error in restore_call: {e}")
+            return False
+
     async def acquire_inflight(
         self, client_id: str, tool_id: str, max_inflight: int
     ) -> bool:
