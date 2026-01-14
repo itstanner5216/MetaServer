@@ -713,6 +713,17 @@ class GovernanceMiddleware(Middleware):
 
         async def _execute_tool() -> Any:
             try:
+                if should_consume_lease and client_id is not None:
+                    fresh_lease = await lease_manager.validate(client_id, tool_name)
+                    if fresh_lease is None:
+                        logger.warning(
+                            f"Lease exhausted before execution for {tool_name} "
+                            f"(client: {client_id}, session: {session_id})"
+                        )
+                        raise ToolError(
+                            f"Lease exhausted for tool '{tool_name}'. "
+                            f"Please request a new lease via get_tool_schema('{tool_name}')."
+                        )
                 result = await call_next()
                 if should_consume_lease and client_id is not None:
                     consumed_lease = await lease_manager.consume(client_id, tool_name)
