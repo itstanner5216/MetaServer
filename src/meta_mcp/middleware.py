@@ -141,7 +141,6 @@ class GovernanceMiddleware(Middleware):
         *,
         tool_call: Optional[ToolCall] = None,
         run_context: Optional[RunContext] = None,
-        run_before_hooks: bool = True,
     ) -> Any:
         """
         Invoke the next tool middleware with hook wrapping.
@@ -156,7 +155,6 @@ class GovernanceMiddleware(Middleware):
             Tool execution result
         """
         session_id = str(context.session_id)
-        hook_manager = get_hook_manager()
         if tool_call is None:
             tool_call = ToolCall(tool_name=tool_name, arguments=arguments)
         if run_context is None:
@@ -165,9 +163,6 @@ class GovernanceMiddleware(Middleware):
                 tool_name=tool_call.tool_name,
                 arguments=tool_call.arguments,
             )
-
-        if run_before_hooks:
-            tool_call = await hook_manager.before_tool(tool_call, run_context)
 
         if tool_call.tool_name != tool_name:
             context.request_context.tool_name = tool_call.tool_name
@@ -185,6 +180,7 @@ class GovernanceMiddleware(Middleware):
 
         result = await call_next()
         tool_result = ToolResult(tool_name=tool_call.tool_name, output=result)
+        hook_manager = get_hook_manager()
         tool_result = await hook_manager.after_tool(tool_result, run_context)
         return tool_result.output
 
@@ -775,12 +771,25 @@ class GovernanceMiddleware(Middleware):
         """
         tool_name = context.request_context.tool_name
         arguments = context.request_context.arguments or {}
+        original_tool_name = tool_name
+        original_arguments = arguments
         tool_call, run_context = await self._run_before_tool_hooks(
             context, tool_name, arguments
         )
         tool_name = tool_call.tool_name
         arguments = tool_call.arguments
         session_id = str(context.session_id)
+
+        if (
+            tool_call.tool_name != original_tool_name
+            or tool_call.arguments != original_arguments
+        ):
+            logger.info(
+                "before_tool hook mutated tool call from %s to %s; "
+                "re-evaluating governance and auditing on updated values",
+                original_tool_name,
+                tool_name,
+            )
 
         # PHASE 3+4 INTEGRATION: Validate lease and token before governance checks
         # Note: Bootstrap tools bypass lease checks
@@ -875,7 +884,6 @@ class GovernanceMiddleware(Middleware):
                 arguments,
                 tool_call=tool_call,
                 run_context=run_context,
-                run_before_hooks=False,
             )
             return self._apply_toon_encoding(result)
 
@@ -889,7 +897,6 @@ class GovernanceMiddleware(Middleware):
                 arguments,
                 tool_call=tool_call,
                 run_context=run_context,
-                run_before_hooks=False,
             )
             return self._apply_toon_encoding(result)
 
@@ -933,7 +940,6 @@ class GovernanceMiddleware(Middleware):
                     arguments,
                     tool_call=tool_call,
                     run_context=run_context,
-                    run_before_hooks=False,
                 )
                 return self._apply_toon_encoding(result)
 
@@ -972,7 +978,6 @@ class GovernanceMiddleware(Middleware):
                     arguments,
                     tool_call=tool_call,
                     run_context=run_context,
-                    run_before_hooks=False,
                 )
                 return self._apply_toon_encoding(result)
             else:
