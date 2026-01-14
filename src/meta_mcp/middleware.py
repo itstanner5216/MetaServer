@@ -753,31 +753,13 @@ class GovernanceMiddleware(Middleware):
             )
             return False, 0, []
 
-    async def on_call_tool(self, context: Context, call_next):
-        """
-        Intercept tool calls and enforce tri-state governance.
-
-        Governance paths:
-        1. BYPASS mode: Log warning, audit, execute
-        2. Non-sensitive tools: Pass through
-        3. READ_ONLY mode: Log denial, audit, raise ToolError
-        4. PERMISSION mode: Check elevation → elicit → grant/deny
-
-        Args:
-            context: FastMCP context
-            call_next: Next middleware in chain
-
-        Returns:
-            Tool result if approved/bypassed
-
-        Raises:
-            ToolError: If operation is denied
-        """
-        tool_name = context.request_context.tool_name
-        arguments = context.request_context.arguments or {}
-        tool_call, run_context = await self._run_before_tool_hooks(
-            context, tool_name, arguments
-        )
+    async def _apply_governance(
+        self,
+        context: Context,
+        call_next,
+        tool_call: ToolCall,
+        run_context: RunContext,
+    ):
         tool_name = tool_call.tool_name
         arguments = tool_call.arguments
         session_id = str(context.session_id)
@@ -992,4 +974,44 @@ class GovernanceMiddleware(Middleware):
         )
         raise ToolError(
             f"Operation '{tool_name}' denied: Unknown governance mode"
+        )
+
+    async def on_call_tool(self, context: Context, call_next):
+        """
+        Intercept tool calls and enforce tri-state governance.
+
+        Governance paths:
+        1. BYPASS mode: Log warning, audit, execute
+        2. Non-sensitive tools: Pass through
+        3. READ_ONLY mode: Log denial, audit, raise ToolError
+        4. PERMISSION mode: Check elevation → elicit → grant/deny
+
+        Args:
+            context: FastMCP context
+            call_next: Next middleware in chain
+
+        Returns:
+            Tool result if approved/bypassed
+
+        Raises:
+            ToolError: If operation is denied
+        """
+        tool_name = context.request_context.tool_name
+        arguments = context.request_context.arguments or {}
+        original_tool_call = ToolCall(tool_name=tool_name, arguments=arguments)
+        tool_call, run_context = await self._run_before_tool_hooks(
+            context, tool_name, arguments
+        )
+        if tool_call != original_tool_call:
+            logger.info(
+                "before_tool hook mutated tool call; re-evaluating governance "
+                f"from {original_tool_call.tool_name} to {tool_call.tool_name} "
+                f"(session: {context.session_id})"
+            )
+
+        return await self._apply_governance(
+            context,
+            call_next,
+            tool_call,
+            run_context,
         )
