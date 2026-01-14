@@ -190,7 +190,7 @@ class GovernanceMiddleware(Middleware):
 
     async def _run_before_tool_hooks(
         self, context: Context, tool_name: str, arguments: Dict[str, Any]
-    ) -> tuple[ToolCall, RunContext]:
+    ) -> tuple[ToolCall, RunContext, bool]:
         session_id = str(context.session_id)
         run_context = RunContext(
             session_id=session_id,
@@ -199,12 +199,15 @@ class GovernanceMiddleware(Middleware):
         )
         hook_manager = get_hook_manager()
         tool_call = ToolCall(tool_name=tool_name, arguments=arguments)
+        mutated = False
         tool_call = await hook_manager.before_tool(tool_call, run_context)
 
         if tool_call.tool_name != tool_name:
             context.request_context.tool_name = tool_call.tool_name
+            mutated = True
         if tool_call.arguments != arguments:
             context.request_context.arguments = tool_call.arguments
+            mutated = True
         if (
             tool_call.tool_name != tool_name
             or tool_call.arguments != arguments
@@ -215,7 +218,7 @@ class GovernanceMiddleware(Middleware):
                 arguments=tool_call.arguments,
             )
 
-        return tool_call, run_context
+        return tool_call, run_context, mutated
 
     @staticmethod
     def _extract_context_key(tool_name: str, arguments: Dict[str, Any]) -> str:
@@ -775,12 +778,22 @@ class GovernanceMiddleware(Middleware):
         """
         tool_name = context.request_context.tool_name
         arguments = context.request_context.arguments or {}
-        tool_call, run_context = await self._run_before_tool_hooks(
+        original_tool_call = ToolCall(
+            tool_name=tool_name,
+            arguments=arguments,
+        )
+        tool_call, run_context, mutated = await self._run_before_tool_hooks(
             context, tool_name, arguments
         )
         tool_name = tool_call.tool_name
         arguments = tool_call.arguments
         session_id = str(context.session_id)
+        if mutated:
+            logger.info(
+                "before_tool hook mutated tool call "
+                f"from {original_tool_call} to {tool_call}; "
+                "re-evaluating governance with updated tool call"
+            )
 
         # PHASE 3+4 INTEGRATION: Validate lease and token before governance checks
         # Note: Bootstrap tools bypass lease checks
