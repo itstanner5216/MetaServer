@@ -35,20 +35,21 @@ class PullRequest:
 class GitHubClient:
     """GitHub API client wrapper."""
     
-    def __init__(self, token: Optional[str] = None, repo: str = "itstanner5216/MetaServer"):
+    def __init__(self, token: Optional[str] = None, repo: Optional[str] = None):
         """
         Initialize GitHub client.
         
         Args:
             token: GitHub API token (defaults to GITHUB_TOKEN env var)
-            repo: Repository in format "owner/repo"
+            repo: Repository in format "owner/repo" (defaults to GITHUB_REPOSITORY env var)
         """
         self.token = token or os.environ.get("GITHUB_TOKEN")
         if not self.token:
             raise ValueError("GitHub token required (GITHUB_TOKEN env var or token parameter)")
         
-        self.repo = repo
-        self.owner, self.repo_name = repo.split("/")
+        # Get repo from parameter or environment variable
+        self.repo = repo or os.environ.get("GITHUB_REPOSITORY", "itstanner5216/MetaServer")
+        self.owner, self.repo_name = self.repo.split("/")
         self.base_url = "https://api.github.com"
         self.headers = {
             "Authorization": f"token {self.token}",

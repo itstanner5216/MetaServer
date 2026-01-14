@@ -66,6 +66,9 @@ class ArchitecturalGuardian:
         self.git = GitOperations(repo_path=repo_path)
         self.ast_analyzer = ASTAnalyzer(repo_path=repo_path)
         self.original_branch = None
+        
+        # Cache for file contents to avoid repeated git operations
+        self._file_cache = {}
     
     def analyze_prs(self, validation_results: Dict[str, Any]) -> List[ArchitecturalVerdict]:
         """
@@ -193,8 +196,13 @@ class ArchitecturalGuardian:
         print(f"  → Analyzing function signatures...")
         for file_path in python_files:
             try:
-                # Get old version
-                old_content = self.git.get_file_at_ref(file_path, pr.base_ref)
+                # Get old version with caching
+                cache_key = f"{pr.base_ref}:{file_path}"
+                if cache_key not in self._file_cache:
+                    old_content = self.git.get_file_at_ref(file_path, pr.base_ref)
+                    self._file_cache[cache_key] = old_content
+                else:
+                    old_content = self._file_cache[cache_key]
                 
                 # Parse both versions
                 old_analysis = self._analyze_content(old_content, file_path)

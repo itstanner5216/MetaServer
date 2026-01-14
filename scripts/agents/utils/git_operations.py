@@ -70,16 +70,17 @@ class GitOperations:
         else:
             self._run_git("checkout", branch)
     
-    def checkout_pr(self, pr_number: int, branch_name: str):
+    def checkout_pr(self, pr_number: int, branch_name: str, remote: str = "origin"):
         """
         Checkout a PR branch locally.
         
         Args:
             pr_number: PR number
             branch_name: Local branch name to create
+            remote: Remote name (default: origin)
         """
         # Fetch the PR
-        self._run_git("fetch", "origin", f"pull/{pr_number}/head:{branch_name}")
+        self._run_git("fetch", remote, f"pull/{pr_number}/head:{branch_name}")
         self.checkout(branch_name)
     
     def get_current_branch(self) -> str:
@@ -204,15 +205,16 @@ class GitOperations:
         """
         self._run_git("add", *files)
     
-    def push(self, branch: Optional[str] = None, force: bool = False):
+    def push(self, branch: Optional[str] = None, force: bool = False, remote: str = "origin"):
         """
         Push commits to remote.
         
         Args:
             branch: Branch to push (current branch if None)
             force: Force push
+            remote: Remote name (default: origin)
         """
-        args = ["push", "origin"]
+        args = ["push", remote]
         
         if branch:
             args.append(branch)

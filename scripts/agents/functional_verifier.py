@@ -322,7 +322,7 @@ class FunctionalVerifier:
         # Check 1: Can import main modules
         try:
             subprocess.run(
-                ["python", "-c", "import src.meta_mcp; import MetaServer"],
+                ["python", "-c", "import meta_mcp; import MetaServer"],
                 cwd=self.repo_path,
                 check=True,
                 capture_output=True,

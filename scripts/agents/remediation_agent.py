@@ -270,13 +270,24 @@ class RemediationAgent:
         except Exception:
             return False
     
-    def _fix_import_errors(self) -> List[str]:
+    def _fix_import_errors(self, patterns: Optional[List[tuple]] = None) -> List[str]:
         """
         Fix import errors.
+        
+        Args:
+            patterns: List of (old_pattern, new_pattern) tuples for replacement.
+                     If None, uses default patterns for this repository.
         
         Returns:
             List of fixed import paths
         """
+        # Default patterns for MetaServer repository
+        if patterns is None:
+            patterns = [
+                (r'from src\.meta_mcp', 'from meta_mcp'),
+                (r'import src\.meta_mcp', 'import meta_mcp'),
+            ]
+        
         fixed = []
         
         # Find Python files
@@ -294,17 +305,9 @@ class RemediationAgent:
                 
                 original_content = content
                 
-                # Fix src.meta_mcp imports
-                content = re.sub(
-                    r'from src\.meta_mcp',
-                    'from meta_mcp',
-                    content
-                )
-                content = re.sub(
-                    r'import src\.meta_mcp',
-                    'import meta_mcp',
-                    content
-                )
+                # Apply all patterns
+                for old_pattern, new_pattern in patterns:
+                    content = re.sub(old_pattern, new_pattern, content)
                 
                 # Write back if changed
                 if content != original_content:
