@@ -19,3 +19,6 @@ reports/
 workspace/
 htmlcov/
 .coverage
+
+# Downloaded tools
+actionlint

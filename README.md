@@ -2,6 +2,43 @@
 
 Meta MCP Server - FastMCP-based server infrastructure with progressive tool discovery and governance.
 
+## 🤖 Automated Setup
+
+### Quick Setup
+
+```bash
+# Clone repository
+git clone https://github.com/itstanner5216/MetaServer.git
+cd MetaServer
+
+# Run automated setup
+bash scripts/setup.sh
+
+# Configure GitHub secrets (optional)
+bash scripts/gh-setup-secrets.sh
+```
+
+### What Gets Automated
+
+- ✅ Dependency installation via UV
+- ✅ Pre-commit hook installation (if configured)
+- ✅ Branch protection rules
+- ✅ Repository labels and settings
+- ✅ Automated security fixes
+- ✅ Code scanning with CodeQL
+
+### Manual Steps
+
+Some integrations require one-time manual setup:
+
+1. **Codecov:** Sign up and add repository token to secrets
+2. **PyPI:** Configure trusted publishing for releases
+
+Run the setup validation to check status:
+```bash
+gh workflow run validate-setup.yml
+```
+
 ## Installation
 
 ### Base Installation
