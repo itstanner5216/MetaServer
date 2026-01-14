@@ -10,6 +10,7 @@ from fastmcp import FastMCP
 from fastmcp.exceptions import ToolError
 from loguru import logger
 
+# Import from the installed package to avoid ModuleNotFoundError in packaged setups.
 from meta_mcp.config import Config
 
 
