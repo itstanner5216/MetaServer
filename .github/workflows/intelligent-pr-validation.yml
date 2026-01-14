@@ -94,7 +94,7 @@ jobs:
           pip install pytest pytest-asyncio pytest-cov bandit httpx
       
       - name: 📥 Download Validation Results
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v4.1.3
         with:
           name: validation-results
           path: reports/
@@ -141,7 +141,7 @@ jobs:
           pip install httpx
       
       - name: 📥 Download Previous Results
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v4.1.3
         with:
           pattern: '*-results'
           path: reports/
@@ -189,14 +189,14 @@ jobs:
           pip install httpx
       
       - name: 📥 Download All Reports
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v4.1.3
         with:
           pattern: '*-results'
           path: reports/
           merge-multiple: true
       
       - name: 📥 Download Architectural Analysis
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v4.1.3
         with:
           name: architectural-analysis
           path: reports/
@@ -249,7 +249,7 @@ jobs:
           sleep 3
       
       - name: 📥 Download Meta-PR List
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v4.1.3
         with:
           name: meta-prs-created
           path: reports/
@@ -291,7 +291,7 @@ jobs:
           pip install -e .
       
       - name: 📥 Download All Artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v4.1.3
         with:
           path: reports/
           merge-multiple: true
