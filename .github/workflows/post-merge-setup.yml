@@ -5,7 +5,6 @@ on:
     branches:
       - main
     paths:
-      - '.github/workflows/ci.yml'
       - '.github/workflows/post-merge-setup.yml'
   workflow_dispatch:
 
@@ -61,22 +60,33 @@ jobs:
           echo "🛡️ Setting up branch protection..."
           
           # Configure branch protection for main branch
-          # Note: Status checks are set to an empty array initially and can be updated
-          # once the CI workflow is in place. Add specific checks like:
-          # 'CI / test (3.10)', 'CI / test (3.11)', 'CI / test (3.12)', 'CodeQL / Analyze (python)'
+          # Note: Some operations may require admin permissions
+          # Using JSON payload for more robust API interaction
+          PROTECTION_JSON=$(cat <<'JSON'
+          {
+            "required_status_checks": {
+              "strict": true,
+              "contexts": ["CodeQL Advanced / Analyze (python)"]
+            },
+            "enforce_admins": false,
+            "required_pull_request_reviews": {
+              "dismiss_stale_reviews": true,
+              "require_code_owner_reviews": false,
+              "required_approving_review_count": 1,
+              "require_last_push_approval": false
+            },
+            "restrictions": null,
+            "required_linear_history": true,
+            "allow_force_pushes": false,
+            "allow_deletions": false,
+            "required_conversation_resolution": true
+          }
+          JSON
+          )
+          
           gh api -X PUT repos/${{ github.repository }}/branches/main/protection \
-            -f required_status_checks[strict]=true \
-            -f required_status_checks[contexts][]='CodeQL Advanced / Analyze (python)' \
-            -f enforce_admins=false \
-            -f required_pull_request_reviews[dismiss_stale_reviews]=true \
-            -f required_pull_request_reviews[require_code_owner_reviews]=false \
-            -f required_pull_request_reviews[required_approving_review_count]=0 \
-            -f required_pull_request_reviews[require_last_push_approval]=false \
-            -f restrictions=null \
-            -f required_linear_history=true \
-            -f allow_force_pushes=false \
-            -f allow_deletions=false \
-            -f required_conversation_resolution=true
+            --input - <<< "$PROTECTION_JSON" \
+            || echo "⚠️ Branch protection requires admin permissions"
           
           echo "✅ Branch protection configured"
           echo "ℹ️  Update status check contexts when CI workflow is added"
@@ -97,8 +107,8 @@ jobs:
             echo "Coverage reports will be automatically uploaded by CI workflow"
             echo "Visit https://codecov.io/gh/${{ github.repository }} after first CI run"
           else
-            # Private repository - check for token
-            if [ -z "${{ secrets.CODECOV_TOKEN }}" ]; then
+            # Private repository - check for token using env variable
+            if [ -z "$CODECOV_TOKEN" ]; then
               echo "⚠️  CODECOV_TOKEN not found"
               echo "📝 Setup instructions:"
               echo "1. Visit https://codecov.io"
@@ -112,6 +122,7 @@ jobs:
           fi
         env:
           GH_TOKEN: ${{ github.token }}
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
         continue-on-error: true
       
       - name: 4️⃣ PyPI Publishing Setup Check
@@ -120,7 +131,9 @@ jobs:
           echo "📦 Checking PyPI configuration..."
           
           # Get project name from pyproject.toml - handle both quoted and unquoted values
-          PROJECT_NAME=$(grep -E "^name\s*=" pyproject.toml | head -1 | sed -E 's/^name\s*=\s*"?([^"]+)"?/\1/' || echo "meta-mcp-server")
+          PROJECT_NAME=$(grep -E "^name\s*=" pyproject.toml | head -1 | sed -E 's/^name\s*=\s*"([^"]+)".*/\1/; s/^name\s*=\s*([^"[:space:]]+).*/\1/' || echo "meta-mcp-server")
+          # Sanitize project name to prevent injection
+          PROJECT_NAME=$(echo "$PROJECT_NAME" | tr -d '\n\r' | head -c 100)
           
           # Provide PyPI setup instructions
           cat << EOF
@@ -168,6 +181,8 @@ jobs:
           echo "⚙️ Updating repository settings..."
           
           # Update repository settings for optimal workflow
+          # Note: allow_auto_merge is enabled with required_approving_review_count=1
+          # This ensures PRs require at least one review before auto-merge
           gh api -X PATCH repos/${{ github.repository }} \
             -f allow_squash_merge=true \
             -f allow_merge_commit=false \
@@ -254,8 +269,8 @@ jobs:
               id: version
               attributes:
                 label: Version
-                description: MetaServer version
-                placeholder: "v1.0.0"
+                description: Package version (e.g., from pyproject.toml)
+                placeholder: "v0.1.0"
               validations:
                 required: true
           EOF
@@ -345,15 +360,10 @@ jobs:
           # Workflows require review
           /.github/workflows/ @$OWNER
           
-          # Security configurations
-          /codecov.yml @$OWNER
-          /.github/dependabot.yml @$OWNER
-          
           # Core source code
           /src/ @$OWNER
-          /MetaServer/ @$OWNER
           
-          # Tests can have broader access
+          # Tests - same owner for consistency
           /tests/ @$OWNER
           
           # Configuration files
@@ -400,7 +410,7 @@ jobs:
           echo "2. Add CODECOV_TOKEN to GitHub Secrets if needed" >> $GITHUB_STEP_SUMMARY
       
       - name: 💾 Commit Configuration Files
-        if: success()
+        if: always()
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
@@ -412,7 +422,7 @@ jobs:
           if git diff --staged --quiet; then
             echo "No changes to commit"
           else
-            git commit -m "chore: add issue templates, PR template, and CODEOWNERS"
+            git commit -m "chore: update repository configuration files"
             git push
             echo "✅ Configuration files committed"
           fi

@@ -4,15 +4,10 @@
 # Workflows require review
 /.github/workflows/ @itstanner5216
 
-# Security configurations
-/codecov.yml @itstanner5216
-/.github/dependabot.yml @itstanner5216
-
 # Core source code
 /src/ @itstanner5216
-/MetaServer/ @itstanner5216
 
-# Tests can have broader access
+# Tests - same owner for consistency
 /tests/ @itstanner5216
 
 # Configuration files

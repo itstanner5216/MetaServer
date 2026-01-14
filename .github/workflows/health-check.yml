@@ -37,8 +37,14 @@ jobs:
             echo "⚠️ Branch protection is NOT active on main branch"
             echo "branch_protection=failed" >> $GITHUB_OUTPUT
           else
-            echo "✅ Branch protection is active"
-            echo "branch_protection=success" >> $GITHUB_OUTPUT
+            # Check if we got valid JSON response (not the fallback string)
+            if echo "$PROTECTION" | jq -e . >/dev/null 2>&1; then
+              echo "✅ Branch protection is active"
+              echo "branch_protection=success" >> $GITHUB_OUTPUT
+            else
+              echo "⚠️ Unable to verify branch protection status"
+              echo "branch_protection=unknown" >> $GITHUB_OUTPUT
+            fi
           fi
         env:
           GH_TOKEN: ${{ github.token }}
