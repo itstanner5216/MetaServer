@@ -712,13 +712,15 @@ class GovernanceMiddleware(Middleware):
                 )
 
         async def _execute_tool() -> Any:
+            reserved_lease = None
             try:
-                result = await call_next()
                 if should_consume_lease and client_id is not None:
-                    consumed_lease = await lease_manager.consume(client_id, tool_name)
-                    if consumed_lease is None:
+                    reserved_lease = await lease_manager.consume(
+                        client_id, tool_name
+                    )
+                    if reserved_lease is None:
                         logger.warning(
-                            f"Failed to consume lease for {tool_name} "
+                            f"Failed to reserve lease for {tool_name} "
                             f"(client: {client_id}, session: {session_id})"
                         )
                         raise ToolError(
@@ -727,10 +729,30 @@ class GovernanceMiddleware(Middleware):
                         )
 
                     logger.info(
-                        f"Lease consumed for {tool_name} "
-                        f"(client: {client_id}, remaining={consumed_lease.calls_remaining})"
+                        f"Lease reserved for {tool_name} "
+                        f"(client: {client_id}, remaining={reserved_lease.calls_remaining})"
                     )
+
+                result = await call_next()
                 return self._apply_toon_encoding(result)
+            except Exception:
+                if (
+                    should_consume_lease
+                    and client_id is not None
+                    and reserved_lease is not None
+                ):
+                    restored_lease = await lease_manager.refund(reserved_lease)
+                    if restored_lease is None:
+                        logger.warning(
+                            f"Failed to refund lease for {tool_name} "
+                            f"(client: {client_id}, session: {session_id})"
+                        )
+                    else:
+                        logger.info(
+                            f"Lease refunded for {tool_name} "
+                            f"(client: {client_id}, remaining={restored_lease.calls_remaining})"
+                        )
+                raise
             finally:
                 if should_consume_lease and client_id is not None and inflight_acquired:
                     await lease_manager.release_inflight(client_id, tool_name)
