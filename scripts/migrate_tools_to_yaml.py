@@ -19,10 +19,11 @@ Usage (not recommended):
     python scripts/migrate_tools_to_yaml.py [--output config/tools.yaml]
 """
 
-import sys
 import argparse
+import sys
 from pathlib import Path
-from typing import List, Dict, Any
+from typing import Any
+
 import yaml
 
 # Add src to path
@@ -63,7 +64,7 @@ def map_sensitivity_to_risk(sensitive: bool, name: str) -> str:
     return "sensitive"
 
 
-def generate_tags(name: str, category: str, description: str) -> List[str]:
+def generate_tags(name: str, category: str, description: str) -> list[str]:
     """Generate tags based on tool name, category, and description."""
     tags = []
 
@@ -74,7 +75,18 @@ def generate_tags(name: str, category: str, description: str) -> List[str]:
     name_parts = name.split("_")
     if len(name_parts) >= 2:
         operation = name_parts[0]  # read, write, list, delete, etc.
-        if operation in ["read", "write", "list", "delete", "create", "move", "execute", "git", "set", "get"]:
+        if operation in [
+            "read",
+            "write",
+            "list",
+            "delete",
+            "create",
+            "move",
+            "execute",
+            "git",
+            "set",
+            "get",
+        ]:
             tags.append(operation)
 
         # Subject (file, directory, command, etc.)
@@ -131,10 +143,12 @@ def expand_description(short_desc: str, name: str) -> str:
         "revoke_all_elevations": f"{short_desc}.\nClears all temporary permission grants. Resets all tools to base governance policy.",
     }
 
-    return expansions.get(name, f"{short_desc}.\nPerforms {name.replace('_', ' ')} operation in the workspace.")
+    return expansions.get(
+        name, f"{short_desc}.\nPerforms {name.replace('_', ' ')} operation in the workspace."
+    )
 
 
-def extract_tools() -> List[Dict[str, Any]]:
+def extract_tools() -> list[dict[str, Any]]:
     """Extract all tools from current registry."""
     tools = []
 
@@ -160,7 +174,7 @@ def extract_tools() -> List[Dict[str, Any]]:
     return tools
 
 
-def extract_servers(tools: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+def extract_servers(tools: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Extract unique servers from tools."""
     servers_by_id = {}
 
@@ -191,7 +205,9 @@ def extract_servers(tools: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
 
             servers_by_id[server_id] = {
                 "server_id": server_id,
-                "description": descriptions.get(server_id, f"{server_id.replace('_', ' ').title()}"),
+                "description": descriptions.get(
+                    server_id, f"{server_id.replace('_', ' ').title()}"
+                ),
                 "risk_level": server_risk,
                 "tags": sorted(list(server_tags)),
             }
@@ -201,7 +217,7 @@ def extract_servers(tools: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
 
 def generate_yaml(output_path: Path) -> None:
     """Generate tools.yaml from current registry."""
-    print(f"Extracting tools from discovery.py...")
+    print("Extracting tools from discovery.py...")
 
     # Extract tools
     tools = extract_tools()
@@ -251,7 +267,7 @@ def generate_yaml(output_path: Path) -> None:
     for tool in tools:
         risk_counts[tool["risk_level"]] += 1
 
-    print(f"\n  Risk breakdown:")
+    print("\n  Risk breakdown:")
     print(f"    Safe: {risk_counts['safe']}")
     print(f"    Sensitive: {risk_counts['sensitive']}")
     print(f"    Dangerous: {risk_counts['dangerous']}")
@@ -289,7 +305,15 @@ def validate_yaml(yaml_path: Path) -> bool:
 
     for i, tool in enumerate(data.get("tools", [])):
         # Required fields
-        required = ["tool_id", "server_id", "description_1line", "description_full", "tags", "risk_level", "requires_permission"]
+        required = [
+            "tool_id",
+            "server_id",
+            "description_1line",
+            "description_full",
+            "tags",
+            "risk_level",
+            "requires_permission",
+        ]
         for field in required:
             if field not in tool:
                 errors.append(f"Tool {i} ({tool.get('tool_id', 'unknown')}): missing '{field}'")
@@ -320,9 +344,8 @@ def validate_yaml(yaml_path: Path) -> bool:
         for error in errors:
             print(f"  - {error}")
         return False
-    else:
-        print("✅ Validation PASSED")
-        return True
+    print("✅ Validation PASSED")
+    return True
 
 
 def main():
@@ -332,12 +355,10 @@ def main():
         "--output",
         type=Path,
         default=Path("config/tools.yaml"),
-        help="Output YAML file path (default: config/tools.yaml)"
+        help="Output YAML file path (default: config/tools.yaml)",
     )
     parser.add_argument(
-        "--validate-only",
-        action="store_true",
-        help="Only validate existing YAML, don't generate"
+        "--validate-only", action="store_true", help="Only validate existing YAML, don't generate"
     )
 
     args = parser.parse_args()

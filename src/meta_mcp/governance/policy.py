@@ -73,7 +73,7 @@ def evaluate_policy(
             reason=f"BYPASS mode allows all tools (risk={risk})",
         )
 
-    elif mode == ExecutionMode.READ_ONLY:
+    if mode == ExecutionMode.READ_ONLY:
         # READ_ONLY mode: Allow only safe tools
         if risk == "safe":
             return PolicyDecision(
@@ -81,14 +81,13 @@ def evaluate_policy(
                 requires_approval=False,
                 reason="READ_ONLY mode allows safe tools",
             )
-        else:
-            return PolicyDecision(
-                action="block",
-                requires_approval=False,
-                reason=f"READ_ONLY mode blocks {risk} tools",
-            )
+        return PolicyDecision(
+            action="block",
+            requires_approval=False,
+            reason=f"READ_ONLY mode blocks {risk} tools",
+        )
 
-    elif mode == ExecutionMode.PERMISSION:
+    if mode == ExecutionMode.PERMISSION:
         # PERMISSION mode: Allow safe, require approval for sensitive/dangerous
         if risk == "safe":
             return PolicyDecision(
@@ -96,24 +95,22 @@ def evaluate_policy(
                 requires_approval=False,
                 reason="PERMISSION mode allows safe tools",
             )
-        elif risk in {"sensitive", "dangerous"}:
+        if risk in {"sensitive", "dangerous"}:
             return PolicyDecision(
                 action="require_approval",
                 requires_approval=True,
                 reason=f"PERMISSION mode requires approval for {risk} tools",
             )
-        else:
-            # Unknown risk: Fail-safe to require approval
-            return PolicyDecision(
-                action="require_approval",
-                requires_approval=True,
-                reason=f"Unknown risk level '{risk}' requires approval (fail-safe)",
-            )
-
-    else:
-        # Unknown mode: Fail-safe to require approval
+        # Unknown risk: Fail-safe to require approval
         return PolicyDecision(
             action="require_approval",
             requires_approval=True,
-            reason=f"Unknown mode '{mode}' requires approval (fail-safe)",
+            reason=f"Unknown risk level '{risk}' requires approval (fail-safe)",
         )
+
+    # Unknown mode: Fail-safe to require approval
+    return PolicyDecision(
+        action="require_approval",
+        requires_approval=True,
+        reason=f"Unknown mode '{mode}' requires approval (fail-safe)",
+    )

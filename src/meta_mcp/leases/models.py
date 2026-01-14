@@ -1,8 +1,7 @@
 """Data models for tool leases (Phase 3)."""
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
-from typing import Optional
 
 
 @dataclass
@@ -28,7 +27,7 @@ class ToolLease:
     expires_at: datetime
     calls_remaining: int
     mode_at_issue: str  # "READ_ONLY", "PERMISSION", "BYPASS"
-    capability_token: Optional[str] = None  # Phase 4 integration
+    capability_token: str | None = None  # Phase 4 integration
 
     @classmethod
     def create(
@@ -38,7 +37,7 @@ class ToolLease:
         ttl_seconds: int,
         calls_remaining: int,
         mode_at_issue: str,
-        capability_token: Optional[str] = None,
+        capability_token: str | None = None,
     ) -> "ToolLease":
         """
         Create a new ToolLease with validation.

@@ -14,9 +14,8 @@ from loguru import logger
 
 # Import governance components using package-safe absolute imports
 # Note: Requires package installation via 'pip install -e .'
-from meta_mcp.audit import audit_logger, AuditEvent
+from meta_mcp.audit import AuditEvent, audit_logger
 from meta_mcp.state import ExecutionMode, governance_state
-
 
 # Create FastMCP server instance for admin tools
 admin_server = FastMCP("AdminTools")
@@ -44,9 +43,7 @@ async def set_governance_mode(mode: str) -> str:
         new_mode = ExecutionMode(mode.lower())
     except ValueError:
         valid_modes = [m.value for m in ExecutionMode]
-        raise ToolError(
-            f"Invalid mode '{mode}'. Valid modes: {', '.join(valid_modes)}"
-        )
+        raise ToolError(f"Invalid mode '{mode}'. Valid modes: {', '.join(valid_modes)}")
 
     # Get current mode for audit trail
     try:
@@ -75,9 +72,7 @@ async def set_governance_mode(mode: str) -> str:
         changed_by="admin_tool",
     )
 
-    logger.warning(
-        f"Governance mode changed: {old_mode.value} → {new_mode.value}"
-    )
+    logger.warning(f"Governance mode changed: {old_mode.value} → {new_mode.value}")
 
     return (
         f"Governance mode changed successfully:\n"
@@ -104,10 +99,7 @@ async def get_governance_status() -> str:
         mode = await governance_state.get_mode()
     except Exception as e:
         logger.error(f"Failed to get governance mode: {e}")
-        return (
-            f"⚠️  Error getting governance status: {e}\n"
-            f"Defaulting to PERMISSION mode (fail-safe)"
-        )
+        return f"⚠️  Error getting governance status: {e}\nDefaulting to PERMISSION mode (fail-safe)"
 
     # Try to get elevation count (optional, best effort)
     elevation_count = "unknown"
@@ -117,9 +109,7 @@ async def get_governance_status() -> str:
         cursor = 0
         count = 0
         while True:
-            cursor, keys = await redis.scan(
-                cursor=cursor, match="elevation:*", count=100
-            )
+            cursor, keys = await redis.scan(cursor=cursor, match="elevation:*", count=100)
             count += len(keys)
             if cursor == 0:
                 break
@@ -173,9 +163,7 @@ async def revoke_all_elevations() -> str:
         cursor = 0
 
         while True:
-            cursor, keys = await redis.scan(
-                cursor=cursor, match="elevation:*", count=100
-            )
+            cursor, keys = await redis.scan(cursor=cursor, match="elevation:*", count=100)
             elevation_keys.extend(keys)
 
             # cursor == 0 means we've completed the iteration
@@ -199,9 +187,8 @@ async def revoke_all_elevations() -> str:
                 f"Successfully revoked {deleted} active elevation(s).\n\n"
                 f"All subsequent sensitive operations will require new approval."
             )
-        else:
-            logger.info("No active elevations to revoke")
-            return "No active elevations found."
+        logger.info("No active elevations to revoke")
+        return "No active elevations found."
 
     except Exception as e:
         logger.error(f"Failed to revoke elevations: {e}")

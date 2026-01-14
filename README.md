@@ -1,6 +1,49 @@
 # MetaMCP Server
 
+[![CI](https://github.com/itstanner5216/MetaServer/actions/workflows/ci.yml/badge.svg)](https://github.com/itstanner5216/MetaServer/actions/workflows/ci.yml)
+[![CodeQL](https://github.com/itstanner5216/MetaServer/actions/workflows/codeql.yml/badge.svg)](https://github.com/itstanner5216/MetaServer/actions/workflows/codeql.yml)
+[![codecov](https://codecov.io/gh/itstanner5216/MetaServer/branch/main/graph/badge.svg)](https://codecov.io/gh/itstanner5216/MetaServer)
+[![Python Version](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/downloads/)
+[![Code style: ruff](https://img.shields.io/badge/code%20style-ruff-000000.svg)](https://github.com/astral-sh/ruff)
+
 Meta MCP Server - FastMCP-based server infrastructure with progressive tool discovery and governance.
+
+## 🤖 Automated Setup
+
+### Quick Setup
+
+```bash
+# Clone repository
+git clone https://github.com/itstanner5216/MetaServer.git
+cd MetaServer
+
+# Run automated setup
+bash scripts/setup.sh
+
+# Configure GitHub secrets (optional)
+bash scripts/gh-setup-secrets.sh
+```
+
+### What Gets Automated
+
+- ✅ Dependency installation via UV
+- ✅ Pre-commit hook installation (if configured)
+- ✅ Branch protection rules
+- ✅ Repository labels and settings
+- ✅ Automated security fixes
+- ✅ Code scanning with CodeQL
+
+### Manual Steps
+
+Some integrations require one-time manual setup:
+
+1. **Codecov:** Sign up and add repository token to secrets
+2. **PyPI:** Configure trusted publishing for releases
+
+Run the setup validation to check status:
+```bash
+gh workflow run validate-setup.yml
+```
 
 ## Installation
 
@@ -40,8 +83,71 @@ If GUI approval is not available, the system automatically falls back to:
 #### Development Tools
 
 ```bash
-# Install with development dependencies
+# Install with development dependencies (using UV - recommended)
+uv sync --all-extras
+
+# Or with pip
 pip install -e ".[dev]"
+```
+
+## Development Setup
+
+### Prerequisites
+- Python 3.10 or higher
+- [UV](https://github.com/astral-sh/uv) package manager (recommended for faster installs)
+
+### Quick Start
+
+1. Clone the repository:
+   ```bash
+   git clone https://github.com/itstanner5216/MetaServer.git
+   cd MetaServer
+   ```
+
+2. Install dependencies:
+   ```bash
+   uv sync --all-extras
+   ```
+
+3. Install pre-commit hooks:
+   ```bash
+   uv run pre-commit install
+   ```
+
+4. Run tests:
+   ```bash
+   uv run pytest
+   ```
+
+### Development Commands
+
+**Linting:**
+```bash
+uv run ruff check .          # Check for issues
+uv run ruff check . --fix    # Auto-fix issues
+```
+
+**Formatting:**
+```bash
+uv run ruff format .         # Format code
+```
+
+**Type Checking:**
+```bash
+uv run pyright               # Type check
+```
+
+**Testing:**
+```bash
+uv run pytest                # Run all tests
+uv run pytest -v             # Verbose output
+uv run pytest --cov          # With coverage
+```
+
+**Pre-commit:**
+```bash
+uv run pre-commit run --all-files  # Run all hooks
+```
 ```
 
 ## Configuration

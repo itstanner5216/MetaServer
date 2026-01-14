@@ -1,16 +1,15 @@
 """FastMCP middleware for tri-state governance with scoped elevation and elicitation."""
 
-import asyncio
 import hashlib
 import time
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from fastmcp import Context
 from fastmcp.exceptions import ToolError
 from fastmcp.server.middleware import Middleware
 from loguru import logger
 
-from .audit import audit_logger, AuditEvent
+from .audit import AuditEvent, audit_logger
 from .config import Config
 from .governance.approval import (
     ApprovalDecision,
@@ -23,7 +22,6 @@ from .leases import lease_manager
 from .registry import tool_registry
 from .state import ExecutionMode, governance_state
 from .toon import encode_output
-
 
 # Constants
 SENSITIVE_TOOLS = {
@@ -86,7 +84,7 @@ class GovernanceMiddleware(Middleware):
             return result
 
     @staticmethod
-    def _extract_context_key(tool_name: str, arguments: Dict[str, Any]) -> str:
+    def _extract_context_key(tool_name: str, arguments: dict[str, Any]) -> str:
         """
         Extract context key for scoped elevation.
 
@@ -130,7 +128,7 @@ class GovernanceMiddleware(Middleware):
         return tool_name
 
     def _compute_elevation_key(
-        self, tool_name: str, arguments: Dict[str, Any], session_id: str
+        self, tool_name: str, arguments: dict[str, Any], session_id: str
     ) -> str:
         """
         Compute elevation key using SHA256 hash.
@@ -151,7 +149,7 @@ class GovernanceMiddleware(Middleware):
         )
 
     async def _check_elevation(
-        self, tool_name: str, arguments: Dict[str, Any], session_id: str
+        self, tool_name: str, arguments: dict[str, Any], session_id: str
     ) -> bool:
         """
         Check if scoped elevation exists.
@@ -170,7 +168,7 @@ class GovernanceMiddleware(Middleware):
     async def _grant_elevation(
         self,
         tool_name: str,
-        arguments: Dict[str, Any],
+        arguments: dict[str, Any],
         session_id: str,
         ttl: int = DEFAULT_ELEVATION_TTL,
     ) -> bool:
@@ -204,9 +202,7 @@ class GovernanceMiddleware(Middleware):
         return granted
 
     @staticmethod
-    def _generate_request_id(
-        session_id: str, tool_name: str, context_key: str
-    ) -> str:
+    def _generate_request_id(session_id: str, tool_name: str, context_key: str) -> str:
         """
         Generate stable request ID for approval requests.
 
@@ -232,7 +228,7 @@ class GovernanceMiddleware(Middleware):
         return f"{session_hash}_{tool_name}_{context_hash}_{timestamp_ms}"
 
     @staticmethod
-    def _get_required_scopes(tool_name: str, arguments: Dict[str, Any]) -> List[str]:
+    def _get_required_scopes(tool_name: str, arguments: dict[str, Any]) -> list[str]:
         """
         Get required permission scopes for a tool operation.
 
@@ -288,9 +284,7 @@ class GovernanceMiddleware(Middleware):
         return base_scopes
 
     @staticmethod
-    def _format_approval_request(
-        tool_name: str, arguments: Dict[str, Any]
-    ) -> str:
+    def _format_approval_request(tool_name: str, arguments: dict[str, Any]) -> str:
         """
         Format approval request in Markdown.
 
@@ -366,8 +360,8 @@ class GovernanceMiddleware(Middleware):
         return False
 
     async def _elicit_approval(
-        self, ctx: Context, tool_name: str, arguments: Dict[str, Any]
-    ) -> tuple[bool, int, List[str]]:
+        self, ctx: Context, tool_name: str, arguments: dict[str, Any]
+    ) -> tuple[bool, int, list[str]]:
         """
         Elicit approval from user using approval provider system.
 
@@ -435,9 +429,7 @@ class GovernanceMiddleware(Middleware):
 
             except Exception as e:
                 # Non-fatal: approval can proceed without artifacts
-                logger.warning(
-                    f"Failed to generate approval artifacts for {request_id}: {e}"
-                )
+                logger.warning(f"Failed to generate approval artifacts for {request_id}: {e}")
 
             # Create approval request
             approval_request = ApprovalRequest(
@@ -489,7 +481,7 @@ class GovernanceMiddleware(Middleware):
                 )
                 return False, 0, []
 
-            elif response.decision == ApprovalDecision.ERROR:
+            if response.decision == ApprovalDecision.ERROR:
                 logger.error(
                     f"Approval error for {tool_name} "
                     f"(request: {request_id}, session: {session_id}): "
@@ -505,7 +497,7 @@ class GovernanceMiddleware(Middleware):
                 )
                 return False, 0, []
 
-            elif response.decision == ApprovalDecision.DENIED:
+            if response.decision == ApprovalDecision.DENIED:
                 logger.info(
                     f"Approval denied for {tool_name} "
                     f"(request: {request_id}, session: {session_id})"
@@ -520,7 +512,7 @@ class GovernanceMiddleware(Middleware):
                 return False, 0, []
 
             # APPROVED - validate selected scopes
-            elif response.decision == ApprovalDecision.APPROVED:
+            if response.decision == ApprovalDecision.APPROVED:
                 # Fail-safe: If no scopes selected, deny
                 if len(response.selected_scopes) == 0:
                     logger.warning(
@@ -591,20 +583,19 @@ class GovernanceMiddleware(Middleware):
                 return True, response.lease_seconds, response.selected_scopes
 
             # Unknown decision - fail-safe deny
-            else:
-                logger.error(
-                    f"Unknown approval decision {response.decision} for {tool_name} "
-                    f"(request: {request_id}, session: {session_id})"
-                )
-                audit_logger.log_approval(
-                    tool_name=tool_name,
-                    arguments=arguments,
-                    session_id=session_id,
-                    request_id=request_id,
-                    approved=False,
-                    reason=f"unknown_decision: {response.decision}",
-                )
-                return False, 0, []
+            logger.error(
+                f"Unknown approval decision {response.decision} for {tool_name} "
+                f"(request: {request_id}, session: {session_id})"
+            )
+            audit_logger.log_approval(
+                tool_name=tool_name,
+                arguments=arguments,
+                session_id=session_id,
+                request_id=request_id,
+                approved=False,
+                reason=f"unknown_decision: {response.decision}",
+            )
+            return False, 0, []
 
         except Exception as e:
             # Error = denial (fail-safe)
@@ -688,10 +679,7 @@ class GovernanceMiddleware(Middleware):
                         f"Lease has been revoked for security."
                     )
 
-                logger.debug(
-                    f"Capability token verified for {tool_name} "
-                    f"(client: {client_id})"
-                )
+                logger.debug(f"Capability token verified for {tool_name} (client: {client_id})")
 
             # Consume lease (decrement calls_remaining)
             consumed_lease = await lease_manager.consume(client_id, tool_name)
@@ -742,25 +730,19 @@ class GovernanceMiddleware(Middleware):
 
         # Path 3: READ_ONLY mode - block sensitive operations
         if mode == ExecutionMode.READ_ONLY:
-            logger.warning(
-                f"READ_ONLY mode: Blocking {tool_name} (session: {session_id})"
-            )
+            logger.warning(f"READ_ONLY mode: Blocking {tool_name} (session: {session_id})")
             audit_logger.log_blocked(
                 tool_name=tool_name,
                 arguments=arguments,
                 session_id=session_id,
                 reason="read_only_mode",
             )
-            raise ToolError(
-                f"Operation '{tool_name}' blocked: System is in READ_ONLY mode"
-            )
+            raise ToolError(f"Operation '{tool_name}' blocked: System is in READ_ONLY mode")
 
         # Path 4: PERMISSION mode - check elevation or elicit
         if mode == ExecutionMode.PERMISSION:
             # Check if scoped elevation exists
-            has_elevation = await self._check_elevation(
-                tool_name, arguments, session_id
-            )
+            has_elevation = await self._check_elevation(tool_name, arguments, session_id)
 
             if has_elevation:
                 # Elevation exists, allow execution
@@ -777,9 +759,7 @@ class GovernanceMiddleware(Middleware):
                 return self._apply_toon_encoding(result)
 
             # No elevation, elicit approval
-            logger.info(
-                f"Eliciting approval for {tool_name} (session: {session_id})"
-            )
+            logger.info(f"Eliciting approval for {tool_name} (session: {session_id})")
             approved, lease_seconds, selected_scopes = await self._elicit_approval(
                 context, tool_name, arguments
             )
@@ -789,9 +769,7 @@ class GovernanceMiddleware(Middleware):
                 # If lease_seconds == 0, skip elevation grant (single-use approval)
                 if lease_seconds > 0:
                     # Grant scoped elevation with user-specified TTL
-                    await self._grant_elevation(
-                        tool_name, arguments, session_id, ttl=lease_seconds
-                    )
+                    await self._grant_elevation(tool_name, arguments, session_id, ttl=lease_seconds)
                     logger.info(
                         f"Approval granted with elevation for {tool_name} "
                         f"(session: {session_id}, ttl: {lease_seconds}s, scopes: {selected_scopes})"
@@ -806,12 +784,9 @@ class GovernanceMiddleware(Middleware):
                 # Execute tool
                 result = await call_next()
                 return self._apply_toon_encoding(result)
-            else:
-                # Denied - audit already logged in _elicit_approval
-                logger.warning(f"Approval denied for {tool_name} (session: {session_id})")
-                raise ToolError(
-                    f"Operation '{tool_name}' denied: User did not approve"
-                )
+            # Denied - audit already logged in _elicit_approval
+            logger.warning(f"Approval denied for {tool_name} (session: {session_id})")
+            raise ToolError(f"Operation '{tool_name}' denied: User did not approve")
 
         # Fail-safe: Unknown mode - deny
         logger.error(f"Unknown governance mode: {mode}, denying {tool_name}")
@@ -821,6 +796,4 @@ class GovernanceMiddleware(Middleware):
             session_id=session_id,
             reason=f"unknown_mode_{mode}",
         )
-        raise ToolError(
-            f"Operation '{tool_name}' denied: Unknown governance mode"
-        )
+        raise ToolError(f"Operation '{tool_name}' denied: Unknown governance mode")

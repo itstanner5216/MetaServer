@@ -1,7 +1,8 @@
 """Data models for tool registry."""
+
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 
 @dataclass
@@ -11,11 +12,12 @@ class ServerRecord:
 
     Design Plan Section 3.2
     """
-    server_id: str           # "core_tools", "admin_tools"
-    description: str         # 1-line summary
-    risk_level: str         # "safe", "sensitive", "dangerous"
-    tags: List[str] = field(default_factory=list)
-    embedding_vector: Optional[List[float]] = None  # Phase 2
+
+    server_id: str  # "core_tools", "admin_tools"
+    description: str  # 1-line summary
+    risk_level: str  # "safe", "sensitive", "dangerous"
+    tags: list[str] = field(default_factory=list)
+    embedding_vector: list[float] | None = None  # Phase 2
 
 
 @dataclass
@@ -32,21 +34,22 @@ class ToolRecord:
     - tags list must have at least one element
     - schema_min token count must be < 50 (Phase 5, not enforced yet)
     """
-    tool_id: str             # "read_file", "write_file"
-    server_id: str           # Parent server
-    description_1line: str   # For search results
-    description_full: str    # For schema delivery
-    tags: List[str]          # ["file", "read", "workspace"]
-    risk_level: str          # "safe", "sensitive", "dangerous"
+
+    tool_id: str  # "read_file", "write_file"
+    server_id: str  # Parent server
+    description_1line: str  # For search results
+    description_full: str  # For schema delivery
+    tags: list[str]  # ["file", "read", "workspace"]
+    risk_level: str  # "safe", "sensitive", "dangerous"
     requires_permission: bool = False
-    required_scopes: List[str] = field(default_factory=list)  # Permission scopes for approval
+    required_scopes: list[str] = field(default_factory=list)  # Permission scopes for approval
 
     # Progressive Schemas (Phase 5)
-    schema_min: Optional[Dict[str, Any]] = None   # 15-50 tokens
-    schema_full: Optional[Dict[str, Any]] = None  # Complete schema
+    schema_min: dict[str, Any] | None = None  # 15-50 tokens
+    schema_full: dict[str, Any] | None = None  # Complete schema
 
     # Semantic Retrieval (Phase 2)
-    embedding_vector: Optional[List[float]] = None
+    embedding_vector: list[float] | None = None
 
     # Metadata
     registered_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
@@ -61,12 +64,11 @@ class ToolRecord:
         Raises:
             AssertionError: If any invariant is violated
         """
-        assert self.risk_level in ["safe", "sensitive", "dangerous"], \
+        assert self.risk_level in ["safe", "sensitive", "dangerous"], (
             f"risk_level must be one of [safe, sensitive, dangerous], got '{self.risk_level}'"
-        assert len(self.description_1line) > 0, \
-            "description_1line must not be empty"
-        assert len(self.tags) > 0, \
-            "tags list must have at least one element"
+        )
+        assert len(self.description_1line) > 0, "description_1line must not be empty"
+        assert len(self.tags) > 0, "tags list must have at least one element"
         return True
 
 
@@ -80,10 +82,11 @@ class ToolCandidate:
     This is what search results return - metadata only, no schemas.
     Model must call get_tool_schema() to access a tool.
     """
+
     tool_id: str
     server_id: str
     description_1line: str
-    tags: List[str]
+    tags: list[str]
     risk_level: str
     relevance_score: float = 0.0  # Semantic similarity (Phase 2)
 

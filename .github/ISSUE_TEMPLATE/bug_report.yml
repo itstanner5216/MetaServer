@@ -1,17 +1,19 @@
 name: 🐛 Bug Report
 description: Report a bug or unexpected behavior
-labels: ["bug", "triage"]
+title: "[Bug]: "
+labels: ["bug"]
 body:
   - type: markdown
     attributes:
       value: |
-        Thanks for taking the time to report this issue!
+        Thanks for taking the time to report a bug! Please fill out the following information.
   
   - type: textarea
     id: description
     attributes:
       label: Description
-      description: A clear description of the bug
+      description: A clear description of what the bug is
+      placeholder: What went wrong?
     validations:
       required: true
   
@@ -35,17 +37,34 @@ body:
       required: true
   
   - type: textarea
+    id: actual
+    attributes:
+      label: Actual Behavior
+      description: What actually happened
+    validations:
+      required: true
+  
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Your environment details
+      value: |
+        - OS: [e.g., Ubuntu 22.04]
+        - Python version: [e.g., 3.11]
+        - Package version: [e.g., 0.1.0]
+    validations:
+      required: true
+  
+  - type: textarea
     id: logs
     attributes:
       label: Logs
-      description: Relevant log output
+      description: Any relevant logs or error messages
       render: shell
   
-  - type: input
-    id: version
+  - type: textarea
+    id: additional
     attributes:
-      label: Version
-      description: MetaServer version
-      placeholder: "v1.0.0"
-    validations:
-      required: true
+      label: Additional Context
+      description: Any other context about the problem

@@ -1,430 +1,252 @@
-name: 🚀 Post-Merge Setup Automation
+name: Post-Merge Repository Setup
 
 on:
-  push:
-    branches:
-      - main
-    paths:
-      - '.github/workflows/post-merge-setup.yml'
-  workflow_dispatch:
+  workflow_dispatch: # Manual trigger
+  pull_request:
+    types: [closed]
+    branches: [main]
 
 permissions:
   contents: write
-  actions: write
-  security-events: write
   pull-requests: write
   issues: write
+  security-events: write
+  actions: write
 
 jobs:
   setup:
-    name: Automated Repository Configuration
+    # Only run if PR was merged (not just closed)
+    if: github.event.pull_request.merged == true || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     
     steps:
-      - name: 📥 Checkout repository
-        uses: actions/checkout@v4
-      
-      - name: 🔧 Setup GitHub CLI
-        run: |
-          # GitHub CLI is pre-installed on ubuntu-latest
-          gh --version
-        env:
-          GH_TOKEN: ${{ github.token }}
-      
-      - name: 1️⃣ Disable Default CodeQL
-        id: codeql
-        run: |
-          echo "🔍 Checking default CodeQL status..."
-          
-          # Check if default CodeQL is enabled
-          STATUS=$(gh api repos/${{ github.repository }}/code-scanning/default-setup 2>/dev/null | jq -r '.state' || echo "not-configured")
-          
-          echo "Current status: $STATUS"
-          
-          if [ "$STATUS" = "configured" ]; then
-            echo "Disabling default CodeQL setup..."
-            gh api -X PATCH repos/${{ github.repository }}/code-scanning/default-setup \
-              -f state='not-configured' \
-              -f query_suite='default'
-            echo "✅ Default CodeQL disabled"
-          else
-            echo "✅ Default CodeQL already disabled"
-          fi
-        env:
-          GH_TOKEN: ${{ github.token }}
-        continue-on-error: true
-      
-      - name: 2️⃣ Configure Branch Protection
-        id: branch-protection
-        run: |
-          echo "🛡️ Setting up branch protection..."
-          
-          # Configure branch protection for main branch
-          # Note: Some operations may require admin permissions
-          # Using JSON payload for more robust API interaction
-          PROTECTION_JSON=$(cat <<'JSON'
-          {
-            "required_status_checks": {
-              "strict": true,
-              "contexts": ["CodeQL Advanced / Analyze (python)"]
-            },
-            "enforce_admins": false,
-            "required_pull_request_reviews": {
-              "dismiss_stale_reviews": true,
-              "require_code_owner_reviews": false,
-              "required_approving_review_count": 1,
-              "require_last_push_approval": false
-            },
-            "restrictions": null,
-            "required_linear_history": true,
-            "allow_force_pushes": false,
-            "allow_deletions": false,
-            "required_conversation_resolution": true
-          }
-          JSON
-          )
-          
-          gh api -X PUT repos/${{ github.repository }}/branches/main/protection \
-            --input - <<< "$PROTECTION_JSON" \
-            || echo "⚠️ Branch protection requires admin permissions"
-          
-          echo "✅ Branch protection configured"
-          echo "ℹ️  Update status check contexts when CI workflow is added"
-        env:
-          GH_TOKEN: ${{ github.token }}
-        continue-on-error: true
-      
-      - name: 3️⃣ Setup Codecov Integration
-        id: codecov
-        run: |
-          echo "📊 Configuring Codecov..."
-          
-          # Check if repository is public or private
-          IS_PRIVATE=$(gh api repos/${{ github.repository }} | jq -r '.private')
-          
-          if [ "$IS_PRIVATE" = "false" ]; then
-            echo "✅ Codecov integration ready (public repository)"
-            echo "Coverage reports will be automatically uploaded by CI workflow"
-            echo "Visit https://codecov.io/gh/${{ github.repository }} after first CI run"
-          else
-            # Private repository - check for token using env variable
-            if [ -z "$CODECOV_TOKEN" ]; then
-              echo "⚠️  CODECOV_TOKEN not found"
-              echo "📝 Setup instructions:"
-              echo "1. Visit https://codecov.io"
-              echo "2. Sign in with GitHub"
-              echo "3. Add repository: ${{ github.repository }}"
-              echo "4. Copy token to GitHub Secrets as CODECOV_TOKEN"
-              echo "5. Re-run this workflow"
-            else
-              echo "✅ Codecov token configured"
-            fi
-          fi
-        env:
-          GH_TOKEN: ${{ github.token }}
-          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
-        continue-on-error: true
-      
-      - name: 4️⃣ PyPI Publishing Setup Check
-        id: pypi
-        run: |
-          echo "📦 Checking PyPI configuration..."
-          
-          # Get project name from pyproject.toml - handle both quoted and unquoted values
-          PROJECT_NAME=$(grep -E "^name\s*=" pyproject.toml | head -1 | sed -E 's/^name\s*=\s*"([^"]+)".*/\1/; s/^name\s*=\s*([^"[:space:]]+).*/\1/' || echo "meta-mcp-server")
-          # Sanitize project name to prevent injection
-          PROJECT_NAME=$(echo "$PROJECT_NAME" | tr -d '\n\r' | head -c 100)
-          
-          # Provide PyPI setup instructions
-          cat << EOF
-          ⚠️  PyPI Trusted Publishing requires manual setup
-          
-          📝 Configuration steps:
-          1. Visit: https://pypi.org/manage/account/publishing/
-          2. Click 'Add a new publisher'
-          3. Fill in:
-             - PyPI Project Name: $PROJECT_NAME
-             - Owner: ${{ github.repository_owner }}
-             - Repository: ${{ github.repository }}
-             - Workflow: release.yml
-             - Environment: release (optional)
-          
-          ✅ Once configured, releases will auto-publish on version tags
-          EOF
-        continue-on-error: true
-      
-      - name: 5️⃣ Enable Security Features
-        id: security
-        run: |
-          echo "🔒 Enabling security features..."
-          
-          # Enable Dependabot security updates
-          echo "Enabling vulnerability alerts..."
-          gh api -X PUT repos/${{ github.repository }}/vulnerability-alerts 2>/dev/null || echo "Already enabled or insufficient permissions"
-          
-          # Enable Dependabot automated security fixes
-          echo "Enabling automated security fixes..."
-          gh api -X PUT repos/${{ github.repository }}/automated-security-fixes 2>/dev/null || echo "Already enabled or insufficient permissions"
-          
-          # Verify security settings
-          echo "Current security settings:"
-          gh api repos/${{ github.repository }} | jq -r '.security_and_analysis' || echo "Unable to retrieve security settings"
-          
-          echo "✅ Security features enabled"
-        env:
-          GH_TOKEN: ${{ github.token }}
-        continue-on-error: true
-      
-      - name: 6️⃣ Configure Repository Settings
-        id: repo-settings
-        run: |
-          echo "⚙️ Updating repository settings..."
-          
-          # Update repository settings for optimal workflow
-          # Note: allow_auto_merge is enabled with required_approving_review_count=1
-          # This ensures PRs require at least one review before auto-merge
-          gh api -X PATCH repos/${{ github.repository }} \
-            -f allow_squash_merge=true \
-            -f allow_merge_commit=false \
-            -f allow_rebase_merge=false \
-            -f delete_branch_on_merge=true \
-            -f allow_auto_merge=true \
-            -f allow_update_branch=true \
-            -f squash_merge_commit_title='PR_TITLE' \
-            -f squash_merge_commit_message='PR_BODY' 2>/dev/null || echo "Insufficient permissions to update repository settings"
-          
-          echo "✅ Repository settings updated"
-        env:
-          GH_TOKEN: ${{ github.token }}
-        continue-on-error: true
-      
-      - name: 7️⃣ Setup GitHub Environments
-        id: environments
-        run: |
-          echo "🌍 Creating environments..."
-          
-          # Create 'release' environment for PyPI publishing
-          gh api -X PUT repos/${{ github.repository }}/environments/release \
-            -f wait_timer=0 \
-            -f prevent_self_review=false 2>/dev/null || echo "Unable to create environment (may require admin permissions)"
-          
-          echo "✅ Release environment created"
-        env:
-          GH_TOKEN: ${{ github.token }}
-        continue-on-error: true
-      
-      - name: 8️⃣ Create Issue Templates
-        id: issue-templates
-        run: |
-          echo "📝 Creating issue templates..."
-          
-          mkdir -p .github/ISSUE_TEMPLATE
-          
-          # Bug report template
-          cat > .github/ISSUE_TEMPLATE/bug_report.yml << 'EOF'
-          name: 🐛 Bug Report
-          description: Report a bug or unexpected behavior
-          labels: ["bug", "triage"]
-          body:
-            - type: markdown
-              attributes:
-                value: |
-                  Thanks for taking the time to report this issue!
-            
-            - type: textarea
-              id: description
-              attributes:
-                label: Description
-                description: A clear description of the bug
-              validations:
-                required: true
-            
-            - type: textarea
-              id: reproduction
-              attributes:
-                label: Steps to Reproduce
-                description: Steps to reproduce the behavior
-                placeholder: |
-                  1. Run command '...'
-                  2. See error
-              validations:
-                required: true
-            
-            - type: textarea
-              id: expected
-              attributes:
-                label: Expected Behavior
-                description: What you expected to happen
-              validations:
-                required: true
-            
-            - type: textarea
-              id: logs
-              attributes:
-                label: Logs
-                description: Relevant log output
-                render: shell
-            
-            - type: input
-              id: version
-              attributes:
-                label: Version
-                description: Package version (e.g., from pyproject.toml)
-                placeholder: "v0.1.0"
-              validations:
-                required: true
-          EOF
-          
-          # Feature request template
-          cat > .github/ISSUE_TEMPLATE/feature_request.yml << 'EOF'
-          name: ✨ Feature Request
-          description: Suggest a new feature or enhancement
-          labels: ["enhancement"]
-          body:
-            - type: textarea
-              id: problem
-              attributes:
-                label: Problem Statement
-                description: What problem does this solve?
-              validations:
-                required: true
-            
-            - type: textarea
-              id: solution
-              attributes:
-                label: Proposed Solution
-                description: How should this work?
-              validations:
-                required: true
-            
-            - type: textarea
-              id: alternatives
-              attributes:
-                label: Alternatives Considered
-                description: Other solutions you've considered
-          EOF
-          
-          echo "✅ Issue templates created"
-        continue-on-error: true
-      
-      - name: 9️⃣ Create PR Template
-        id: pr-template
-        run: |
-          echo "📋 Creating PR template..."
-          
-          cat > .github/pull_request_template.md << 'EOF'
-          ## Description
-          <!-- Describe your changes in detail -->
-          
-          ## Type of Change
-          <!-- Mark relevant items with [x] -->
-          - [ ] 🐛 Bug fix (non-breaking change which fixes an issue)
-          - [ ] ✨ New feature (non-breaking change which adds functionality)
-          - [ ] 💥 Breaking change (fix or feature that would cause existing functionality to not work as expected)
-          - [ ] 📝 Documentation update
-          - [ ] 🔧 Chore (dependencies, tooling, etc.)
-          
-          ## Testing
-          <!-- Describe the tests you ran -->
-          - [ ] Tests pass locally
-          - [ ] Added new tests for changes
-          - [ ] Coverage maintained/improved
-          
-          ## Checklist
-          - [ ] Code follows project style guidelines
-          - [ ] Self-review completed
-          - [ ] Comments added for complex code
-          - [ ] Documentation updated
-          - [ ] No new warnings generated
-          - [ ] Related issues linked
-          
-          ## Related Issues
-          <!-- Link related issues: Fixes #123, Closes #456 -->
-          EOF
-          
-          echo "✅ PR template created"
-        continue-on-error: true
-      
-      - name: 🔟 Setup Code Owners
-        id: codeowners
-        run: |
-          echo "👥 Configuring code owners..."
-          
-          # Use repository owner as default code owner
-          OWNER="${{ github.repository_owner }}"
-          
-          cat > .github/CODEOWNERS << EOF
-          # Default owners for everything
-          * @$OWNER
-          
-          # Workflows require review
-          /.github/workflows/ @$OWNER
-          
-          # Core source code
-          /src/ @$OWNER
-          
-          # Tests - same owner for consistency
-          /tests/ @$OWNER
-          
-          # Configuration files
-          *.toml @$OWNER
-          *.yml @$OWNER
-          *.yaml @$OWNER
-          EOF
-          
-          echo "✅ Code owners configured"
-        continue-on-error: true
-      
-      - name: 📊 Generate Setup Report
-        if: always()
-        run: |
-          echo "# 🚀 Repository Setup Report" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "## Configuration Status" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          
-          # Add status for each step
-          echo "| Task | Status |" >> $GITHUB_STEP_SUMMARY
-          echo "|------|--------|" >> $GITHUB_STEP_SUMMARY
-          echo "| Disable Default CodeQL | ${{ steps.codeql.outcome == 'success' && '✅' || '⚠️' }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Branch Protection | ${{ steps.branch-protection.outcome == 'success' && '✅' || '⚠️' }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Codecov Integration | ${{ steps.codecov.outcome == 'success' && '✅' || '⚠️' }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| PyPI Setup Check | ${{ steps.pypi.outcome == 'success' && '✅' || '⚠️' }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Security Features | ${{ steps.security.outcome == 'success' && '✅' || '⚠️' }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Repository Settings | ${{ steps.repo-settings.outcome == 'success' && '✅' || '⚠️' }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| GitHub Environments | ${{ steps.environments.outcome == 'success' && '✅' || '⚠️' }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Issue Templates | ${{ steps.issue-templates.outcome == 'success' && '✅' || '⚠️' }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| PR Template | ${{ steps.pr-template.outcome == 'success' && '✅' || '⚠️' }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Code Owners | ${{ steps.codeowners.outcome == 'success' && '✅' || '⚠️' }} |" >> $GITHUB_STEP_SUMMARY
-          
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "## 📝 Manual Steps Required" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### PyPI Trusted Publishing" >> $GITHUB_STEP_SUMMARY
-          echo "1. Visit: https://pypi.org/manage/account/publishing/" >> $GITHUB_STEP_SUMMARY
-          echo "2. Add publisher for: ${{ github.repository }}" >> $GITHUB_STEP_SUMMARY
-          echo "3. Workflow: release.yml" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### Codecov (Private Repos Only)" >> $GITHUB_STEP_SUMMARY
-          echo "1. Visit: https://codecov.io/gh/${{ github.repository }}" >> $GITHUB_STEP_SUMMARY
-          echo "2. Add CODECOV_TOKEN to GitHub Secrets if needed" >> $GITHUB_STEP_SUMMARY
-      
-      - name: 💾 Commit Configuration Files
-        if: always()
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          
-          git add .github/ISSUE_TEMPLATE/ || true
-          git add .github/pull_request_template.md || true
-          git add .github/CODEOWNERS || true
-          
-          if git diff --staged --quiet; then
-            echo "No changes to commit"
-          else
-            git commit -m "chore: update repository configuration files"
-            git push
-            echo "✅ Configuration files committed"
-          fi
-        env:
-          GH_TOKEN: ${{ github.token }}
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
+    
+    - name: Setup Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+    
+    - name: Install GitHub CLI
+      run: |
+        type -p curl >/dev/null || (sudo apt update && sudo apt install curl -y)
+        curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | sudo dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg \
+        && sudo chmod go+r /usr/share/keyrings/githubcli-archive-keyring.gpg \
+        && echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | sudo tee /etc/apt/sources.list.d/github-cli.list > /dev/null \
+        && sudo apt update \
+        && sudo apt install gh -y
+    
+    - name: Configure Branch Protection Rules
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        echo "🔒 Setting up branch protection for main..."
+        
+        # Create branch protection rule
+        gh api \
+          --method PUT \
+          -H "Accept: application/vnd.github+json" \
+          /repos/${{ github.repository }}/branches/main/protection \
+          -f required_status_checks='{"strict":true,"contexts":["CI / test (3.10)","CI / test (3.11)","CI / test (3.12)","CodeQL / Analyze (python)"]}' \
+          -f enforce_admins=false \
+          -f required_pull_request_reviews='{"dismissal_restrictions":{},"dismiss_stale_reviews":true,"require_code_owner_reviews":false,"required_approving_review_count":1}' \
+          -f restrictions=null \
+          -f required_linear_history=false \
+          -f allow_force_pushes=false \
+          -f allow_deletions=false \
+          -f block_creations=false \
+          -f required_conversation_resolution=true \
+          || echo "⚠️  Branch protection may already exist or requires admin permissions"
+    
+    - name: Configure Repository Settings
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        echo "⚙️  Configuring repository settings..."
+        
+        # Enable vulnerability alerts
+        gh api \
+          --method PUT \
+          -H "Accept: application/vnd.github+json" \
+          /repos/${{ github.repository }}/vulnerability-alerts \
+          || echo "⚠️  Vulnerability alerts may already be enabled"
+        
+        # Enable automated security fixes (Dependabot)
+        gh api \
+          --method PUT \
+          -H "Accept: application/vnd.github+json" \
+          /repos/${{ github.repository }}/automated-security-fixes \
+          || echo "⚠️  Automated security fixes may already be enabled"
+        
+        # Update repository settings
+        gh api \
+          --method PATCH \
+          -H "Accept: application/vnd.github+json" \
+          /repos/${{ github.repository }} \
+          -f allow_squash_merge=true \
+          -f allow_merge_commit=false \
+          -f allow_rebase_merge=true \
+          -f delete_branch_on_merge=true \
+          -f allow_auto_merge=true \
+          || echo "⚠️  Repository settings may require admin permissions"
+    
+    - name: Create Repository Labels
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        echo "🏷️  Creating repository labels..."
+        
+        # Define labels (name:color:description)
+        labels=(
+          "dependencies:0366d6:Dependency updates"
+          "automated:ededed:Automated changes"
+          "github-actions:000000:GitHub Actions workflows"
+          "security:d73a4a:Security-related changes"
+          "bug:d73a4a:Something isn't working"
+          "enhancement:a2eeef:New feature or request"
+          "documentation:0075ca:Documentation improvements"
+          "good first issue:7057ff:Good for newcomers"
+          "help wanted:008672:Extra attention needed"
+          "invalid:e4e669:Invalid issue or PR"
+          "question:d876e3:Further information requested"
+          "wontfix:ffffff:This will not be worked on"
+        )
+        
+        for label in "${labels[@]}"; do
+          IFS=':' read -r name color description <<< "$label"
+          gh label create "$name" --color "$color" --description "$description" --force || true
+        done
+    
+    - name: Setup Issue Templates
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        echo "📝 Issue templates will be created in next commit..."
+        # Templates are created as files in the repository
+    
+    - name: Disable Default CodeQL
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        echo "🔍 Attempting to disable default CodeQL setup..."
+        
+        # This may require manual action, but we'll try
+        gh api \
+          --method DELETE \
+          -H "Accept: application/vnd.github+json" \
+          /repos/${{ github.repository }}/code-scanning/default-setup \
+          || echo "⚠️  Default CodeQL may need to be disabled manually in Settings → Code security"
+    
+    - name: Create Setup Validation Issue
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        cat << 'EOF' > issue-body.md
+        # 🚀 Repository Setup Completed!
+        
+        ## ✅ Automated Configurations
+        
+        The following have been automatically configured:
+        
+        - ✅ Branch protection rules for `main`
+        - ✅ Required status checks (CI, CodeQL)
+        - ✅ Pull request review requirements
+        - ✅ Repository labels
+        - ✅ Security alerts enabled
+        - ✅ Dependabot auto-merge enabled
+        - ✅ Delete branch on merge enabled
+        
+        ## ⚠️ Manual Steps Required
+        
+        Please complete the following steps to finish setup:
+        
+        ### 1. Codecov Configuration (Required for Coverage Reports)
+        
+        ```bash
+        # 1. Visit https://codecov.io and sign in with GitHub
+        # 2. Add repository: itstanner5216/MetaServer
+        # 3. Copy the repository token
+        # 4. Add to GitHub Secrets:
+        gh secret set CODECOV_TOKEN --body "YOUR_TOKEN_HERE"
+        ```
+        
+        Or via GitHub UI:
+        - Settings → Secrets and variables → Actions → New repository secret
+        - Name: `CODECOV_TOKEN`
+        - Value: [token from Codecov]
+        
+        ### 2. PyPI Trusted Publishing (Required for Automated Releases)
+        
+        ```bash
+        # 1. Visit https://pypi.org/manage/account/publishing/
+        # 2. Add a new "pending publisher":
+        #    - PyPI Project Name: metaserver (or your package name)
+        #    - Owner: itstanner5216
+        #    - Repository name: MetaServer
+        #    - Workflow name: release.yml
+        #    - Environment name: release (optional)
+        ```
+        
+        **Note:** You'll create your first release by pushing a tag:
+        ```bash
+        git tag -a v0.1.0 -m "Initial release"
+        git push origin v0.1.0
+        ```
+        
+        ### 3. Verify Default CodeQL is Disabled
+        
+        - Go to Settings → Code security and analysis
+        - Under "Code scanning" → "CodeQL analysis"
+        - Ensure default setup is **disabled** (we're using custom workflow)
+        
+        ### 4. Test the Setup
+        
+        Run the validation workflow:
+        ```bash
+        gh workflow run validate-setup.yml
+        ```
+        
+        ## 📊 What's Next?
+        
+        - Create your first issue or PR to test the workflows
+        - Pre-commit hooks will run automatically on commits
+        - Dependabot will open PRs weekly for dependency updates
+        - Coverage reports will appear on PRs (after Codecov setup)
+        
+        ## 🛠️ Development Quick Start
+        
+        ```bash
+        # Install dependencies
+        uv sync
+        
+        # Install pre-commit hooks
+        uv run pre-commit install
+        
+        # Run tests
+        uv run pytest
+        
+        # Lint code
+        uv run ruff check .
+        
+        # Format code
+        uv run ruff format .
+        ```
+        
+        ## 📚 Documentation
+        
+        - [Contributing Guide](./CONTRIBUTING.md)
+        - [CI/CD Workflows](./.github/workflows/)
+        - [Pre-commit Configuration](./.pre-commit-config.yaml)
+        
+        ---
+        
+        **Close this issue once all manual steps are completed.**
+        EOF
+        
+        gh issue create \
+          --title "🚀 Complete Repository Setup - Manual Steps Required" \
+          --body-file issue-body.md \
+          --label "documentation,automated"

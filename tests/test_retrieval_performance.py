@@ -7,13 +7,15 @@ Tests:
 - Index building performance
 - Comparison with keyword search
 """
-import pytest
+
 import time
-from datetime import datetime
+
+import pytest
+
 from src.meta_mcp.registry.models import ToolRecord
 from src.meta_mcp.registry.registry import ToolRegistry
-from src.meta_mcp.retrieval.search import SemanticSearch
 from src.meta_mcp.retrieval.embedder import ToolEmbedder
+from src.meta_mcp.retrieval.search import SemanticSearch
 
 
 class TestRetrievalPerformance:
@@ -47,7 +49,7 @@ class TestRetrievalPerformance:
                         description_1line=f"{operation.capitalize()} {category} data variant {variant}",
                         description_full=f"Perform {operation} operation on {category} resources. This is variant {variant} with extended capabilities.",
                         tags=[category, operation, f"variant_{variant}"],
-                        risk_level=["safe", "sensitive", "dangerous"][variant % 3]
+                        risk_level=["safe", "sensitive", "dangerous"][variant % 3],
                     )
                     tool_count += 1
 
@@ -67,7 +69,7 @@ class TestRetrievalPerformance:
             "network operations",
             "database queries",
             "encrypt data",
-            "process images"
+            "process images",
         ]
 
         total_time = 0
@@ -82,13 +84,13 @@ class TestRetrievalPerformance:
             total_time += search_time_ms
 
             # Individual search should be under 100ms
-            assert search_time_ms < 100, \
+            assert search_time_ms < 100, (
                 f"Search for '{query}' took {search_time_ms:.2f}ms, expected <100ms"
+            )
 
         # Average should be well under 100ms
         avg_time = total_time / iterations
-        assert avg_time < 100, \
-            f"Average search time {avg_time:.2f}ms, expected <100ms"
+        assert avg_time < 100, f"Average search time {avg_time:.2f}ms, expected <100ms"
 
         print(f"\nSearch performance: {avg_time:.2f}ms average over {iterations} queries")
 
@@ -104,8 +106,7 @@ class TestRetrievalPerformance:
         build_time_ms = (end - start) * 1000
 
         # Index building should complete in under 1 second for 100 tools
-        assert build_time_ms < 1000, \
-            f"Index build took {build_time_ms:.2f}ms, expected <1000ms"
+        assert build_time_ms < 1000, f"Index build took {build_time_ms:.2f}ms, expected <1000ms"
 
         print(f"\nIndex build time: {build_time_ms:.2f}ms for {len(large_registry._tools)} tools")
 
@@ -136,10 +137,9 @@ class TestRetrievalPerformance:
         uncached_time = end - start
 
         # Cached should be significantly faster
-        assert cached_time < uncached_time, \
-            "Cached embeddings should be faster than recomputing"
+        assert cached_time < uncached_time, "Cached embeddings should be faster than recomputing"
 
-        print(f"\nCache speedup: {uncached_time/cached_time:.1f}x faster")
+        print(f"\nCache speedup: {uncached_time / cached_time:.1f}x faster")
 
     def test_semantic_vs_keyword_quality(self):
         """Compare semantic search quality vs keyword search."""
@@ -153,7 +153,7 @@ class TestRetrievalPerformance:
                 description_1line="Read files from disk",
                 description_full="Read and retrieve file contents from local storage",
                 tags=["file", "read", "storage", "io"],
-                risk_level="safe"
+                risk_level="safe",
             ),
             ToolRecord(
                 tool_id="load_document",
@@ -161,7 +161,7 @@ class TestRetrievalPerformance:
                 description_1line="Load document contents",
                 description_full="Load and parse document files",
                 tags=["document", "load", "parse"],
-                risk_level="safe"
+                risk_level="safe",
             ),
             ToolRecord(
                 tool_id="send_email",
@@ -169,8 +169,8 @@ class TestRetrievalPerformance:
                 description_1line="Send email messages",
                 description_full="Transmit email to recipients",
                 tags=["email", "send", "network"],
-                risk_level="sensitive"
-            )
+                risk_level="sensitive",
+            ),
         ]
 
         for tool in tools:
@@ -187,7 +187,9 @@ class TestRetrievalPerformance:
         semantic_top_ids = [r.tool_id for r in semantic_results[:2]]
         assert "read_file" in semantic_top_ids or "load_document" in semantic_top_ids
 
-        print(f"\nSemantic search top result: {semantic_results[0].tool_id if semantic_results else 'none'}")
+        print(
+            f"\nSemantic search top result: {semantic_results[0].tool_id if semantic_results else 'none'}"
+        )
 
     def test_memory_efficiency(self, large_registry):
         """Test memory usage is reasonable for embeddings."""
@@ -203,8 +205,7 @@ class TestRetrievalPerformance:
         total_memory_kb = (cache_size + vocab_size) / 1024
 
         # Memory should be reasonable (< 1MB for 100 tools)
-        assert total_memory_kb < 1024, \
-            f"Memory usage {total_memory_kb:.2f}KB exceeds 1MB limit"
+        assert total_memory_kb < 1024, f"Memory usage {total_memory_kb:.2f}KB exceeds 1MB limit"
 
         print(f"\nMemory usage: {total_memory_kb:.2f}KB for {len(large_registry._tools)} tools")
 
@@ -219,14 +220,16 @@ class TestRetrievalPerformance:
         for count in tool_counts:
             tools = []
             for i in range(count):
-                tools.append(ToolRecord(
-                    tool_id=f"tool_{i}",
-                    server_id="core",
-                    description_1line=f"Tool {i} for testing",
-                    description_full=f"Extended description for tool {i}",
-                    tags=[f"tag_{i}"],
-                    risk_level="safe"
-                ))
+                tools.append(
+                    ToolRecord(
+                        tool_id=f"tool_{i}",
+                        server_id="core",
+                        description_1line=f"Tool {i} for testing",
+                        description_full=f"Extended description for tool {i}",
+                        tags=[f"tag_{i}"],
+                        risk_level="safe",
+                    )
+                )
 
             embedder._build_vocabulary(tools)
             vocab_sizes.append(len(embedder._vocabulary))
@@ -258,7 +261,7 @@ class TestRetrievalPerformance:
             "network requests",
             "database queries",
             "security functions",
-            "text processing"
+            "text processing",
         ]
 
         start = time.perf_counter()
@@ -274,8 +277,9 @@ class TestRetrievalPerformance:
         avg_time_ms = ((end - start) / total_searches) * 1000
 
         # Average should still be under 100ms
-        assert avg_time_ms < 100, \
+        assert avg_time_ms < 100, (
             f"Average search time under load: {avg_time_ms:.2f}ms, expected <100ms"
+        )
 
         print(f"\nConcurrent load: {avg_time_ms:.2f}ms average over {total_searches} searches")
 
@@ -294,8 +298,7 @@ class TestRetrievalPerformance:
         search_time_ms = (end - start) * 1000
 
         # Should still complete in reasonable time
-        assert search_time_ms < 200, \
-            f"Long query took {search_time_ms:.2f}ms, expected <200ms"
+        assert search_time_ms < 200, f"Long query took {search_time_ms:.2f}ms, expected <200ms"
 
         print(f"\nWorst-case query (100 words): {search_time_ms:.2f}ms")
 
@@ -314,10 +317,13 @@ class TestRetrievalPerformance:
         rebuild_time = time.perf_counter() - start
 
         # Rebuild should be similar to initial build
-        assert rebuild_time < 1.5 * initial_time, \
+        assert rebuild_time < 1.5 * initial_time, (
             "Rebuild should not be significantly slower than initial build"
+        )
 
-        print(f"\nIndex rebuild: {rebuild_time*1000:.2f}ms vs initial {initial_time*1000:.2f}ms")
+        print(
+            f"\nIndex rebuild: {rebuild_time * 1000:.2f}ms vs initial {initial_time * 1000:.2f}ms"
+        )
 
     def test_empty_results_performance(self, large_registry):
         """Test performance when no results match."""
@@ -332,7 +338,6 @@ class TestRetrievalPerformance:
         search_time_ms = (end - start) * 1000
 
         # Should still be fast even with no matches
-        assert search_time_ms < 100, \
-            f"No-match query took {search_time_ms:.2f}ms, expected <100ms"
+        assert search_time_ms < 100, f"No-match query took {search_time_ms:.2f}ms, expected <100ms"
 
         print(f"\nNo-match query: {search_time_ms:.2f}ms")
