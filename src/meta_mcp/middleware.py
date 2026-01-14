@@ -775,11 +775,21 @@ class GovernanceMiddleware(Middleware):
         """
         tool_name = context.request_context.tool_name
         arguments = context.request_context.arguments or {}
+        original_tool_name = tool_name
+        original_arguments = arguments
         tool_call, run_context = await self._run_before_tool_hooks(
             context, tool_name, arguments
         )
         tool_name = tool_call.tool_name
         arguments = tool_call.arguments
+        if (
+            tool_name != original_tool_name
+            or arguments != original_arguments
+        ):
+            logger.info(
+                "before_tool hook mutated tool call; re-evaluating governance "
+                "against updated tool call"
+            )
         session_id = str(context.session_id)
 
         # PHASE 3+4 INTEGRATION: Validate lease and token before governance checks
