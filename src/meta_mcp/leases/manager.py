@@ -309,17 +309,13 @@ class LeaseManager:
             logger.error(f"Unexpected error in consume: {e}")
             return None
 
-    async def acquire_inflight(
-        self, client_id: str, tool_id: str, max_inflight: int
-    ) -> bool:
+    async def acquire_inflight(self, client_id: str, tool_id: str) -> bool:
         """
         Acquire an inflight slot for a lease-backed tool call.
 
         Args:
             client_id: Session identifier
             tool_id: Tool identifier
-            max_inflight: Maximum concurrent calls allowed (calls_remaining)
-
         Returns:
             True if a slot was acquired, False otherwise
 
@@ -342,7 +338,8 @@ class LeaseManager:
                 if lease_ttl > 0:
                     await redis.expire(inflight_key, lease_ttl)
 
-            if inflight > max_inflight:
+            lease = await self.validate(client_id, tool_id)
+            if lease is None or inflight > lease.calls_remaining:
                 await redis.decr(inflight_key)
                 inflight_after = await redis.get(inflight_key)
                 if inflight_after is None or int(inflight_after) <= 0:

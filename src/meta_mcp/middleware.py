@@ -699,7 +699,7 @@ class GovernanceMiddleware(Middleware):
                 )
 
             inflight_acquired = await lease_manager.acquire_inflight(
-                client_id, tool_name, lease.calls_remaining
+                client_id, tool_name
             )
             if not inflight_acquired:
                 logger.warning(
