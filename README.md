@@ -45,6 +45,44 @@ Run the setup validation to check status:
 gh workflow run validate-setup.yml
 ```
 
+## 🤖 AI Agent System for PR Management
+
+MetaServer includes a **fully automated multi-agent system** for validating, fixing, and bundling pull requests:
+
+### Features
+
+- **Automated PR Validation** 🔍: Validates all open PRs with tests, security scans, and architectural checks
+- **Auto-Remediation** 🔧: Automatically fixes common issues (imports, conflicts, simple test failures)
+- **Architectural Guardian** 🏛️: Ensures no breaking changes or architectural violations
+- **Meta-PR Creation** 📦: Groups safe PRs by functional area into reviewable meta-PRs
+- **Functional Verification** ✅: Verifies meta-PRs don't break server functionality
+- **Comprehensive Reporting** 📊: Generates detailed reports and action items
+
+### Quick Start
+
+Run the full validation system via GitHub Actions:
+
+1. Go to **Actions** → **🤖 Intelligent PR Validation & Auto-Remediation**
+2. Click **Run workflow**
+3. Select options (auto-fix, architectural checks, create meta-PRs)
+4. Review the generated reports and meta-PRs
+
+### Documentation
+
+See **[docs/AGENT_SYSTEM.md](docs/AGENT_SYSTEM.md)** for complete documentation including:
+- System architecture and agent details
+- Usage instructions and examples
+- Safety mechanisms and rollback procedures
+- Troubleshooting guide
+
+### Benefits
+
+- ✅ **Save 40+ hours** of manual PR review time
+- ✅ **Eliminate breaking changes** through automated architectural analysis
+- ✅ **Auto-fix common issues** with remediation agent
+- ✅ **Bundle related changes** for easier review
+- ✅ **Maintain code quality** with comprehensive validation
+
 ## Installation
 
 ### Base Installation
