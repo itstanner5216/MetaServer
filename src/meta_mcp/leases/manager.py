@@ -74,6 +74,20 @@ class LeaseManager:
         """
         return f"lease:{client_id}:{tool_id}"
 
+    @staticmethod
+    def _inflight_key(client_id: str, tool_id: str) -> str:
+        """
+        Generate Redis key for inflight lease usage.
+
+        Args:
+            client_id: Session identifier
+            tool_id: Tool identifier
+
+        Returns:
+            Redis key string
+        """
+        return f"lease_inflight:{client_id}:{tool_id}"
+
     async def grant(
         self,
         client_id: str,
@@ -294,6 +308,82 @@ class LeaseManager:
         except Exception as e:
             logger.error(f"Unexpected error in consume: {e}")
             return None
+
+    async def acquire_inflight(
+        self, client_id: str, tool_id: str, max_inflight: int
+    ) -> bool:
+        """
+        Acquire an inflight slot for a lease-backed tool call.
+
+        Args:
+            client_id: Session identifier
+            tool_id: Tool identifier
+            max_inflight: Maximum concurrent calls allowed (calls_remaining)
+
+        Returns:
+            True if a slot was acquired, False otherwise
+
+        Security:
+        - Validates client_id is not empty
+        - Fails closed on Redis errors
+        """
+        if not client_id or not client_id.strip():
+            logger.warning("Cannot acquire inflight slot with empty client_id")
+            return False
+
+        try:
+            redis = await self._get_redis()
+            inflight_key = self._inflight_key(client_id, tool_id)
+
+            inflight = await redis.incr(inflight_key)
+
+            if inflight == 1:
+                lease_ttl = await redis.ttl(self._lease_key(client_id, tool_id))
+                if lease_ttl > 0:
+                    await redis.expire(inflight_key, lease_ttl)
+
+            if inflight > max_inflight:
+                await redis.decr(inflight_key)
+                inflight_after = await redis.get(inflight_key)
+                if inflight_after is None or int(inflight_after) <= 0:
+                    await redis.delete(inflight_key)
+                return False
+
+            return True
+
+        except (aioredis.ConnectionError, aioredis.TimeoutError) as e:
+            logger.error(f"Redis connection failed in acquire_inflight: {e}")
+            return False
+        except Exception as e:
+            logger.error(f"Unexpected error in acquire_inflight: {e}")
+            return False
+
+    async def release_inflight(self, client_id: str, tool_id: str) -> None:
+        """
+        Release an inflight slot for a lease-backed tool call.
+
+        Args:
+            client_id: Session identifier
+            tool_id: Tool identifier
+
+        Security:
+        - Validates client_id is not empty
+        - Fails closed on Redis errors
+        """
+        if not client_id or not client_id.strip():
+            logger.warning("Cannot release inflight slot with empty client_id")
+            return
+
+        try:
+            redis = await self._get_redis()
+            inflight_key = self._inflight_key(client_id, tool_id)
+            inflight = await redis.decr(inflight_key)
+            if inflight <= 0:
+                await redis.delete(inflight_key)
+        except (aioredis.ConnectionError, aioredis.TimeoutError) as e:
+            logger.error(f"Redis connection failed in release_inflight: {e}")
+        except Exception as e:
+            logger.error(f"Unexpected error in release_inflight: {e}")
 
     async def revoke(self, client_id: str, tool_id: str) -> bool:
         """
