@@ -753,31 +753,25 @@ class GovernanceMiddleware(Middleware):
             )
             return False, 0, []
 
-    async def on_call_tool(self, context: Context, call_next):
+    async def _handle_tool_call(
+        self,
+        context: Context,
+        call_next,
+        tool_call: ToolCall,
+        run_context: RunContext,
+    ) -> Any:
         """
-        Intercept tool calls and enforce tri-state governance.
-
-        Governance paths:
-        1. BYPASS mode: Log warning, audit, execute
-        2. Non-sensitive tools: Pass through
-        3. READ_ONLY mode: Log denial, audit, raise ToolError
-        4. PERMISSION mode: Check elevation → elicit → grant/deny
+        Apply governance checks and execute a tool call.
 
         Args:
             context: FastMCP context
             call_next: Next middleware in chain
+            tool_call: Finalized tool call after hooks
+            run_context: Run context associated with the tool call
 
         Returns:
-            Tool result if approved/bypassed
-
-        Raises:
-            ToolError: If operation is denied
+            Tool execution result
         """
-        tool_name = context.request_context.tool_name
-        arguments = context.request_context.arguments or {}
-        tool_call, run_context = await self._run_before_tool_hooks(
-            context, tool_name, arguments
-        )
         tool_name = tool_call.tool_name
         arguments = tool_call.arguments
         session_id = str(context.session_id)
@@ -992,4 +986,43 @@ class GovernanceMiddleware(Middleware):
         )
         raise ToolError(
             f"Operation '{tool_name}' denied: Unknown governance mode"
+        )
+
+    async def on_call_tool(self, context: Context, call_next):
+        """
+        Intercept tool calls and enforce tri-state governance.
+
+        Governance paths:
+        1. BYPASS mode: Log warning, audit, execute
+        2. Non-sensitive tools: Pass through
+        3. READ_ONLY mode: Log denial, audit, raise ToolError
+        4. PERMISSION mode: Check elevation → elicit → grant/deny
+
+        Args:
+            context: FastMCP context
+            call_next: Next middleware in chain
+
+        Returns:
+            Tool result if approved/bypassed
+
+        Raises:
+            ToolError: If operation is denied
+        """
+        original_tool_name = context.request_context.tool_name
+        original_arguments = context.request_context.arguments or {}
+        tool_call, run_context = await self._run_before_tool_hooks(
+            context, original_tool_name, original_arguments
+        )
+
+        if (
+            tool_call.tool_name != original_tool_name
+            or tool_call.arguments != original_arguments
+        ):
+            logger.info(
+                "before_tool hook mutated tool call; re-evaluating governance with "
+                "updated tool_name/arguments"
+            )
+
+        return await self._handle_tool_call(
+            context, call_next, tool_call, run_context
         )
