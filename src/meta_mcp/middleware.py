@@ -141,7 +141,7 @@ class GovernanceMiddleware(Middleware):
         *,
         tool_call: Optional[ToolCall] = None,
         run_context: Optional[RunContext] = None,
-        run_before_hooks: bool = True,
+        run_before_hooks: bool = False,
     ) -> Any:
         """
         Invoke the next tool middleware with hook wrapping.
@@ -157,8 +157,11 @@ class GovernanceMiddleware(Middleware):
         """
         session_id = str(context.session_id)
         hook_manager = get_hook_manager()
+        original_tool_call = tool_call or ToolCall(
+            tool_name=tool_name, arguments=arguments
+        )
         if tool_call is None:
-            tool_call = ToolCall(tool_name=tool_name, arguments=arguments)
+            tool_call = original_tool_call
         if run_context is None:
             run_context = RunContext(
                 session_id=session_id,
@@ -168,6 +171,15 @@ class GovernanceMiddleware(Middleware):
 
         if run_before_hooks:
             tool_call = await hook_manager.before_tool(tool_call, run_context)
+            if tool_call != original_tool_call:
+                logger.error(
+                    "before_tool hooks mutated tool call during invoke_tool; "
+                    "governance must be re-evaluated before execution."
+                )
+                raise ToolError(
+                    "before_tool hooks mutated tool call after governance; "
+                    "run hooks before governance checks."
+                )
 
         if tool_call.tool_name != tool_name:
             context.request_context.tool_name = tool_call.tool_name
@@ -775,12 +787,18 @@ class GovernanceMiddleware(Middleware):
         """
         tool_name = context.request_context.tool_name
         arguments = context.request_context.arguments or {}
+        original_tool_call = ToolCall(tool_name=tool_name, arguments=arguments)
         tool_call, run_context = await self._run_before_tool_hooks(
             context, tool_name, arguments
         )
         tool_name = tool_call.tool_name
         arguments = tool_call.arguments
         session_id = str(context.session_id)
+        if tool_call != original_tool_call:
+            logger.info(
+                "before_tool hooks mutated tool call; re-evaluating governance "
+                "with updated tool name and arguments."
+            )
 
         # PHASE 3+4 INTEGRATION: Validate lease and token before governance checks
         # Note: Bootstrap tools bypass lease checks
