@@ -7,7 +7,9 @@ Tests:
 - Audit logging for macro operations
 - Rate limiting and quotas
 """
+
 import pytest
+
 from src.meta_mcp.registry.models import ToolRecord
 from src.meta_mcp.registry.registry import ToolRegistry
 
@@ -27,7 +29,7 @@ class TestMacroGovernance:
                 description_1line="Safe operation 1",
                 description_full="Safe operation",
                 tags=["safe"],
-                risk_level="safe"
+                risk_level="safe",
             ),
             ToolRecord(
                 tool_id="safe_tool_2",
@@ -35,7 +37,7 @@ class TestMacroGovernance:
                 description_1line="Safe operation 2",
                 description_full="Safe operation",
                 tags=["safe"],
-                risk_level="safe"
+                risk_level="safe",
             ),
             ToolRecord(
                 tool_id="sensitive_tool",
@@ -43,7 +45,7 @@ class TestMacroGovernance:
                 description_1line="Sensitive operation",
                 description_full="Sensitive operation",
                 tags=["sensitive"],
-                risk_level="sensitive"
+                risk_level="sensitive",
             ),
             ToolRecord(
                 tool_id="dangerous_tool",
@@ -51,8 +53,8 @@ class TestMacroGovernance:
                 description_1line="Dangerous operation",
                 description_full="Dangerous operation",
                 tags=["dangerous"],
-                risk_level="dangerous"
-            )
+                risk_level="dangerous",
+            ),
         ]
 
         for tool in tools:
@@ -68,11 +70,7 @@ class TestMacroGovernance:
         tool_ids = ["safe_tool_1", "safe_tool_2", "sensitive_tool", "dangerous_tool"]
 
         # Read with safe-only filter
-        results = batch_read_tools(
-            sample_registry,
-            tool_ids,
-            max_risk_level="safe"
-        )
+        results = batch_read_tools(sample_registry, tool_ids, max_risk_level="safe")
 
         # Should only return safe tools
         safe_results = [t for t in results.values() if t is not None]
@@ -83,11 +81,7 @@ class TestMacroGovernance:
         from src.meta_mcp.macros.batch_search import batch_search_tools
 
         queries = ["operation"]
-        results = batch_search_tools(
-            sample_registry,
-            queries,
-            exclude_risk_levels=["dangerous"]
-        )
+        results = batch_search_tools(sample_registry, queries, exclude_risk_levels=["dangerous"])
 
         # Should not include dangerous tools
         for query, candidates in results.items():
@@ -127,24 +121,19 @@ class TestMacroGovernance:
         """Test macro operations require appropriate permissions."""
         from src.meta_mcp.macros.batch_write import batch_update_tools
 
-        updates = {
-            "dangerous_tool": {"description_1line": "Modified"}
-        }
+        updates = {"dangerous_tool": {"description_1line": "Modified"}}
 
         # Without permission for dangerous tools, should fail
-        result = batch_update_tools(
-            sample_registry,
-            updates,
-            check_permissions=True
-        )
+        result = batch_update_tools(sample_registry, updates, check_permissions=True)
 
         # Should fail or require approval
         assert "error" in result or result["success"] is False
 
     def test_batch_read_rate_limiting(self, sample_registry):
         """Test batch operations respect rate limits."""
-        from src.meta_mcp.macros.batch_read import batch_read_tools
         import time
+
+        from src.meta_mcp.macros.batch_read import batch_read_tools
 
         tool_ids = ["safe_tool_1", "safe_tool_2"]
 
@@ -166,10 +155,7 @@ class TestMacroGovernance:
 
         # Include session context
         results = batch_read_tools(
-            sample_registry,
-            tool_ids,
-            session_id="test-session-123",
-            user_id="test-user"
+            sample_registry, tool_ids, session_id="test-session-123", user_id="test-user"
         )
 
         # Should complete with context
@@ -184,15 +170,10 @@ class TestMacroGovernance:
         # Batch update that should fail partway
         updates = {
             "safe_tool_1": {"description_1line": "Updated 1"},
-            "safe_tool_2": {"risk_level": "invalid"}  # This will fail
+            "safe_tool_2": {"risk_level": "invalid"},  # This will fail
         }
 
-        result = batch_update_tools(
-            sample_registry,
-            updates,
-            atomic=True,
-            rollback_on_error=True
-        )
+        result = batch_update_tools(sample_registry, updates, atomic=True, rollback_on_error=True)
 
         if result["success"] is False:
             # Should rollback safe_tool_1 update
@@ -204,9 +185,7 @@ class TestMacroGovernance:
 
         original_desc = sample_registry.get("safe_tool_1").description_1line
 
-        updates = {
-            "safe_tool_1": {"description_1line": "Updated"}
-        }
+        updates = {"safe_tool_1": {"description_1line": "Updated"}}
 
         result = batch_update_tools(sample_registry, updates, dry_run=True)
 

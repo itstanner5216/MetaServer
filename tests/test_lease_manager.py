@@ -9,8 +9,8 @@ Tests LeaseManager methods:
 - purge(): Cleanup expired leases
 """
 
+
 import pytest
-from datetime import datetime, timedelta
 
 
 @pytest.mark.asyncio
@@ -33,7 +33,6 @@ async def test_grant_creates_lease():
     # assert lease.client_id == "test_session"
     # assert lease.tool_id == "read_file"
 
-    pass
 
 
 @pytest.mark.asyncio
@@ -47,7 +46,6 @@ async def test_validate_returns_none_for_nonexistent_lease():
     # lease = await lease_manager.validate("nonexistent_session", "read_file")
     # assert lease is None
 
-    pass
 
 
 @pytest.mark.asyncio
@@ -72,7 +70,6 @@ async def test_validate_returns_lease_when_valid():
     # assert lease is not None
     # assert lease.calls_remaining == 3
 
-    pass
 
 
 @pytest.mark.asyncio
@@ -100,7 +97,6 @@ async def test_consume_decrements_calls():
     # lease = await lease_manager.consume("test_session", "read_file")
     # assert lease.calls_remaining == 1
 
-    pass
 
 
 @pytest.mark.asyncio
@@ -128,7 +124,6 @@ async def test_consume_returns_none_when_exhausted():
     # lease = await lease_manager.consume("test_session", "read_file")
     # assert lease is None
 
-    pass
 
 
 @pytest.mark.asyncio
@@ -160,7 +155,6 @@ async def test_revoke_deletes_lease():
     # lease = await lease_manager.validate("test_session", "read_file")
     # assert lease is None
 
-    pass
 
 
 @pytest.mark.asyncio
@@ -198,7 +192,6 @@ async def test_grant_with_capability_token():
     # lease_check = await lease_manager.validate("test_session", "write_file")
     # assert lease_check.capability_token == token
 
-    pass
 
 
 @pytest.mark.asyncio
@@ -233,4 +226,3 @@ async def test_purge_removes_expired_leases():
     # lease = await lease_manager.validate("test_session", "read_file")
     # assert lease is None
 
-    pass

@@ -12,7 +12,6 @@ Checks:
 
 import sys
 from pathlib import Path
-from typing import List, Tuple
 
 # Add src to path
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
@@ -78,14 +77,13 @@ class InvariantValidator:
             print("✅ All invariants validated successfully!")
             print()
             return True
-        elif not self.failures:
+        if not self.failures:
             print("⚠️  All critical checks passed, but warnings exist")
             print()
             return True
-        else:
-            print("❌ Critical invariant violations detected!")
-            print()
-            return False
+        print("❌ Critical invariant violations detected!")
+        print()
+        return False
 
 
 def validate_registry_invariants(validator: InvariantValidator):
@@ -101,49 +99,35 @@ def validate_registry_invariants(validator: InvariantValidator):
     tools = registry.get_all_summaries()
 
     # Check: At least one tool exists
-    validator.check(
-        len(tools) > 0,
-        "Registry must contain at least one tool"
-    )
+    validator.check(len(tools) > 0, "Registry must contain at least one tool")
 
     # Check: All tool IDs are unique
     tool_ids = [tool.tool_id for tool in tools]
-    validator.check(
-        len(tool_ids) == len(set(tool_ids)),
-        "All tool IDs must be unique"
-    )
+    validator.check(len(tool_ids) == len(set(tool_ids)), "All tool IDs must be unique")
 
     # Check: All tools have valid risk levels
     valid_risks = {"safe", "sensitive", "dangerous"}
     for tool in tools:
         validator.check(
             tool.risk_level in valid_risks,
-            f"Tool {tool.tool_id} has invalid risk level: {tool.risk_level}"
+            f"Tool {tool.tool_id} has invalid risk level: {tool.risk_level}",
         )
 
     # Check: All tools have non-empty descriptions
     for tool in tools:
         validator.check(
-            len(tool.description_1line) > 0,
-            f"Tool {tool.tool_id} has empty description_1line"
+            len(tool.description_1line) > 0, f"Tool {tool.tool_id} has empty description_1line"
         )
 
     # Check: All tools have at least one tag
     for tool in tools:
-        validator.check(
-            len(tool.tags) > 0,
-            f"Tool {tool.tool_id} has no tags"
-        )
+        validator.check(len(tool.tags) > 0, f"Tool {tool.tool_id} has no tags")
 
     # Check: Bootstrap tools exist
     bootstrap_tools = registry.get_bootstrap_tools()
+    validator.check("search_tools" in bootstrap_tools, "Bootstrap tool 'search_tools' must exist")
     validator.check(
-        "search_tools" in bootstrap_tools,
-        "Bootstrap tool 'search_tools' must exist"
-    )
-    validator.check(
-        "get_tool_schema" in bootstrap_tools,
-        "Bootstrap tool 'get_tool_schema' must exist"
+        "get_tool_schema" in bootstrap_tools, "Bootstrap tool 'get_tool_schema' must exist"
     )
 
 
@@ -163,18 +147,12 @@ def validate_search_invariants(validator: InvariantValidator):
         return
 
     # Check: Search returns results
-    test_queries = [
-        "read files",
-        "write data",
-        "network operations"
-    ]
+    test_queries = ["read files", "write data", "network operations"]
 
     for query in test_queries:
         results = searcher.search(query, limit=5)
         validator.check(
-            len(results) > 0,
-            f"Search for '{query}' returned no results",
-            critical=False
+            len(results) > 0, f"Search for '{query}' returned no results", critical=False
         )
 
     # Check: Results are ranked (descending scores)
@@ -183,14 +161,14 @@ def validate_search_invariants(validator: InvariantValidator):
         scores = [r.relevance_score for r in results]
         validator.check(
             scores == sorted(scores, reverse=True),
-            "Search results must be ranked by descending relevance"
+            "Search results must be ranked by descending relevance",
         )
 
     # Check: All scores in valid range [0, 1]
     for result in results:
         validator.check(
             0.0 <= result.relevance_score <= 1.0,
-            f"Relevance score {result.relevance_score} out of range [0, 1]"
+            f"Relevance score {result.relevance_score} out of range [0, 1]",
         )
 
 
@@ -207,10 +185,7 @@ def validate_embedding_invariants(validator: InvariantValidator):
     # Check: All tools have embeddings
     for tool in tools:
         embedding = searcher.embedder.get_cached_embedding(tool.tool_id)
-        validator.check(
-            embedding is not None,
-            f"Tool {tool.tool_id} has no embedding"
-        )
+        validator.check(embedding is not None, f"Tool {tool.tool_id} has no embedding")
 
     # Check: Embeddings are normalized (unit length)
     for tool in tools:
@@ -220,7 +195,7 @@ def validate_embedding_invariants(validator: InvariantValidator):
             validator.check(
                 abs(magnitude - 1.0) < 0.01,  # Allow small floating point error
                 f"Tool {tool.tool_id} embedding not normalized (magnitude={magnitude:.3f})",
-                critical=False
+                critical=False,
             )
 
     # Check: Embedding dimension consistency
@@ -233,7 +208,7 @@ def validate_embedding_invariants(validator: InvariantValidator):
             if embedding:
                 validator.check(
                     len(embedding) == expected_dim,
-                    f"Tool {tool.tool_id} has inconsistent embedding dimension"
+                    f"Tool {tool.tool_id} has inconsistent embedding dimension",
                 )
 
 
@@ -250,11 +225,11 @@ def validate_security_properties(validator: InvariantValidator):
     for result in results:
         validator.check(
             not hasattr(result, "schema_min"),
-            f"Search result for {result.tool_id} leaks schema_min"
+            f"Search result for {result.tool_id} leaks schema_min",
         )
         validator.check(
             not hasattr(result, "schema_full"),
-            f"Search result for {result.tool_id} leaks schema_full"
+            f"Search result for {result.tool_id} leaks schema_full",
         )
 
     # Check: Dangerous tools are marked correctly
@@ -271,7 +246,7 @@ def validate_security_properties(validator: InvariantValidator):
             validator.check(
                 tool.risk_level in ["sensitive", "dangerous"],
                 f"Tool {tool.tool_id} appears dangerous but has risk_level={tool.risk_level}",
-                critical=False
+                critical=False,
             )
 
 

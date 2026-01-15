@@ -22,7 +22,6 @@ from src.meta_mcp.discovery_utils import format_search_results
 from src.meta_mcp.middleware import GovernanceMiddleware
 from src.meta_mcp.state import ExecutionMode
 
-
 # ============================================================================
 # TEST 1: remove_directory tool - path validation, recursive deletion
 # ============================================================================
@@ -34,7 +33,8 @@ def core_tools_module(tmp_path, monkeypatch):
     Load core_tools with an isolated WORKSPACE_ROOT for filesystem tests.
     """
     monkeypatch.setenv("WORKSPACE_ROOT", str(tmp_path))
-    import servers.core_tools as core_tools
+    from servers import core_tools
+
     importlib.reload(core_tools)
     Path(core_tools.WORKSPACE_ROOT).mkdir(parents=True, exist_ok=True)
     return core_tools
@@ -173,9 +173,7 @@ def test_remove_directory_recursive_deletion(core_tools_module):
 
 
 @pytest.mark.asyncio
-async def test_middleware_skips_lease_check_when_disabled(
-    mock_fastmcp_context
-):
+async def test_middleware_skips_lease_check_when_disabled(mock_fastmcp_context):
     """
     Test that middleware skips lease validation when ENABLE_LEASE_MANAGEMENT is False.
 
@@ -191,23 +189,32 @@ async def test_middleware_skips_lease_check_when_disabled(
         # Setup middleware and context for sensitive tool (write_file)
         middleware = GovernanceMiddleware()
         mock_fastmcp_context.request_context.tool_name = "write_file"
-        mock_fastmcp_context.request_context.arguments = {
-            "path": "test.txt",
-            "content": "test"
-        }
+        mock_fastmcp_context.request_context.arguments = {"path": "test.txt", "content": "test"}
 
         # Mock governance/elevation to avoid Redis
-        with patch("src.meta_mcp.middleware.governance_state.get_mode", new_callable=AsyncMock) as mock_mode, \
-             patch.object(middleware, "_check_elevation", new_callable=AsyncMock) as mock_check, \
-             patch.object(middleware, "_elicit_approval", new_callable=AsyncMock) as mock_elicit, \
-             patch("src.meta_mcp.middleware.lease_manager.validate", new_callable=AsyncMock) as mock_validate, \
-             patch("src.meta_mcp.middleware.lease_manager.consume", new_callable=AsyncMock) as mock_consume, \
-             patch("src.meta_mcp.middleware.audit_logger.log") as mock_log:
+        with (
+            patch(
+                "src.meta_mcp.middleware.governance_state.get_mode", new_callable=AsyncMock
+            ) as mock_mode,
+            patch.object(middleware, "_check_elevation", new_callable=AsyncMock) as mock_check,
+            patch.object(middleware, "_elicit_approval", new_callable=AsyncMock) as mock_elicit,
+            patch(
+                "src.meta_mcp.middleware.lease_manager.validate", new_callable=AsyncMock
+            ) as mock_validate,
+            patch(
+                "src.meta_mcp.middleware.lease_manager.consume", new_callable=AsyncMock
+            ) as mock_consume,
+            patch("src.meta_mcp.middleware.audit_logger.log") as mock_log,
+        ):
             mock_mode.return_value = ExecutionMode.PERMISSION
             mock_check.return_value = False
             mock_elicit.return_value = (True, 0, ["tool:write_file"])
-            mock_validate.side_effect = AssertionError("Lease validation should not run when disabled")
-            mock_consume.side_effect = AssertionError("Lease consumption should not run when disabled")
+            mock_validate.side_effect = AssertionError(
+                "Lease validation should not run when disabled"
+            )
+            mock_consume.side_effect = AssertionError(
+                "Lease consumption should not run when disabled"
+            )
 
             # Create mock call_next
             call_next = AsyncMock(return_value="success")
@@ -225,9 +232,7 @@ async def test_middleware_skips_lease_check_when_disabled(
 
 
 @pytest.mark.asyncio
-async def test_middleware_requires_lease_when_enabled(
-    mock_fastmcp_context
-):
+async def test_middleware_requires_lease_when_enabled(mock_fastmcp_context):
     """
     Test that middleware requires lease when ENABLE_LEASE_MANAGEMENT is True.
 
@@ -243,16 +248,15 @@ async def test_middleware_requires_lease_when_enabled(
         # Setup middleware and context for non-bootstrap tool
         middleware = GovernanceMiddleware()
         mock_fastmcp_context.request_context.tool_name = "write_file"
-        mock_fastmcp_context.request_context.arguments = {
-            "path": "test.txt",
-            "content": "test"
-        }
+        mock_fastmcp_context.request_context.arguments = {"path": "test.txt", "content": "test"}
 
         # Create mock call_next
         call_next = AsyncMock()
 
         # Mock lease validation to simulate missing lease (no Redis)
-        with patch("src.meta_mcp.middleware.lease_manager.validate", new_callable=AsyncMock) as mock_validate:
+        with patch(
+            "src.meta_mcp.middleware.lease_manager.validate", new_callable=AsyncMock
+        ) as mock_validate:
             mock_validate.return_value = None
 
             # Execute middleware WITHOUT lease (should fail)
@@ -271,9 +275,7 @@ async def test_middleware_requires_lease_when_enabled(
 
 
 @pytest.mark.asyncio
-async def test_middleware_always_skips_lease_for_bootstrap_tools(
-    mock_fastmcp_context
-):
+async def test_middleware_always_skips_lease_for_bootstrap_tools(mock_fastmcp_context):
     """
     Test that middleware always skips lease check for bootstrap tools.
 
@@ -290,11 +292,19 @@ async def test_middleware_always_skips_lease_for_bootstrap_tools(
         mock_fastmcp_context.request_context.tool_name = "search_tools"
         mock_fastmcp_context.request_context.arguments = {"query": "test"}
 
-        with patch("src.meta_mcp.middleware.governance_state.get_mode", new_callable=AsyncMock) as mock_mode, \
-             patch("src.meta_mcp.middleware.lease_manager.validate", new_callable=AsyncMock) as mock_validate, \
-             patch("src.meta_mcp.middleware.audit_logger.log") as mock_log:
+        with (
+            patch(
+                "src.meta_mcp.middleware.governance_state.get_mode", new_callable=AsyncMock
+            ) as mock_mode,
+            patch(
+                "src.meta_mcp.middleware.lease_manager.validate", new_callable=AsyncMock
+            ) as mock_validate,
+            patch("src.meta_mcp.middleware.audit_logger.log") as mock_log,
+        ):
             mock_mode.return_value = ExecutionMode.PERMISSION
-            mock_validate.side_effect = AssertionError("Lease validation should not run for bootstrap tools")
+            mock_validate.side_effect = AssertionError(
+                "Lease validation should not run for bootstrap tools"
+            )
 
             call_next = AsyncMock(return_value="search results")
             result = await middleware.on_call_tool(mock_fastmcp_context, call_next)
@@ -320,9 +330,7 @@ async def test_middleware_always_skips_lease_for_bootstrap_tools(
 
 
 @pytest.mark.asyncio
-async def test_middleware_extracts_client_id_from_session_id(
-    mock_fastmcp_context
-):
+async def test_middleware_extracts_client_id_from_session_id(mock_fastmcp_context):
     """
     Test that middleware extracts client_id from context.session_id.
 
@@ -331,21 +339,26 @@ async def test_middleware_extracts_client_id_from_session_id(
     # Setup middleware
     middleware = GovernanceMiddleware()
     mock_fastmcp_context.request_context.tool_name = "write_file"
-    mock_fastmcp_context.request_context.arguments = {
-        "path": "test.txt",
-        "content": "test"
-    }
+    mock_fastmcp_context.request_context.arguments = {"path": "test.txt", "content": "test"}
     mock_fastmcp_context.session_id = "test-session-abc123"
 
     dummy_lease = MagicMock(capability_token=None, calls_remaining=1)
 
     # Mock lease validation and governance to avoid Redis
-    with patch("src.meta_mcp.middleware.lease_manager.validate", new_callable=AsyncMock) as mock_validate, \
-         patch("src.meta_mcp.middleware.lease_manager.consume", new_callable=AsyncMock) as mock_consume, \
-         patch("src.meta_mcp.middleware.governance_state.get_mode", new_callable=AsyncMock) as mock_mode, \
-         patch.object(middleware, "_check_elevation", new_callable=AsyncMock) as mock_check, \
-         patch.object(middleware, "_elicit_approval", new_callable=AsyncMock) as mock_elicit, \
-         patch("src.meta_mcp.middleware.audit_logger.log") as mock_log:
+    with (
+        patch(
+            "src.meta_mcp.middleware.lease_manager.validate", new_callable=AsyncMock
+        ) as mock_validate,
+        patch(
+            "src.meta_mcp.middleware.lease_manager.consume", new_callable=AsyncMock
+        ) as mock_consume,
+        patch(
+            "src.meta_mcp.middleware.governance_state.get_mode", new_callable=AsyncMock
+        ) as mock_mode,
+        patch.object(middleware, "_check_elevation", new_callable=AsyncMock) as mock_check,
+        patch.object(middleware, "_elicit_approval", new_callable=AsyncMock) as mock_elicit,
+        patch("src.meta_mcp.middleware.audit_logger.log") as mock_log,
+    ):
         mock_validate.return_value = dummy_lease
         mock_consume.return_value = dummy_lease
         mock_mode.return_value = ExecutionMode.PERMISSION
@@ -363,56 +376,51 @@ async def test_middleware_extracts_client_id_from_session_id(
         ctx_arg = call_args[0][0]  # First positional arg is Context
 
         # Verify session_id is accessible from context
-        assert hasattr(ctx_arg, 'session_id')
+        assert hasattr(ctx_arg, "session_id")
         assert str(ctx_arg.session_id) == "test-session-abc123"
 
 
 @pytest.mark.asyncio
-async def test_supervisor_get_tool_schema_uses_session_id_for_client_id(
-    mock_fastmcp_context
-):
+async def test_supervisor_get_tool_schema_uses_session_id_for_client_id(mock_fastmcp_context):
     """
     Test that supervisor's get_tool_schema extracts client_id from ctx.session_id.
 
     Validates: Client identification in supervisor (line 367 in supervisor.py)
     """
     from src.meta_mcp.supervisor import get_tool_schema
-    from src.meta_mcp.registry import tool_registry
 
     # Setup context with session_id
     mock_context = MagicMock()
     mock_context.session_id = "supervisor-session-xyz789"
 
     # Mock registry to have a tool
-    with patch('src.meta_mcp.supervisor.tool_registry') as mock_registry:
+    with patch("src.meta_mcp.supervisor.tool_registry") as mock_registry:
         mock_registry.is_registered.return_value = True
         mock_registry.get.return_value = MagicMock(
-            risk_level="safe",
-            schema_full=None,
-            schema_min=None
+            risk_level="safe", schema_full=None, schema_min=None
         )
 
         # Mock _expose_tool to succeed
-        with patch('src.meta_mcp.supervisor._expose_tool', new_callable=AsyncMock) as mock_expose, \
-             patch('src.meta_mcp.supervisor.governance_state.get_mode', new_callable=AsyncMock) as mock_mode:
+        with (
+            patch("src.meta_mcp.supervisor._expose_tool", new_callable=AsyncMock) as mock_expose,
+            patch(
+                "src.meta_mcp.supervisor.governance_state.get_mode", new_callable=AsyncMock
+            ) as mock_mode,
+        ):
             mock_expose.return_value = True
             mock_mode.return_value = ExecutionMode.PERMISSION
 
             # Mock lease_manager.grant to capture client_id
             from src.meta_mcp.leases import lease_manager
-            with patch.object(lease_manager, 'grant', new_callable=AsyncMock) as mock_grant:
-                mock_grant.return_value = MagicMock(
-                    tool_id="test_tool",
-                    calls_remaining=3
-                )
+
+            with patch.object(lease_manager, "grant", new_callable=AsyncMock) as mock_grant:
+                mock_grant.return_value = MagicMock(tool_id="test_tool", calls_remaining=3)
 
                 # Mock mcp.get_tool to return a tool
-                with patch('src.meta_mcp.supervisor.mcp') as mock_mcp:
+                with patch("src.meta_mcp.supervisor.mcp") as mock_mcp:
                     mock_tool = MagicMock()
                     mock_tool.to_mcp_tool.return_value = MagicMock(
-                        name="test_tool",
-                        description="Test tool",
-                        inputSchema={"type": "object"}
+                        name="test_tool", description="Test tool", inputSchema={"type": "object"}
                     )
                     mock_mcp.get_tool = AsyncMock(return_value=mock_tool)
 
@@ -425,13 +433,13 @@ async def test_supervisor_get_tool_schema_uses_session_id_for_client_id(
                         grant_kwargs = mock_grant.call_args[1]
 
                         # client_id should be str(ctx.session_id)
-                        assert grant_kwargs['client_id'] == "supervisor-session-xyz789"
+                        assert grant_kwargs["client_id"] == "supervisor-session-xyz789"
 
-                    except Exception as e:
+                    except Exception:
                         # If it fails for other reasons (like missing mocks), still check the grant call
                         if mock_grant.called:
                             grant_kwargs = mock_grant.call_args[1]
-                            assert grant_kwargs['client_id'] == "supervisor-session-xyz789"
+                            assert grant_kwargs["client_id"] == "supervisor-session-xyz789"
 
 
 @pytest.mark.asyncio
@@ -444,35 +452,33 @@ async def test_supervisor_handles_missing_context_gracefully():
     from src.meta_mcp.supervisor import get_tool_schema
 
     # Mock registry
-    with patch('src.meta_mcp.supervisor.tool_registry') as mock_registry:
+    with patch("src.meta_mcp.supervisor.tool_registry") as mock_registry:
         mock_registry.is_registered.return_value = True
         mock_registry.get.return_value = MagicMock(
-            risk_level="safe",
-            schema_full=None,
-            schema_min=None
+            risk_level="safe", schema_full=None, schema_min=None
         )
 
         # Mock _expose_tool
-        with patch('src.meta_mcp.supervisor._expose_tool', new_callable=AsyncMock) as mock_expose, \
-             patch('src.meta_mcp.supervisor.governance_state.get_mode', new_callable=AsyncMock) as mock_mode:
+        with (
+            patch("src.meta_mcp.supervisor._expose_tool", new_callable=AsyncMock) as mock_expose,
+            patch(
+                "src.meta_mcp.supervisor.governance_state.get_mode", new_callable=AsyncMock
+            ) as mock_mode,
+        ):
             mock_expose.return_value = True
             mock_mode.return_value = ExecutionMode.PERMISSION
 
             # Mock lease_manager.grant
             from src.meta_mcp.leases import lease_manager
-            with patch.object(lease_manager, 'grant', new_callable=AsyncMock) as mock_grant:
-                mock_grant.return_value = MagicMock(
-                    tool_id="test_tool",
-                    calls_remaining=3
-                )
+
+            with patch.object(lease_manager, "grant", new_callable=AsyncMock) as mock_grant:
+                mock_grant.return_value = MagicMock(tool_id="test_tool", calls_remaining=3)
 
                 # Mock mcp.get_tool
-                with patch('src.meta_mcp.supervisor.mcp') as mock_mcp:
+                with patch("src.meta_mcp.supervisor.mcp") as mock_mcp:
                     mock_tool = MagicMock()
                     mock_tool.to_mcp_tool.return_value = MagicMock(
-                        name="test_tool",
-                        description="Test tool",
-                        inputSchema={"type": "object"}
+                        name="test_tool", description="Test tool", inputSchema={"type": "object"}
                     )
                     mock_mcp.get_tool = AsyncMock(return_value=mock_tool)
 
@@ -485,19 +491,18 @@ async def test_supervisor_handles_missing_context_gracefully():
                         grant_kwargs = mock_grant.call_args[1]
 
                         # Should use "unknown_client" as fail-safe
-                        assert grant_kwargs['client_id'] == "unknown_client"
+                        assert grant_kwargs["client_id"] == "unknown_client"
 
                     except Exception:
                         # Even if other parts fail, check the grant call used fail-safe
                         if mock_grant.called:
                             grant_kwargs = mock_grant.call_args[1]
-                            assert grant_kwargs['client_id'] == "unknown_client"
+                            assert grant_kwargs["client_id"] == "unknown_client"
 
 
 # ============================================================================
 # TEST 4: format_search_results - works with ToolCandidate results
 # ============================================================================
-
 
 def test_format_search_results_handles_tool_candidate():
     """
@@ -560,6 +565,7 @@ def test_format_search_results_mixed_risk_levels():
 
     Validates: Risk level to sensitivity mapping logic
     """
+
     # Create tools with different risk levels
     from src.meta_mcp.registry.models import ToolCandidate
 
@@ -612,13 +618,13 @@ def test_admin_tools_imports_without_syspath():
 
     try:
         # Import admin_tools module (should use package-safe imports)
-        import servers.admin_tools as admin_tools
+        from servers import admin_tools
 
         # Verify imports are successful
-        assert hasattr(admin_tools, 'admin_server')
-        assert hasattr(admin_tools, 'set_governance_mode')
-        assert hasattr(admin_tools, 'get_governance_status')
-        assert hasattr(admin_tools, 'revoke_all_elevations')
+        assert hasattr(admin_tools, "admin_server")
+        assert hasattr(admin_tools, "set_governance_mode")
+        assert hasattr(admin_tools, "get_governance_status")
+        assert hasattr(admin_tools, "revoke_all_elevations")
 
         # Verify sys.path was not mutated during import
         assert sys.path == original_syspath, "sys.path was mutated during import"
@@ -638,15 +644,18 @@ def test_admin_tools_imports_use_meta_mcp_package():
     source_code = admin_tools_path.read_text()
 
     # Verify imports use "from meta_mcp" (not "from src.meta_mcp")
-    assert "from meta_mcp.audit import" in source_code, \
+    assert "from meta_mcp.audit import" in source_code, (
         "Should use 'from meta_mcp.audit' not 'from src.meta_mcp.audit'"
+    )
 
-    assert "from meta_mcp.state import" in source_code, \
+    assert "from meta_mcp.state import" in source_code, (
         "Should use 'from meta_mcp.state' not 'from src.meta_mcp.state'"
+    )
 
     # Verify NO "from src.meta_mcp" imports exist
-    assert "from src.meta_mcp" not in source_code, \
+    assert "from src.meta_mcp" not in source_code, (
         "Should not use 'from src.meta_mcp' - package should be installed via 'pip install -e .'"
+    )
 
 
 def test_admin_tools_governance_components_accessible():
@@ -656,23 +665,29 @@ def test_admin_tools_governance_components_accessible():
     Validates: Imports resolve to actual usable objects
     """
     try:
-        from servers.admin_tools import admin_server, audit_logger, governance_state, ExecutionMode, AuditEvent
+        from servers.admin_tools import (
+            AuditEvent,
+            ExecutionMode,
+            admin_server,
+            audit_logger,
+            governance_state,
+        )
 
         # Verify audit_logger has expected methods
-        assert hasattr(audit_logger, 'log_mode_change')
+        assert hasattr(audit_logger, "log_mode_change")
         assert callable(audit_logger.log_mode_change)
 
         # Verify governance_state has expected methods
-        assert hasattr(governance_state, 'get_mode')
-        assert hasattr(governance_state, 'set_mode')
+        assert hasattr(governance_state, "get_mode")
+        assert hasattr(governance_state, "set_mode")
 
         # Verify ExecutionMode enum
-        assert hasattr(ExecutionMode, 'PERMISSION')
-        assert hasattr(ExecutionMode, 'READ_ONLY')
-        assert hasattr(ExecutionMode, 'BYPASS')
+        assert hasattr(ExecutionMode, "PERMISSION")
+        assert hasattr(ExecutionMode, "READ_ONLY")
+        assert hasattr(ExecutionMode, "BYPASS")
 
         # Verify AuditEvent enum
-        assert hasattr(AuditEvent, 'ELEVATIONS_REVOKED')
+        assert hasattr(AuditEvent, "ELEVATIONS_REVOKED")
 
     except ImportError as e:
         pytest.fail(f"Failed to import governance components from admin_tools: {e}")
@@ -695,8 +710,12 @@ async def test_admin_tools_functions_use_imported_components():
         async def scan(self, cursor=0, match=None, count=100):
             return 0, []
 
-    with patch("servers.admin_tools.governance_state.get_mode", new_callable=AsyncMock) as mock_mode, \
-         patch("servers.admin_tools.governance_state._get_redis", new_callable=AsyncMock) as mock_redis:
+    with (
+        patch("servers.admin_tools.governance_state.get_mode", new_callable=AsyncMock) as mock_mode,
+        patch(
+            "servers.admin_tools.governance_state._get_redis", new_callable=AsyncMock
+        ) as mock_redis,
+    ):
         mock_mode.return_value = ExecutionMode.PERMISSION
         mock_redis.return_value = DummyRedis()
 
@@ -714,9 +733,7 @@ async def test_admin_tools_functions_use_imported_components():
 
 
 @pytest.mark.asyncio
-async def test_todo_list_2_integration(
-    mock_fastmcp_context
-):
+async def test_todo_list_2_integration(mock_fastmcp_context):
     """
     Integration test validating all TODO List 2 changes work together.
 
@@ -729,10 +746,12 @@ async def test_todo_list_2_integration(
     """
     # 1. Verify remove_directory exists and is importable
     from servers.core_tools import remove_directory
+
     assert hasattr(remove_directory, "fn")
 
     # 2. Verify remove_directory is registered in middleware's SENSITIVE_TOOLS
     from src.meta_mcp.middleware import SENSITIVE_TOOLS
+
     assert "remove_directory" in SENSITIVE_TOOLS
 
     # 3. Test middleware uses session_id for client tracking
@@ -747,10 +766,14 @@ async def test_todo_list_2_integration(
 
     try:
         # Mock elicit_approval to verify session tracking
-        with patch.object(middleware, '_elicit_approval', new_callable=AsyncMock) as mock_elicit, \
-             patch.object(middleware, "_check_elevation", new_callable=AsyncMock) as mock_check, \
-             patch("src.meta_mcp.middleware.governance_state.get_mode", new_callable=AsyncMock) as mock_mode, \
-             patch("src.meta_mcp.middleware.audit_logger.log") as mock_log:
+        with (
+            patch.object(middleware, "_elicit_approval", new_callable=AsyncMock) as mock_elicit,
+            patch.object(middleware, "_check_elevation", new_callable=AsyncMock) as mock_check,
+            patch(
+                "src.meta_mcp.middleware.governance_state.get_mode", new_callable=AsyncMock
+            ) as mock_mode,
+            patch("src.meta_mcp.middleware.audit_logger.log") as mock_log,
+        ):
             mock_elicit.return_value = (True, 0, ["tool:remove_directory"])
             mock_check.return_value = False
             mock_mode.return_value = ExecutionMode.PERMISSION
@@ -770,6 +793,7 @@ async def test_todo_list_2_integration(
 
     # 4. Test format_search_results with registry search (config/tools.yaml)
     from src.meta_mcp.registry import tool_registry as yaml_registry
+
     results = yaml_registry.search("remove")
 
     # Should find remove_directory
@@ -783,6 +807,7 @@ async def test_todo_list_2_integration(
 
     # 5. Verify admin_tools imports work
     from servers.admin_tools import admin_server, set_governance_mode
+
     assert admin_server is not None
     assert hasattr(set_governance_mode, "fn")
     assert callable(set_governance_mode.fn)

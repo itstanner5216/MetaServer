@@ -11,11 +11,9 @@ Usage:
     python scripts/check_phase_status.py [--verbose]
 """
 
-import sys
+import argparse
 import subprocess
 from pathlib import Path
-from typing import List, Tuple, Dict
-import argparse
 
 # Phase requirements
 PHASES = {
@@ -115,7 +113,7 @@ PHASES = {
 }
 
 
-def check_files_exist(phase: int) -> Tuple[bool, List[str]]:
+def check_files_exist(phase: int) -> tuple[bool, list[str]]:
     """Check if all required files for a phase exist."""
     missing = []
     for file in PHASES[phase]["files"]:
@@ -124,7 +122,7 @@ def check_files_exist(phase: int) -> Tuple[bool, List[str]]:
     return len(missing) == 0, missing
 
 
-def check_tests_exist(phase: int) -> Tuple[bool, List[str]]:
+def check_tests_exist(phase: int) -> tuple[bool, list[str]]:
     """Check if test files exist."""
     missing = []
     for test in PHASES[phase]["tests"]:
@@ -133,7 +131,7 @@ def check_tests_exist(phase: int) -> Tuple[bool, List[str]]:
     return len(missing) == 0, missing
 
 
-def run_tests(phase: int, verbose: bool = False) -> Tuple[bool, str]:
+def run_tests(phase: int, verbose: bool = False) -> tuple[bool, str]:
     """Run tests for a phase."""
     tests = PHASES[phase]["tests"]
 
@@ -142,20 +140,14 @@ def run_tests(phase: int, verbose: bool = False) -> Tuple[bool, str]:
 
     try:
         cmd = ["pytest"] + tests + ["-v" if verbose else "-q"]
-        result = subprocess.run(
-            cmd,
-            capture_output=True,
-            text=True,
-            timeout=30
-        )
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
 
         if result.returncode == 0:
             return True, "All tests passed"
-        elif result.returncode == 5:
+        if result.returncode == 5:
             # pytest exit code 5 = no tests collected (all skipped)
             return None, "Tests exist but skipped (not implemented)"
-        else:
-            return False, f"Tests failed (exit code {result.returncode})"
+        return False, f"Tests failed (exit code {result.returncode})"
 
     except subprocess.TimeoutExpired:
         return False, "Tests timed out"
@@ -163,7 +155,7 @@ def run_tests(phase: int, verbose: bool = False) -> Tuple[bool, str]:
         return False, f"Test error: {e}"
 
 
-def get_phase_status(phase: int, verbose: bool = False) -> Dict:
+def get_phase_status(phase: int, verbose: bool = False) -> dict:
     """Get complete status for a phase."""
     files_ok, missing_files = check_files_exist(phase)
     tests_ok, missing_tests = check_tests_exist(phase)
@@ -201,7 +193,7 @@ def get_phase_status(phase: int, verbose: bool = False) -> Dict:
     return status
 
 
-def print_status(status: Dict, verbose: bool = False):
+def print_status(status: dict, verbose: bool = False):
     """Print phase status."""
     phase = status["phase"]
     name = status["name"]
@@ -270,7 +262,9 @@ def main():
         print()
         print("=" * 50)
         complete = sum(1 for s in statuses if s["overall"] == "COMPLETE")
-        partial = sum(1 for s in statuses if "PARTIAL" in s["overall"] or "FILES ONLY" in s["overall"])
+        partial = sum(
+            1 for s in statuses if "PARTIAL" in s["overall"] or "FILES ONLY" in s["overall"]
+        )
         not_started = sum(1 for s in statuses if s["overall"] == "NOT STARTED")
 
         print(f"Summary: {complete}/10 complete, {partial} partial, {not_started} not started")

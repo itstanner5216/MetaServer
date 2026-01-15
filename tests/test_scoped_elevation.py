@@ -1,13 +1,12 @@
 """Test TTL-based scoped elevation cache (Invariant #6)."""
 
 import asyncio
+from unittest.mock import AsyncMock
 
 import pytest
-from unittest.mock import AsyncMock
 
 from src.meta_mcp.middleware import GovernanceMiddleware
 from src.meta_mcp.state import governance_state
-
 
 # ============================================================================
 # ELEVATION GRANT AND AUTO-APPROVAL TESTS
@@ -15,6 +14,7 @@ from src.meta_mcp.state import governance_state
 
 
 @pytest.mark.asyncio
+@pytest.mark.requires_redis
 async def test_elevation_grants_on_approval(
     governance_in_permission,
     mock_fastmcp_context,
@@ -55,6 +55,7 @@ async def test_elevation_grants_on_approval(
 
 
 @pytest.mark.asyncio
+@pytest.mark.requires_redis
 async def test_elevation_auto_approves_same_path(
     governance_in_permission,
     mock_fastmcp_context,
@@ -97,6 +98,7 @@ async def test_elevation_auto_approves_same_path(
 
 
 @pytest.mark.asyncio
+@pytest.mark.requires_redis
 async def test_elevation_requires_new_approval_different_path(
     governance_in_permission,
     mock_fastmcp_context,
@@ -144,6 +146,7 @@ async def test_elevation_requires_new_approval_different_path(
 
 
 @pytest.mark.asyncio
+@pytest.mark.requires_redis
 async def test_elevation_expires_after_ttl(
     governance_in_permission,
     mock_fastmcp_context,
@@ -194,6 +197,7 @@ async def test_elevation_expires_after_ttl(
 
 
 @pytest.mark.asyncio
+@pytest.mark.requires_redis
 async def test_elevation_scoped_to_session(
     governance_in_permission,
     mock_fastmcp_context,
@@ -281,6 +285,7 @@ async def test_elevation_hash_computation():
 
 
 @pytest.mark.asyncio
+@pytest.mark.requires_redis
 async def test_elevation_mandatory_ttl(redis_client):
     """
     Test that granting elevation with TTL=0 should fail.

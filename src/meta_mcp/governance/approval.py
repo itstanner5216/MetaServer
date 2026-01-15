@@ -13,8 +13,7 @@ import time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from enum import Enum
-from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from loguru import logger
 
@@ -45,10 +44,10 @@ class ApprovalRequest:
     request_id: str
     tool_name: str
     message: str
-    required_scopes: List[str]
-    artifacts_path: Optional[str] = None
+    required_scopes: list[str]
+    artifacts_path: str | None = None
     timeout_seconds: int = 300
-    context_metadata: Dict[str, Any] = field(default_factory=dict)
+    context_metadata: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass
@@ -66,10 +65,10 @@ class ApprovalResponse:
 
     request_id: str
     decision: ApprovalDecision
-    selected_scopes: List[str] = field(default_factory=list)
+    selected_scopes: list[str] = field(default_factory=list)
     lease_seconds: int = 0
     timestamp: float = field(default_factory=time.time)
-    error_message: Optional[str] = None
+    error_message: str | None = None
 
     def is_approved(self) -> bool:
         """Check if request was approved with at least one scope."""
@@ -98,7 +97,6 @@ class ApprovalProvider(ABC):
             TimeoutError: If request times out
             Exception: On provider-specific errors
         """
-        pass
 
     @abstractmethod
     async def is_available(self) -> bool:
@@ -107,7 +105,6 @@ class ApprovalProvider(ABC):
         Returns:
             True if provider can handle requests, False otherwise
         """
-        pass
 
     @abstractmethod
     def get_name(self) -> str:
@@ -116,7 +113,6 @@ class ApprovalProvider(ABC):
         Returns:
             Provider name (e.g., "DBus GUI", "FastMCP Elicit")
         """
-        pass
 
 
 class DBusGUIProvider(ApprovalProvider):
@@ -133,7 +129,7 @@ class DBusGUIProvider(ApprovalProvider):
         self._bus_name = "org.gnome.Shell.Extensions.MetaMCP"
         self._object_path = "/org/gnome/Shell/Extensions/MetaMCP"
         self._interface_name = "org.gnome.Shell.Extensions.MetaMCP"
-        self._available: Optional[bool] = None
+        self._available: bool | None = None
 
     async def is_available(self) -> bool:
         """Check if DBus GUI is available.
@@ -292,11 +288,21 @@ Operation: {request.message}
 Required Permissions:
 {scope_list}
 
-Do you approve this operation? (yes/no)
+Respond with JSON or key=value pairs including decision, selected_scopes, lease_seconds.
+
+JSON example:
+{{"decision": "approved", "selected_scopes": [{", ".join([f'"{scope}"' for scope in request.required_scopes])}], "lease_seconds": 300}}
+
+Key-value example (line or semicolon separated):
+decision=approved
+selected_scopes={", ".join(request.required_scopes)}
+lease_seconds=300
+
+Use lease_seconds=0 for single-use approval.
 """
 
             # Elicit approval from user
-            response_text = await asyncio.wait_for(
+            response_payload = await asyncio.wait_for(
                 self._context.elicit(elicit_message),
                 timeout=request.timeout_seconds,
             )
@@ -312,13 +318,12 @@ Do you approve this operation? (yes/no)
                     lease_seconds=300,  # Default 5 minute lease
                     timestamp=time.time(),
                 )
-            else:
-                return ApprovalResponse(
-                    request_id=request.request_id,
-                    decision=ApprovalDecision.DENIED,
-                    selected_scopes=[],
-                    timestamp=time.time(),
-                )
+            return ApprovalResponse(
+                request_id=request.request_id,
+                decision=ApprovalDecision.DENIED,
+                selected_scopes=[],
+                timestamp=time.time(),
+            )
 
         except asyncio.TimeoutError:
             return ApprovalResponse(
@@ -339,6 +344,131 @@ Do you approve this operation? (yes/no)
     def get_name(self) -> str:
         """Get provider name."""
         return "FastMCP Elicit"
+
+    @staticmethod
+    def _parse_approval_payload(
+        request: ApprovalRequest, response_payload: Any
+    ) -> ApprovalResponse:
+        payload = response_payload
+        if hasattr(response_payload, "data"):
+            payload = response_payload.data
+
+        parsed = FastMCPElicitProvider._parse_structured_response(payload)
+        if not parsed:
+            return ApprovalResponse(
+                request_id=request.request_id,
+                decision=ApprovalDecision.ERROR,
+                selected_scopes=[],
+                error_message="Invalid approval response format",
+            )
+
+        decision = FastMCPElicitProvider._parse_decision(parsed.get("decision"))
+        selected_scopes = FastMCPElicitProvider._parse_scopes(parsed.get("selected_scopes"))
+        lease_seconds = FastMCPElicitProvider._parse_lease_seconds(parsed.get("lease_seconds"))
+
+        if decision is None:
+            decision = (
+                ApprovalDecision.APPROVED
+                if selected_scopes
+                else ApprovalDecision.DENIED
+            )
+
+        return ApprovalResponse(
+            request_id=request.request_id,
+            decision=decision,
+            selected_scopes=selected_scopes,
+            lease_seconds=lease_seconds,
+            timestamp=time.time(),
+        )
+
+    @staticmethod
+    def _parse_structured_response(payload: Any) -> Dict[str, Any]:
+        if payload is None:
+            return {}
+
+        if isinstance(payload, dict):
+            return {str(key).lower(): value for key, value in payload.items()}
+
+        if isinstance(payload, str):
+            stripped = payload.strip()
+            if not stripped:
+                return {}
+            try:
+                parsed_json = json.loads(stripped)
+                if isinstance(parsed_json, dict):
+                    return {
+                        str(key).lower(): value for key, value in parsed_json.items()
+                    }
+            except json.JSONDecodeError:
+                pass
+            return FastMCPElicitProvider._parse_key_value_response(stripped)
+
+        return {}
+
+    @staticmethod
+    def _parse_key_value_response(payload: str) -> Dict[str, Any]:
+        parsed: Dict[str, Any] = {}
+        for chunk in payload.split(";"):
+            for line in chunk.splitlines():
+                if not line.strip():
+                    continue
+                if "=" in line:
+                    key, value = line.split("=", 1)
+                elif ":" in line:
+                    key, value = line.split(":", 1)
+                else:
+                    continue
+                parsed[key.strip().lower()] = value.strip()
+        return parsed
+
+    @staticmethod
+    def _parse_decision(raw_value: Any) -> Optional[ApprovalDecision]:
+        if raw_value is None:
+            return None
+        normalized = str(raw_value).strip().lower()
+        if normalized in {"approved", "approve", "yes", "y"}:
+            return ApprovalDecision.APPROVED
+        if normalized in {"denied", "deny", "no", "n"}:
+            return ApprovalDecision.DENIED
+        if normalized == "timeout":
+            return ApprovalDecision.TIMEOUT
+        if normalized == "error":
+            return ApprovalDecision.ERROR
+        return None
+
+    @staticmethod
+    def _parse_scopes(raw_value: Any) -> List[str]:
+        if raw_value is None:
+            return []
+        if isinstance(raw_value, list):
+            return [str(scope).strip() for scope in raw_value if str(scope).strip()]
+        if isinstance(raw_value, str):
+            stripped = raw_value.strip()
+            if not stripped:
+                return []
+            if stripped.startswith("["):
+                try:
+                    parsed_json = json.loads(stripped)
+                    if isinstance(parsed_json, list):
+                        return [
+                            str(scope).strip()
+                            for scope in parsed_json
+                            if str(scope).strip()
+                        ]
+                except json.JSONDecodeError:
+                    pass
+            return [scope.strip() for scope in stripped.split(",") if scope.strip()]
+        return [str(raw_value).strip()] if str(raw_value).strip() else []
+
+    @staticmethod
+    def _parse_lease_seconds(raw_value: Any) -> int:
+        if raw_value is None:
+            return 0
+        try:
+            lease_seconds = int(float(raw_value))
+        except (TypeError, ValueError):
+            return 0
+        return max(0, lease_seconds)
 
 
 class SystemdFallbackProvider(ApprovalProvider):
@@ -380,7 +510,9 @@ class SystemdFallbackProvider(ApprovalProvider):
         try:
             # Format prompt message
             scope_list = ", ".join(request.required_scopes)
-            prompt = f"Approve {request.tool_name}? ({request.message}) [Scopes: {scope_list}] (yes/no)"
+            prompt = (
+                f"Approve {request.tool_name}? ({request.message}) [Scopes: {scope_list}] (yes/no)"
+            )
 
             # Use systemd-ask-password
             proc = await asyncio.create_subprocess_exec(
@@ -403,13 +535,12 @@ class SystemdFallbackProvider(ApprovalProvider):
                     lease_seconds=300,  # Default 5 minute lease
                     timestamp=time.time(),
                 )
-            else:
-                return ApprovalResponse(
-                    request_id=request.request_id,
-                    decision=ApprovalDecision.DENIED,
-                    selected_scopes=[],
-                    timestamp=time.time(),
-                )
+            return ApprovalResponse(
+                request_id=request.request_id,
+                decision=ApprovalDecision.DENIED,
+                selected_scopes=[],
+                timestamp=time.time(),
+            )
 
         except Exception as e:
             logger.error(f"systemd fallback approval failed: {e}")
@@ -433,7 +564,7 @@ class ApprovalProviderFactory:
 
     @staticmethod
     async def create_provider(
-        provider_name: Optional[str] = None, context: Any = None
+        provider_name: str | None = None, context: Any = None
     ) -> ApprovalProvider:
         """Create approval provider based on configuration.
 
@@ -473,10 +604,9 @@ class ApprovalProviderFactory:
                 if await explicit_provider.is_available():
                     logger.info(f"Using explicit approval provider: {explicit_provider.get_name()}")
                     return explicit_provider
-                else:
-                    logger.warning(
-                        f"Requested provider {preference} not available, falling back to auto"
-                    )
+                logger.warning(
+                    f"Requested provider {preference} not available, falling back to auto"
+                )
 
         # Auto-select first available provider
         for provider in providers:
@@ -491,7 +621,7 @@ class ApprovalProviderFactory:
 
 
 # Singleton instance
-_approval_provider: Optional[ApprovalProvider] = None
+_approval_provider: ApprovalProvider | None = None
 
 
 async def get_approval_provider(context: Any = None) -> ApprovalProvider:

@@ -1,13 +1,13 @@
 """Test fail-safe defaults (Invariant #6, Task 16)."""
 
+from unittest.mock import AsyncMock, patch
+
 import pytest
 from fastmcp.exceptions import ToolError
-from unittest.mock import AsyncMock, MagicMock, patch
 from redis import asyncio as aioredis
 
 from src.meta_mcp.middleware import GovernanceMiddleware
 from src.meta_mcp.state import ExecutionMode, governance_state
-
 
 # ============================================================================
 # REDIS FAILURE TESTS
@@ -64,6 +64,7 @@ async def test_redis_down_never_returns_bypass():
 
 
 @pytest.mark.asyncio
+@pytest.mark.requires_redis
 async def test_elicitation_error_blocks(
     governance_in_permission,
     mock_fastmcp_context,
@@ -110,6 +111,7 @@ async def test_elicitation_error_blocks(
 
 
 @pytest.mark.asyncio
+@pytest.mark.requires_redis
 async def test_invalid_mode_defaults_to_permission(redis_client):
     """
     Test that invalid mode string in Redis returns PERMISSION.

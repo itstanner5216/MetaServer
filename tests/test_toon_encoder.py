@@ -1,6 +1,7 @@
 """Tests for TOON encoder functionality."""
 
 import pytest
+
 from src.meta_mcp.toon import encode_output
 
 
@@ -45,13 +46,7 @@ class TestBasicEncoding:
 
     def test_non_array_data_unchanged(self):
         """Non-array data should pass through unchanged."""
-        data = {
-            "message": "Hello",
-            "count": 42,
-            "active": True,
-            "score": 3.14,
-            "nullable": None
-        }
+        data = {"message": "Hello", "count": 42, "active": True, "score": 3.14, "nullable": None}
         result = encode_output(data, threshold=5)
 
         assert result == data
@@ -80,13 +75,7 @@ class TestNestedStructures:
 
     def test_nested_arrays_in_dict(self):
         """Nested arrays in dictionaries should be recursively encoded."""
-        data = {
-            "level1": {
-                "level2": {
-                    "items": ["a", "b", "c", "d", "e", "f"]
-                }
-            }
-        }
+        data = {"level1": {"level2": {"items": ["a", "b", "c", "d", "e", "f"]}}}
         result = encode_output(data, threshold=5)
 
         assert result["level1"]["level2"]["items"]["__toon"] is True
@@ -98,7 +87,7 @@ class TestNestedStructures:
             "matrix": [
                 ["a", "b", "c", "d", "e", "f"],
                 ["1", "2", "3"],
-                ["x", "y", "z", "p", "q", "r", "s"]
+                ["x", "y", "z", "p", "q", "r", "s"],
             ]
         }
         result = encode_output(data, threshold=5)
@@ -125,12 +114,9 @@ class TestNestedStructures:
             "users": [
                 {"id": 1, "tags": ["a", "b", "c", "d", "e", "f"]},
                 {"id": 2, "tags": ["x", "y"]},
-                {"id": 3, "tags": ["p", "q", "r", "s", "t", "u", "v"]}
+                {"id": 3, "tags": ["p", "q", "r", "s", "t", "u", "v"]},
             ],
-            "metadata": {
-                "count": 3,
-                "active": True
-            }
+            "metadata": {"count": 3, "active": True},
         }
         result = encode_output(data, threshold=5)
 
@@ -268,34 +254,14 @@ class TestEdgeCases:
 
     def test_deeply_nested_structure(self):
         """Deeply nested structures should be handled correctly."""
-        data = {
-            "a": {
-                "b": {
-                    "c": {
-                        "d": {
-                            "e": ["i1", "i2", "i3", "i4", "i5", "i6"]
-                        }
-                    }
-                }
-            }
-        }
+        data = {"a": {"b": {"c": {"d": {"e": ["i1", "i2", "i3", "i4", "i5", "i6"]}}}}}
         result = encode_output(data, threshold=5)
 
         assert result["a"]["b"]["c"]["d"]["e"]["__toon"] is True
 
     def test_mixed_types_in_array(self):
         """Arrays with mixed types should be handled correctly."""
-        data = {
-            "mixed": [
-                "string",
-                42,
-                3.14,
-                True,
-                None,
-                {"nested": "dict"},
-                ["nested", "list"]
-            ]
-        }
+        data = {"mixed": ["string", 42, 3.14, True, None, {"nested": "dict"}, ["nested", "list"]]}
         result = encode_output(data, threshold=5)
 
         # Array exceeds threshold
@@ -312,7 +278,7 @@ class TestEdgeCases:
                 {"id": 3, "tags": ["m", "n", "o", "s", "t", "u"]},
                 {"id": 4, "tags": ["1", "2", "3", "4", "5", "6"]},
                 {"id": 5, "tags": ["w", "x", "y", "z", "a", "b"]},
-                {"id": 6, "tags": ["p", "q", "r", "s", "t", "u"]}
+                {"id": 6, "tags": ["p", "q", "r", "s", "t", "u"]},
             ]
         }
         result = encode_output(data, threshold=5)
@@ -336,12 +302,6 @@ class TestEdgeCases:
 
     def test_dict_with_no_arrays(self):
         """Dictionary with no arrays should be unchanged."""
-        data = {
-            "name": "test",
-            "value": 42,
-            "nested": {
-                "key": "value"
-            }
-        }
+        data = {"name": "test", "value": 42, "nested": {"key": "value"}}
         result = encode_output(data, threshold=5)
         assert result == data
