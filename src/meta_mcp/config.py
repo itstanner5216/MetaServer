@@ -42,6 +42,17 @@ class Config:
         except ValueError as e:
             raise ValueError(f"Invalid PORT environment variable: {e}")
 
+    @staticmethod
+    def _parse_non_negative_int(value: str, name: str) -> int:
+        """Parse and validate a non-negative integer environment variable."""
+        try:
+            parsed = int(value)
+            if parsed < 0:
+                raise ValueError(f"{name} must be >= 0, got {parsed}")
+            return parsed
+        except ValueError as e:
+            raise ValueError(f"Invalid {name} environment variable: {e}")
+
     # ========================================================================
     # Server Configuration
     # ========================================================================
@@ -49,6 +60,14 @@ class Config:
     PORT: int = _parse_port.__func__(os.getenv("PORT", "8001"))
     WORKSPACE_ROOT: str = os.getenv("WORKSPACE_ROOT", "./workspace")
     AUDIT_LOG_PATH: str = os.getenv("AUDIT_LOG_PATH", "./audit.jsonl")
+    AUDIT_LOG_MAX_BYTES: int = _parse_non_negative_int.__func__(
+        os.getenv("AUDIT_LOG_MAX_BYTES", "10485760"),
+        "AUDIT_LOG_MAX_BYTES",
+    )
+    AUDIT_LOG_BACKUP_COUNT: int = _parse_non_negative_int.__func__(
+        os.getenv("AUDIT_LOG_BACKUP_COUNT", "5"),
+        "AUDIT_LOG_BACKUP_COUNT",
+    )
 
     # ========================================================================
     # Redis Configuration
