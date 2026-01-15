@@ -3,7 +3,6 @@
 import asyncio
 import json
 from datetime import datetime, timezone
-from typing import Optional
 
 from loguru import logger
 from redis import asyncio as aioredis
@@ -70,8 +69,8 @@ class LeaseManager:
         ttl_seconds: int,
         calls_remaining: int,
         mode_at_issue: str,
-        capability_token: Optional[str] = None,
-    ) -> Optional[ToolLease]:
+        capability_token: str | None = None,
+    ) -> ToolLease | None:
         """
         Grant a new lease.
 
@@ -141,9 +140,7 @@ class LeaseManager:
             logger.error(f"Unexpected error in grant: {e}")
             return None
 
-    async def validate(
-        self, client_id: str, tool_id: str
-    ) -> Optional[ToolLease]:
+    async def validate(self, client_id: str, tool_id: str) -> ToolLease | None:
         """
         Validate lease exists and is not expired.
 
@@ -208,9 +205,7 @@ class LeaseManager:
             logger.error(f"Unexpected error in validate: {e}")
             return None
 
-    async def consume(
-        self, client_id: str, tool_id: str
-    ) -> Optional[ToolLease]:
+    async def consume(self, client_id: str, tool_id: str) -> ToolLease | None:
         """
         Consume one call from lease (decrement calls_remaining).
 
@@ -249,33 +244,31 @@ class LeaseManager:
                 logger.info(f"Lease exhausted and deleted for {client_id}:{tool_id}")
                 # Return lease with 0 calls to indicate exhaustion
                 return lease
+            # Update lease in Redis
+            lease_dict = {
+                "client_id": lease.client_id,
+                "tool_id": lease.tool_id,
+                "granted_at": lease.granted_at.isoformat(),
+                "expires_at": lease.expires_at.isoformat(),
+                "calls_remaining": lease.calls_remaining,
+                "mode_at_issue": lease.mode_at_issue,
+                "capability_token": lease.capability_token,
+            }
+            lease_json = json.dumps(lease_dict)
+
+            # Get remaining TTL
+            ttl = await redis.ttl(key)
+            if ttl > 0:
+                await redis.setex(key, ttl, lease_json)
             else:
-                # Update lease in Redis
-                lease_dict = {
-                    "client_id": lease.client_id,
-                    "tool_id": lease.tool_id,
-                    "granted_at": lease.granted_at.isoformat(),
-                    "expires_at": lease.expires_at.isoformat(),
-                    "calls_remaining": lease.calls_remaining,
-                    "mode_at_issue": lease.mode_at_issue,
-                    "capability_token": lease.capability_token,
-                }
-                lease_json = json.dumps(lease_dict)
+                # TTL expired, delete
+                await redis.delete(key)
+                return None
 
-                # Get remaining TTL
-                ttl = await redis.ttl(key)
-                if ttl > 0:
-                    await redis.setex(key, ttl, lease_json)
-                else:
-                    # TTL expired, delete
-                    await redis.delete(key)
-                    return None
-
-                logger.info(
-                    f"Consumed lease for {client_id}:{tool_id} "
-                    f"(remaining={lease.calls_remaining})"
-                )
-                return lease
+            logger.info(
+                f"Consumed lease for {client_id}:{tool_id} (remaining={lease.calls_remaining})"
+            )
+            return lease
 
         except (aioredis.ConnectionError, aioredis.TimeoutError) as e:
             logger.error(f"Redis connection failed in consume: {e}")

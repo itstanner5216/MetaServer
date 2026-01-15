@@ -11,8 +11,9 @@ Validates that the progressive discovery implementation meets all success criter
 """
 
 import pytest
-from src.meta_mcp.supervisor import mcp, tool_registry, search_tools, get_tool_schema
+
 from src.meta_mcp.state import ExecutionMode, governance_state
+from src.meta_mcp.supervisor import get_tool_schema, mcp, search_tools, tool_registry
 
 
 @pytest.mark.asyncio
@@ -56,21 +57,22 @@ async def test_search_does_not_expose_tools():
     search_result = search_tools.fn(query="file")
 
     # Verify search returned results
-    assert "read_file" in search_result or "Read file" in search_result, \
+    assert "read_file" in search_result or "Read file" in search_result, (
         "search_tools should find file-related tools"
+    )
 
     # Get tool count after search
     tools_after = await mcp.get_tools()
     count_after = len(tools_after)
 
     # Verify no tools were exposed
-    assert count_after == count_before, \
+    assert count_after == count_before, (
         f"search_tools exposed {count_after - count_before} tools (should expose 0)"
+    )
 
     # Verify read_file specifically not exposed
     tool_names_after = [t.name for t in tools_after.values()]
-    assert "read_file" not in tool_names_after, \
-        "read_file should not be exposed after search"
+    assert "read_file" not in tool_names_after, "read_file should not be exposed after search"
 
 
 @pytest.mark.asyncio
@@ -88,16 +90,16 @@ async def test_get_tool_schema_triggers_exposure():
     tool_names_before = [t.name for t in tools_before.values()]
 
     # Verify read_file not exposed yet
-    assert "read_file" not in tool_names_before, \
-        "read_file should not be exposed initially"
+    assert "read_file" not in tool_names_before, "read_file should not be exposed initially"
 
     # Request schema for read_file (triggers exposure)
     schema_result = await get_tool_schema.fn(tool_name="read_file")
 
     # Verify schema was returned
     assert "read_file" in schema_result, "Schema should contain tool name"
-    assert "inputSchema" in schema_result or "parameters" in schema_result.lower(), \
+    assert "inputSchema" in schema_result or "parameters" in schema_result.lower(), (
         "Schema should contain parameter information"
+    )
 
     # Get tool count after schema request
     tools_after = await mcp.get_tools()
@@ -105,11 +107,9 @@ async def test_get_tool_schema_triggers_exposure():
     tool_names_after = [t.name for t in tools_after.values()]
 
     # Verify tool was exposed
-    assert count_after == count_before + 1, \
-        f"Expected 1 new tool, got {count_after - count_before}"
+    assert count_after == count_before + 1, f"Expected 1 new tool, got {count_after - count_before}"
 
-    assert "read_file" in tool_names_after, \
-        "read_file should be exposed after schema request"
+    assert "read_file" in tool_names_after, "read_file should be exposed after schema request"
 
 
 @pytest.mark.asyncio
@@ -135,8 +135,9 @@ async def test_exposed_tools_persist():
     tools_after_second = await mcp.get_tools()
     count_second = len(tools_after_second)
 
-    assert count_second == count_first, \
+    assert count_second == count_first, (
         f"Tool count changed from {count_first} to {count_second} (duplicate exposure?)"
+    )
 
 
 @pytest.mark.asyncio
@@ -164,15 +165,16 @@ async def test_tools_list_updates_dynamically():
 
         # Verify count increased
         expected_count = initial_count + i
-        assert current_count == expected_count, \
+        assert current_count == expected_count, (
             f"After exposing {i} tools, expected {expected_count}, got {current_count}"
+        )
 
         # Verify the tool is in the list
-        assert tool_name in current_names, \
-            f"{tool_name} should be in tools/list after exposure"
+        assert tool_name in current_names, f"{tool_name} should be in tools/list after exposure"
 
 
 @pytest.mark.asyncio
+@pytest.mark.requires_redis
 async def test_governance_intercepts_all_tools(redis_client):
     """
     SUCCESS CRITERION 6: Governance middleware intercepts ALL tools.
@@ -222,18 +224,17 @@ async def test_context_reduction_calculation():
     reduction_percentage = ((total_registered - initially_exposed) / total_registered) * 100
 
     # Verify metrics
-    assert total_registered >= 13, \
-        f"Expected at least 13 total tools, got {total_registered}"
+    assert total_registered >= 13, f"Expected at least 13 total tools, got {total_registered}"
 
-    assert initially_exposed == 2, \
-        f"Expected 2 bootstrap tools, got {initially_exposed}"
+    assert initially_exposed == 2, f"Expected 2 bootstrap tools, got {initially_exposed}"
 
-    assert reduction_percentage >= 75, \
+    assert reduction_percentage >= 75, (
         f"Context reduction is {reduction_percentage:.1f}%, expected >= 75%"
+    )
 
     # Log the actual savings
     print(f"\n{'=' * 60}")
-    print(f"CONTEXT REDUCTION METRICS")
+    print("CONTEXT REDUCTION METRICS")
     print(f"{'=' * 60}")
     print(f"Total registered tools:    {total_registered}")
     print(f"Initially exposed tools:   {initially_exposed}")
@@ -255,8 +256,9 @@ async def test_discovery_workflow_complete():
     # Verify execute_command not yet exposed
     tools_after_search = await mcp.get_tools()
     names_after_search = [t.name for t in tools_after_search.values()]
-    assert "execute_command" not in names_after_search, \
+    assert "execute_command" not in names_after_search, (
         "execute_command should not be exposed after search"
+    )
 
     # Step 2: Model requests schema
     schema_result = await get_tool_schema.fn(tool_name="execute_command")
@@ -265,8 +267,9 @@ async def test_discovery_workflow_complete():
     # Verify execute_command now exposed
     tools_after_schema = await mcp.get_tools()
     names_after_schema = [t.name for t in tools_after_schema.values()]
-    assert "execute_command" in names_after_schema, \
+    assert "execute_command" in names_after_schema, (
         "execute_command should be exposed after schema request"
+    )
 
     # Step 3: Model can now invoke the tool
     # (We won't actually execute a command, just verify it's callable)
@@ -298,18 +301,17 @@ async def test_no_breaking_changes():
 
     for tool_name in expected_core_tools:
         # Should be registered
-        assert tool_registry.is_registered(tool_name), \
+        assert tool_registry.is_registered(tool_name), (
             f"{tool_name} should be registered in discovery"
+        )
 
         # Should be searchable
         search_result = search_tools.fn(query=tool_name)
-        assert tool_name in search_result, \
-            f"{tool_name} should be found via search"
+        assert tool_name in search_result, f"{tool_name} should be found via search"
 
         # Should be exposable via schema request
         schema_result = await get_tool_schema.fn(tool_name=tool_name)
-        assert tool_name in schema_result, \
-            f"{tool_name} schema should be retrievable"
+        assert tool_name in schema_result, f"{tool_name} schema should be retrievable"
 
 
 @pytest.mark.asyncio
@@ -323,10 +325,8 @@ async def test_bootstrap_tools_always_available():
     tools = await mcp.get_tools()
     tool_names = [t.name for t in tools.values()]
 
-    assert "search_tools" in tool_names, \
-        "search_tools must be available at startup"
-    assert "get_tool_schema" in tool_names, \
-        "get_tool_schema must be available at startup"
+    assert "search_tools" in tool_names, "search_tools must be available at startup"
+    assert "get_tool_schema" in tool_names, "get_tool_schema must be available at startup"
 
     # Both should be immediately callable
     search_result = search_tools.fn(query="test")

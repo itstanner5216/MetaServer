@@ -1,10 +1,10 @@
 """Tests for TOON threshold configuration and feature flag."""
 
-import pytest
 from unittest.mock import patch
-from src.meta_mcp.toon import encode_output
+
 from src.meta_mcp.config import Config
 from src.meta_mcp.middleware import GovernanceMiddleware
+from src.meta_mcp.toon import encode_output
 
 
 class TestThresholdConfiguration:
@@ -50,7 +50,7 @@ class TestFeatureFlagToggling:
 
     def test_toon_encoding_when_enabled(self):
         """When ENABLE_TOON_OUTPUTS is True, encoding should be applied."""
-        with patch.object(Config, 'ENABLE_TOON_OUTPUTS', True):
+        with patch.object(Config, "ENABLE_TOON_OUTPUTS", True):
             middleware = GovernanceMiddleware()
             data = {"items": list(range(10))}
 
@@ -62,7 +62,7 @@ class TestFeatureFlagToggling:
 
     def test_toon_encoding_when_disabled(self):
         """When ENABLE_TOON_OUTPUTS is False, encoding should be skipped."""
-        with patch.object(Config, 'ENABLE_TOON_OUTPUTS', False):
+        with patch.object(Config, "ENABLE_TOON_OUTPUTS", False):
             middleware = GovernanceMiddleware()
             data = {"items": list(range(10))}
 
@@ -77,13 +77,11 @@ class TestFeatureFlagToggling:
         """Feature flag should control all TOON encoding operations."""
         test_data = {
             "large_array": list(range(100)),
-            "nested": {
-                "another_large_array": list(range(50))
-            }
+            "nested": {"another_large_array": list(range(50))},
         }
 
         # Test with flag enabled
-        with patch.object(Config, 'ENABLE_TOON_OUTPUTS', True):
+        with patch.object(Config, "ENABLE_TOON_OUTPUTS", True):
             middleware = GovernanceMiddleware()
             result_enabled = middleware._apply_toon_encoding(test_data)
 
@@ -91,7 +89,7 @@ class TestFeatureFlagToggling:
             assert result_enabled["nested"]["another_large_array"]["__toon"] is True
 
         # Test with flag disabled
-        with patch.object(Config, 'ENABLE_TOON_OUTPUTS', False):
+        with patch.object(Config, "ENABLE_TOON_OUTPUTS", False):
             middleware = GovernanceMiddleware()
             result_disabled = middleware._apply_toon_encoding(test_data)
 
@@ -107,12 +105,9 @@ class TestMiddlewareIntegration:
         middleware = GovernanceMiddleware()
 
         # Simulate a tool result with large arrays
-        tool_result = {
-            "files": [f"file{i}.txt" for i in range(50)],
-            "message": "Success"
-        }
+        tool_result = {"files": [f"file{i}.txt" for i in range(50)], "message": "Success"}
 
-        with patch.object(Config, 'ENABLE_TOON_OUTPUTS', True):
+        with patch.object(Config, "ENABLE_TOON_OUTPUTS", True):
             encoded = middleware._apply_toon_encoding(tool_result)
 
             assert encoded["files"]["__toon"] is True
@@ -127,7 +122,9 @@ class TestMiddlewareIntegration:
         tool_result = {"data": "valid_data"}
 
         # Mock encode_output to raise an exception
-        with patch('src.meta_mcp.middleware.encode_output', side_effect=Exception("Encoding error")):
+        with patch(
+            "src.meta_mcp.middleware.encode_output", side_effect=Exception("Encoding error")
+        ):
             result = middleware._apply_toon_encoding(tool_result)
 
             # Should return original result on error
@@ -137,14 +134,7 @@ class TestMiddlewareIntegration:
         """Middleware should preserve results without arrays."""
         middleware = GovernanceMiddleware()
 
-        tool_result = {
-            "status": "success",
-            "code": 200,
-            "data": {
-                "name": "test",
-                "value": 42
-            }
-        }
+        tool_result = {"status": "success", "code": 200, "data": {"name": "test", "value": 42}}
 
         encoded = middleware._apply_toon_encoding(tool_result)
 
@@ -178,7 +168,7 @@ class TestTokenThreshold:
 
     def test_token_threshold_config_exists(self):
         """TOON_TOKEN_THRESHOLD should be defined in Config."""
-        assert hasattr(Config, 'TOON_TOKEN_THRESHOLD')
+        assert hasattr(Config, "TOON_TOKEN_THRESHOLD")
         assert isinstance(Config.TOON_TOKEN_THRESHOLD, int)
         assert Config.TOON_TOKEN_THRESHOLD > 0
 
@@ -197,11 +187,11 @@ class TestEndToEndScenarios:
             "path": "/workspace/data",
             "files": [f"file_{i:03d}.txt" for i in range(100)],
             "directories": ["subdir1", "subdir2"],
-            "total_items": 102
+            "total_items": 102,
         }
 
         middleware = GovernanceMiddleware()
-        with patch.object(Config, 'ENABLE_TOON_OUTPUTS', True):
+        with patch.object(Config, "ENABLE_TOON_OUTPUTS", True):
             encoded = middleware._apply_toon_encoding(tool_result)
 
             # Files array should be compressed
@@ -225,11 +215,11 @@ class TestEndToEndScenarios:
                 {"file": f"test_{i}.py", "line": i, "content": f"test content {i}"}
                 for i in range(50)
             ],
-            "total_matches": 50
+            "total_matches": 50,
         }
 
         middleware = GovernanceMiddleware()
-        with patch.object(Config, 'ENABLE_TOON_OUTPUTS', True):
+        with patch.object(Config, "ENABLE_TOON_OUTPUTS", True):
             encoded = middleware._apply_toon_encoding(tool_result)
 
             # Matches array should be compressed
@@ -247,15 +237,14 @@ class TestEndToEndScenarios:
         tool_result = {
             "query": "SELECT * FROM users",
             "rows": [
-                {"id": i, "name": f"user_{i}", "email": f"user{i}@example.com"}
-                for i in range(200)
+                {"id": i, "name": f"user_{i}", "email": f"user{i}@example.com"} for i in range(200)
             ],
             "row_count": 200,
-            "execution_time_ms": 45
+            "execution_time_ms": 45,
         }
 
         middleware = GovernanceMiddleware()
-        with patch.object(Config, 'ENABLE_TOON_OUTPUTS', True):
+        with patch.object(Config, "ENABLE_TOON_OUTPUTS", True):
             encoded = middleware._apply_toon_encoding(tool_result)
 
             # Rows should be compressed
@@ -273,11 +262,11 @@ class TestEndToEndScenarios:
             "small_list": ["a", "b", "c"],
             "large_list": list(range(100)),
             "another_small": [1, 2],
-            "another_large": [f"item_{i}" for i in range(50)]
+            "another_large": [f"item_{i}" for i in range(50)],
         }
 
         middleware = GovernanceMiddleware()
-        with patch.object(Config, 'ENABLE_TOON_OUTPUTS', True):
+        with patch.object(Config, "ENABLE_TOON_OUTPUTS", True):
             encoded = middleware._apply_toon_encoding(tool_result)
 
             # Small arrays preserved

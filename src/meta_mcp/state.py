@@ -2,14 +2,12 @@
 
 import hashlib
 from enum import Enum
-from typing import Optional
 
 from loguru import logger
 from redis import asyncio as aioredis
 
 from .config import Config
 from .redis_client import close_redis_client, get_redis_client
-
 
 # Constants
 GOVERNANCE_MODE_KEY = "governance:mode"
@@ -116,9 +114,7 @@ class GovernanceState:
             return False
 
     @staticmethod
-    def compute_elevation_hash(
-        tool_name: str, context_key: str, session_id: str
-    ) -> str:
+    def compute_elevation_hash(tool_name: str, context_key: str, session_id: str) -> str:
         """
         Compute SHA256 hash for elevation key.
 
@@ -137,9 +133,7 @@ class GovernanceState:
         hash_digest = hashlib.sha256(composite.encode("utf-8")).hexdigest()
         return f"{ELEVATION_PREFIX}{hash_digest}"
 
-    async def grant_elevation(
-        self, hash_key: str, ttl: int = DEFAULT_ELEVATION_TTL
-    ) -> bool:
+    async def grant_elevation(self, hash_key: str, ttl: int = DEFAULT_ELEVATION_TTL) -> bool:
         """
         Grant elevation for a specific hash key with mandatory TTL.
 

@@ -5,7 +5,7 @@ metadata summaries to reduce token consumption while preserving structure
 information.
 """
 
-from typing import Any, Dict, List, Union
+from typing import Any
 
 
 def encode_output(result: Any, threshold: int = 5) -> Any:
@@ -68,19 +68,15 @@ def _encode_recursive(value: Any, threshold: int) -> Any:
             return {
                 "__toon": True,
                 "count": len(value),
-                "sample": [_encode_recursive(item, threshold) for item in value[:3]]
+                "sample": [_encode_recursive(item, threshold) for item in value[:3]],
             }
-        else:
-            # Preserve array, but recursively encode items
-            return [_encode_recursive(item, threshold) for item in value]
+        # Preserve array, but recursively encode items
+        return [_encode_recursive(item, threshold) for item in value]
 
     # Handle dictionaries
     if isinstance(value, dict):
         # Recursively encode all values in dict
-        return {
-            key: _encode_recursive(val, threshold)
-            for key, val in value.items()
-        }
+        return {key: _encode_recursive(val, threshold) for key, val in value.items()}
 
     # Handle tuples (convert to list for JSON compatibility)
     if isinstance(value, tuple):
@@ -90,10 +86,9 @@ def _encode_recursive(value: Any, threshold: int) -> Any:
             return {
                 "__toon": True,
                 "count": len(as_list),
-                "sample": [_encode_recursive(item, threshold) for item in as_list[:3]]
+                "sample": [_encode_recursive(item, threshold) for item in as_list[:3]],
             }
-        else:
-            return [_encode_recursive(item, threshold) for item in as_list]
+        return [_encode_recursive(item, threshold) for item in as_list]
 
     # Primitive types (str, int, float, bool) - return unchanged
     return value

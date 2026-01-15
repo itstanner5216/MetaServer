@@ -1,12 +1,11 @@
 """Additional tests to achieve >90% coverage on middleware.py"""
 
-import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
 from fastmcp.exceptions import ToolError
 
 from src.meta_mcp.middleware import GovernanceMiddleware
-from src.meta_mcp.state import ExecutionMode
-
 
 # ============================================================================
 # CONTEXT KEY EXTRACTION TESTS (Lines 76-97)
@@ -14,6 +13,7 @@ from src.meta_mcp.state import ExecutionMode
 
 
 @pytest.mark.asyncio
+@pytest.mark.requires_redis
 async def test_execute_command_context_key_truncation(
     governance_in_permission,
     mock_fastmcp_context,
@@ -44,6 +44,7 @@ async def test_execute_command_context_key_truncation(
 
 
 @pytest.mark.asyncio
+@pytest.mark.requires_redis
 async def test_directory_operations_context_key(
     governance_in_permission,
     mock_fastmcp_context,
@@ -73,6 +74,7 @@ async def test_directory_operations_context_key(
 
 
 @pytest.mark.asyncio
+@pytest.mark.requires_redis
 async def test_git_operations_context_key(
     governance_in_permission,
     mock_fastmcp_context,
@@ -102,6 +104,7 @@ async def test_git_operations_context_key(
 
 
 @pytest.mark.asyncio
+@pytest.mark.requires_redis
 async def test_admin_operations_context_key(
     governance_in_permission,
     mock_fastmcp_context,
@@ -136,6 +139,7 @@ async def test_admin_operations_context_key(
 
 
 @pytest.mark.asyncio
+@pytest.mark.requires_redis
 async def test_approval_request_long_argument_truncation(
     governance_in_permission,
     mock_fastmcp_context,
@@ -151,10 +155,7 @@ async def test_approval_request_long_argument_truncation(
     # Setup with very long content argument (>200 chars)
     long_content = "x" * 300
     mock_fastmcp_context.request_context.tool_name = "write_file"
-    mock_fastmcp_context.request_context.arguments = {
-        "path": "test.txt",
-        "content": long_content
-    }
+    mock_fastmcp_context.request_context.arguments = {"path": "test.txt", "content": long_content}
     mock_fastmcp_context.request_context.session_id = "test-session"
 
     # Mock elicit to capture the formatted request
@@ -186,6 +187,7 @@ async def test_approval_request_long_argument_truncation(
 
 
 @pytest.mark.asyncio
+@pytest.mark.requires_redis
 async def test_unknown_mode_fail_safe_denies(
     redis_client,
     mock_fastmcp_context,
@@ -207,10 +209,7 @@ async def test_unknown_mode_fail_safe_denies(
 
     with patch.object(governance_state, "get_mode", return_value=InvalidMode()):
         mock_fastmcp_context.request_context.tool_name = "write_file"
-        mock_fastmcp_context.request_context.arguments = {
-            "path": "test.txt",
-            "content": "data"
-        }
+        mock_fastmcp_context.request_context.arguments = {"path": "test.txt", "content": "data"}
         mock_fastmcp_context.request_context.session_id = "test-session"
 
         call_next = AsyncMock()

@@ -9,9 +9,9 @@ Tests:
 - Memory usage
 """
 
-import time
-import sys
 import statistics
+import sys
+import time
 from pathlib import Path
 
 # Add src to path
@@ -30,7 +30,7 @@ def benchmark_registry_loading() -> dict:
     return {
         "operation": "registry_loading",
         "time_ms": elapsed * 1000,
-        "tool_count": len(registry.get_all_summaries())
+        "tool_count": len(registry.get_all_summaries()),
     }
 
 
@@ -48,7 +48,7 @@ def benchmark_search_latency(iterations: int = 100) -> dict:
         "write data to storage",
         "network operations",
         "send email messages",
-        "list directory contents"
+        "list directory contents",
     ]
 
     times = []
@@ -67,7 +67,7 @@ def benchmark_search_latency(iterations: int = 100) -> dict:
         "p99_ms": statistics.quantiles(times, n=100)[98],  # 99th percentile
         "min_ms": min(times),
         "max_ms": max(times),
-        "iterations": len(times)
+        "iterations": len(times),
     }
 
 
@@ -83,7 +83,7 @@ def benchmark_index_building() -> dict:
     return {
         "operation": "index_building",
         "time_ms": elapsed * 1000,
-        "vocabulary_size": len(searcher.embedder._vocabulary)
+        "vocabulary_size": len(searcher.embedder._vocabulary),
     }
 
 
@@ -109,7 +109,7 @@ def benchmark_tool_retrieval(iterations: int = 1000) -> dict:
         "operation": "tool_retrieval",
         "mean_ms": statistics.mean(times),
         "median_ms": statistics.median(times),
-        "iterations": iterations
+        "iterations": iterations,
     }
 
 
@@ -124,12 +124,14 @@ def run_baseline_benchmarks():
         benchmark_registry_loading,
         benchmark_index_building,
         lambda: benchmark_search_latency(iterations=20),
-        lambda: benchmark_tool_retrieval(iterations=1000)
+        lambda: benchmark_tool_retrieval(iterations=1000),
     ]
 
     results = []
     for bench in benchmarks:
-        print(f"Running {bench.__name__ if hasattr(bench, '__name__') else 'benchmark'}...", end=" ")
+        print(
+            f"Running {bench.__name__ if hasattr(bench, '__name__') else 'benchmark'}...", end=" "
+        )
         sys.stdout.flush()
 
         try:

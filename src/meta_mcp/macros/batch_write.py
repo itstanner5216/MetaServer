@@ -4,18 +4,19 @@ Batch write operations for tools.
 Provides batch update capabilities with validation and rollback support.
 """
 
-from typing import Any, Dict, Optional
+from typing import Any
+
 from ..registry.registry import ToolRegistry
 
 
 def batch_update_tools(
     registry: ToolRegistry,
-    updates: Dict[str, Dict[str, Any]],
+    updates: dict[str, dict[str, Any]],
     atomic: bool = False,
     rollback_on_error: bool = False,
     check_permissions: bool = False,
-    dry_run: bool = False
-) -> Dict[str, Any]:
+    dry_run: bool = False,
+) -> dict[str, Any]:
     """
     Update multiple tools in a single batch operation.
 
@@ -46,21 +47,23 @@ def batch_update_tools(
         for tool_id, fields in updates.items():
             tool = registry.get(tool_id)
             if tool:
-                preview.append({
-                    "tool_id": tool_id,
-                    "current": {k: getattr(tool, k, None) for k in fields.keys()},
-                    "proposed": fields
-                })
+                preview.append(
+                    {
+                        "tool_id": tool_id,
+                        "current": {k: getattr(tool, k, None) for k in fields.keys()},
+                        "proposed": fields,
+                    }
+                )
         return {"dry_run": True, "preview": preview}
 
     # Permission check for dangerous tools
     if check_permissions:
-        for tool_id in updates.keys():
+        for tool_id in updates:
             tool = registry.get(tool_id)
             if tool and tool.risk_level == "dangerous":
                 return {
                     "success": False,
-                    "error": f"Permission required to modify dangerous tool: {tool_id}"
+                    "error": f"Permission required to modify dangerous tool: {tool_id}",
                 }
 
     # Perform updates
@@ -82,9 +85,7 @@ def batch_update_tools(
 
         # Store original values for rollback
         if rollback_on_error:
-            original_values[tool_id] = {
-                k: getattr(tool, k, None) for k in fields.keys()
-            }
+            original_values[tool_id] = {k: getattr(tool, k, None) for k in fields.keys()}
 
         # Apply updates
         try:
@@ -104,15 +105,10 @@ def batch_update_tools(
                 for key, value in original_fields.items():
                     setattr(tool, key, value)
 
-        return {
-            "success": False,
-            "updated": 0,
-            "errors": errors,
-            "rolled_back": True
-        }
+        return {"success": False, "updated": 0, "errors": errors, "rolled_back": True}
 
     return {
         "success": len(errors) == 0,
         "updated": updated_count,
-        "errors": errors if errors else None
+        "errors": errors if errors else None,
     }

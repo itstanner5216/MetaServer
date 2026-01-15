@@ -19,11 +19,11 @@ Architecture:
 Latency Target: 170ms total retrieval time
 """
 
-from .semantic_search import SemanticRetriever, RetrievalCandidate
 from .bm25 import BM25Index
+from .semantic_search import RetrievalCandidate, SemanticRetriever
 
 __all__ = [
-    "SemanticRetriever",
-    "RetrievalCandidate",
     "BM25Index",
+    "RetrievalCandidate",
+    "SemanticRetriever",
 ]

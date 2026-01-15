@@ -4,14 +4,14 @@ Create benchmark comparison between baseline and optimized results.
 """
 
 import json
-from pathlib import Path
 from datetime import datetime
+from pathlib import Path
 
 
 def load_results(filename: str) -> dict:
     """Load benchmark results from JSON file."""
     path = Path(__file__).parent / filename
-    with open(path, 'r') as f:
+    with open(path) as f:
         return json.load(f)
 
 
@@ -26,7 +26,7 @@ def find_result(results: list, operation: str) -> dict:
 def calculate_speedup(baseline_ms: float, optimized_ms: float) -> float:
     """Calculate speedup ratio."""
     if optimized_ms == 0:
-        return float('inf')
+        return float("inf")
     return baseline_ms / optimized_ms
 
 
@@ -43,7 +43,7 @@ def create_comparison():
         "baseline_timestamp": baseline.get("timestamp"),
         "optimized_timestamp": optimized.get("timestamp"),
         "comparisons": [],
-        "summary": {}
+        "summary": {},
     }
 
     # Compare search latency (baseline) vs cached search (optimized)
@@ -57,27 +57,24 @@ def create_comparison():
                 "mean_ms": baseline_search.get("mean_ms"),
                 "median_ms": baseline_search.get("median_ms"),
                 "p95_ms": baseline_search.get("p95_ms"),
-                "p99_ms": baseline_search.get("p99_ms")
+                "p99_ms": baseline_search.get("p99_ms"),
             },
             "optimized": {
                 "mean_ms": optimized_search.get("mean_ms"),
                 "median_ms": optimized_search.get("median_ms"),
-                "p95_ms": optimized_search.get("p95_ms")
+                "p95_ms": optimized_search.get("p95_ms"),
             },
             "speedup": {
                 "mean": calculate_speedup(
-                    baseline_search.get("mean_ms", 0),
-                    optimized_search.get("mean_ms", 1)
+                    baseline_search.get("mean_ms", 0), optimized_search.get("mean_ms", 1)
                 ),
                 "median": calculate_speedup(
-                    baseline_search.get("median_ms", 0),
-                    optimized_search.get("median_ms", 1)
+                    baseline_search.get("median_ms", 0), optimized_search.get("median_ms", 1)
                 ),
                 "p95": calculate_speedup(
-                    baseline_search.get("p95_ms", 0),
-                    optimized_search.get("p95_ms", 1)
-                )
-            }
+                    baseline_search.get("p95_ms", 0), optimized_search.get("p95_ms", 1)
+                ),
+            },
         }
         comparison["comparisons"].append(search_comparison)
 
@@ -90,19 +87,18 @@ def create_comparison():
             "operation": "index_building",
             "baseline": {
                 "build_time_ms": baseline_index.get("time_ms"),
-                "vocabulary_size": baseline_index.get("vocabulary_size")
+                "vocabulary_size": baseline_index.get("vocabulary_size"),
             },
             "optimized": {
                 "build_time_ms": optimized_embedding.get("build_time_ms"),
                 "cache_size": optimized_embedding.get("cache_size"),
-                "avg_cache_retrieval_ms": optimized_embedding.get("avg_cache_retrieval_ms")
+                "avg_cache_retrieval_ms": optimized_embedding.get("avg_cache_retrieval_ms"),
             },
             "speedup": {
                 "build_time": calculate_speedup(
-                    baseline_index.get("time_ms", 0),
-                    optimized_embedding.get("build_time_ms", 1)
+                    baseline_index.get("time_ms", 0), optimized_embedding.get("build_time_ms", 1)
                 )
-            }
+            },
         }
         comparison["comparisons"].append(index_comparison)
 
@@ -113,7 +109,7 @@ def create_comparison():
             "vocabulary_size": memory.get("vocabulary_size"),
             "cached_embeddings": memory.get("cached_embeddings"),
             "total_embedding_kb": memory.get("total_embedding_kb"),
-            "total_embedding_mb": memory.get("total_embedding_mb")
+            "total_embedding_mb": memory.get("total_embedding_mb"),
         }
 
     # Add batch performance info
@@ -123,7 +119,7 @@ def create_comparison():
             "individual_avg_ms": batch.get("individual_avg_ms"),
             "batch_total_ms": batch.get("batch_total_ms"),
             "speedup": batch.get("speedup"),
-            "tool_count": batch.get("tool_count")
+            "tool_count": batch.get("tool_count"),
         }
 
     # Create summary
@@ -138,9 +134,13 @@ def create_comparison():
             "key_findings": [
                 f"Search latency improved by {search_comp['speedup']['mean']:.2f}x (mean)",
                 f"P95 latency improved by {search_comp['speedup']['p95']:.2f}x",
-                f"Memory footprint: {memory.get('total_embedding_mb', 0):.2f} MB" if memory else "Memory data unavailable",
-                f"Batch operations {batch.get('speedup', 0):.2f}x faster than individual" if batch else "Batch data unavailable"
-            ]
+                f"Memory footprint: {memory.get('total_embedding_mb', 0):.2f} MB"
+                if memory
+                else "Memory data unavailable",
+                f"Batch operations {batch.get('speedup', 0):.2f}x faster than individual"
+                if batch
+                else "Batch data unavailable",
+            ],
         }
 
     return comparison
@@ -151,7 +151,7 @@ if __name__ == "__main__":
 
     # Save to JSON
     output_path = Path(__file__).parent / "comparison.json"
-    with open(output_path, 'w') as f:
+    with open(output_path, "w") as f:
         json.dump(comparison, f, indent=2)
 
     print("Benchmark Comparison")

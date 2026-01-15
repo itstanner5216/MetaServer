@@ -4,14 +4,14 @@ Generate human-readable performance summary report.
 """
 
 import json
-from pathlib import Path
 from datetime import datetime
+from pathlib import Path
 
 
 def load_json(filename: str) -> dict:
     """Load JSON file."""
     path = Path(__file__).parent / filename
-    with open(path, 'r') as f:
+    with open(path) as f:
         return json.load(f)
 
 
@@ -27,10 +27,9 @@ def format_ms(ms: float) -> str:
     """Format milliseconds with appropriate precision."""
     if ms < 0.001:
         return f"{ms * 1000:.3f} µs"
-    elif ms < 1:
+    if ms < 1:
         return f"{ms:.3f} ms"
-    else:
-        return f"{ms:.2f} ms"
+    return f"{ms:.2f} ms"
 
 
 def generate_summary():
@@ -57,7 +56,9 @@ def generate_summary():
     summary = comparison.get("summary", {})
     if summary:
         lines.append(f"Overall Status: {summary.get('optimization_status', 'N/A')}")
-        lines.append(f"Search Performance Improvement: {summary.get('search_mean_speedup', 0):.2f}x")
+        lines.append(
+            f"Search Performance Improvement: {summary.get('search_mean_speedup', 0):.2f}x"
+        )
         lines.append(f"P95 Latency Improvement: {summary.get('search_p95_speedup', 0):.2f}x")
         lines.append(f"Cache Hit Rate: {summary.get('cache_hit_rate', 'N/A')}")
         lines.append(f"Memory Footprint: {summary.get('memory_footprint_mb', 0):.2f} MB")
@@ -100,9 +101,15 @@ def generate_summary():
 
         p99_base = search_baseline.get("p99_ms", 0)
 
-        lines.append(f"   Mean            {format_ms(mean_base):15s} {format_ms(mean_opt):15s} {mean_speedup:.2f}x")
-        lines.append(f"   Median          {format_ms(median_base):15s} {format_ms(median_opt):15s} {median_speedup:.2f}x")
-        lines.append(f"   P95             {format_ms(p95_base):15s} {format_ms(p95_opt):15s} {p95_speedup:.2f}x")
+        lines.append(
+            f"   Mean            {format_ms(mean_base):15s} {format_ms(mean_opt):15s} {mean_speedup:.2f}x"
+        )
+        lines.append(
+            f"   Median          {format_ms(median_base):15s} {format_ms(median_opt):15s} {median_speedup:.2f}x"
+        )
+        lines.append(
+            f"   P95             {format_ms(p95_base):15s} {format_ms(p95_opt):15s} {p95_speedup:.2f}x"
+        )
         lines.append(f"   P99             {format_ms(p99_base):15s} {'N/A':15s} N/A")
     lines.append("")
 
@@ -117,7 +124,9 @@ def generate_summary():
     if embedding_opt:
         lines.append(f"   Cache Size: {embedding_opt.get('cache_size', 0)} embeddings")
         lines.append(f"   Cache Hits: {embedding_opt.get('cache_hits', 0)}")
-        lines.append(f"   Avg Cache Retrieval: {format_ms(embedding_opt.get('avg_cache_retrieval_ms', 0))}")
+        lines.append(
+            f"   Avg Cache Retrieval: {format_ms(embedding_opt.get('avg_cache_retrieval_ms', 0))}"
+        )
     lines.append("")
 
     # Tool Retrieval
@@ -145,11 +154,13 @@ def generate_summary():
     lines.append("CACHE PERFORMANCE")
     lines.append("-" * 70)
     if embedding_opt:
-        cache_size = embedding_opt.get('cache_size', 0)
-        cache_hits = embedding_opt.get('cache_hits', 0)
+        cache_size = embedding_opt.get("cache_size", 0)
+        cache_hits = embedding_opt.get("cache_hits", 0)
         hit_rate = (cache_hits / cache_size * 100) if cache_size > 0 else 0
         lines.append(f"Embedding Cache Hit Rate: {hit_rate:.1f}%")
-        lines.append(f"Cache Retrieval Time: {format_ms(embedding_opt.get('avg_cache_retrieval_ms', 0))}")
+        lines.append(
+            f"Cache Retrieval Time: {format_ms(embedding_opt.get('avg_cache_retrieval_ms', 0))}"
+        )
     lines.append("")
 
     # Batch Operations
@@ -166,8 +177,8 @@ def generate_summary():
     # Optimization Gains
     lines.append("OPTIMIZATION GAINS")
     lines.append("-" * 70)
-    if summary and summary.get('key_findings'):
-        for finding in summary['key_findings']:
+    if summary and summary.get("key_findings"):
+        for finding in summary["key_findings"]:
             lines.append(f"  • {finding}")
     lines.append("")
 
@@ -177,13 +188,15 @@ def generate_summary():
     bottlenecks = []
 
     if search_baseline:
-        p99 = search_baseline.get('p99_ms', 0)
-        mean = search_baseline.get('mean_ms', 0)
+        p99 = search_baseline.get("p99_ms", 0)
+        mean = search_baseline.get("mean_ms", 0)
         if p99 > mean * 2:
-            bottlenecks.append(f"Search P99 latency ({format_ms(p99)}) is {p99/mean:.1f}x higher than mean")
+            bottlenecks.append(
+                f"Search P99 latency ({format_ms(p99)}) is {p99 / mean:.1f}x higher than mean"
+            )
 
     if registry_baseline:
-        reg_time = registry_baseline.get('time_ms', 0)
+        reg_time = registry_baseline.get("time_ms", 0)
         if reg_time > 5:
             bottlenecks.append(f"Registry loading time ({format_ms(reg_time)}) could be optimized")
 
@@ -199,13 +212,13 @@ def generate_summary():
     lines.append("-" * 70)
     recommendations = []
 
-    if memory and memory.get('total_embedding_mb', 0) < 1:
+    if memory and memory.get("total_embedding_mb", 0) < 1:
         recommendations.append("Memory footprint is excellent (<1 MB)")
 
-    if search_optimized and search_optimized.get('mean_ms', 0) < 0.2:
+    if search_optimized and search_optimized.get("mean_ms", 0) < 0.2:
         recommendations.append("Search latency is excellent (<0.2ms)")
 
-    if batch and batch.get('speedup', 0) > 2:
+    if batch and batch.get("speedup", 0) > 2:
         recommendations.append("Continue using batch operations where possible")
 
     if not recommendations:
@@ -227,7 +240,7 @@ if __name__ == "__main__":
 
     # Save to file
     output_path = Path(__file__).parent / "PERFORMANCE_SUMMARY.txt"
-    with open(output_path, 'w') as f:
+    with open(output_path, "w") as f:
         f.write(summary)
 
     # Print to console
