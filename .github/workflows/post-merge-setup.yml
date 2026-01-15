@@ -237,7 +237,7 @@ jobs:
         
         ## 📚 Documentation
         
-        - [Contributing Guide](./CONTRIBUTING.md)
+        - [Contributing Guide](./docs/development/CONTRIBUTING.md)
         - [CI/CD Workflows](./.github/workflows/)
         - [Pre-commit Configuration](./.pre-commit-config.yaml)
         
