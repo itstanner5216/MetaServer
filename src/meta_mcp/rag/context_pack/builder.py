@@ -11,9 +11,9 @@ import hmac
 import json
 import logging
 import uuid
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime, timedelta
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -38,6 +38,7 @@ def _count_tokens(text: str) -> int:
     """
     try:
         import tiktoken
+
         encoder = tiktoken.get_encoding("cl100k_base")
         return len(encoder.encode(text))
     except ImportError:
@@ -82,21 +83,21 @@ class ContextPack:
 
     pack_id: str
     query: str
-    query_rewritten: Optional[str]
+    query_rewritten: str | None
     lease_id: str
     scope: str
-    embedding_config: Dict[str, Any]
-    retrieval_config: Dict[str, Any]
-    candidates_raw: List[Dict[str, Any]]
-    candidates_selected: List[Dict[str, Any]]
-    selected_chunk_full_text: Dict[str, str]
-    explainer_output: Dict[str, Any]
-    token_budget: Dict[str, int]
+    embedding_config: dict[str, Any]
+    retrieval_config: dict[str, Any]
+    candidates_raw: list[dict[str, Any]]
+    candidates_selected: list[dict[str, Any]]
+    selected_chunk_full_text: dict[str, str]
+    explainer_output: dict[str, Any]
+    token_budget: dict[str, int]
     signature: str
     created_at: datetime
     expires_at: datetime
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """
         Convert pack to dictionary for serialization.
 
@@ -122,7 +123,7 @@ class ContextPack:
         }
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "ContextPack":
+    def from_dict(cls, data: dict[str, Any]) -> "ContextPack":
         """
         Create ContextPack from dictionary.
 
@@ -245,14 +246,14 @@ class ContextPackBuilder:
         query: str,
         lease_id: str,
         scope: str,
-        candidates_raw: List[Dict[str, Any]],
-        selected_chunks: List[Dict[str, Any]],
-        explainer_output: Dict[str, Any],
-        chunk_texts: Dict[str, str],
-        embedding_config: Dict[str, Any],
-        retrieval_config: Dict[str, Any],
-        query_rewritten: Optional[str] = None,
-        ttl_seconds: Optional[int] = None,
+        candidates_raw: list[dict[str, Any]],
+        selected_chunks: list[dict[str, Any]],
+        explainer_output: dict[str, Any],
+        chunk_texts: dict[str, str],
+        embedding_config: dict[str, Any],
+        retrieval_config: dict[str, Any],
+        query_rewritten: str | None = None,
+        ttl_seconds: int | None = None,
     ) -> ContextPack:
         """
         Build a signed ContextPack with all retrieval context.
@@ -353,7 +354,7 @@ class ContextPackBuilder:
 
         return pack
 
-    def _canonicalize(self, pack_data: Dict[str, Any]) -> str:
+    def _canonicalize(self, pack_data: dict[str, Any]) -> str:
         """
         Create RFC 8785-style canonical JSON serialization.
 
@@ -397,8 +398,8 @@ class ContextPackBuilder:
 
     def _compute_token_budget(
         self,
-        selected_texts: Dict[str, str],
-    ) -> Dict[str, int]:
+        selected_texts: dict[str, str],
+    ) -> dict[str, int]:
         """
         Compute token budget breakdown for selected chunks.
 
@@ -412,9 +413,7 @@ class ContextPackBuilder:
             Dict with total_budget, used_by_selection, available_for_generation
         """
         # Count tokens in all selected texts
-        used_by_selection = sum(
-            _count_tokens(text) for text in selected_texts.values()
-        )
+        used_by_selection = sum(_count_tokens(text) for text in selected_texts.values())
 
         # Calculate available for generation
         available = max(0, self._token_budget - used_by_selection)
@@ -425,7 +424,7 @@ class ContextPackBuilder:
             "available_for_generation": available,
         }
 
-    def get_metrics(self) -> Dict[str, Any]:
+    def get_metrics(self) -> dict[str, Any]:
         """
         Get builder metrics.
 

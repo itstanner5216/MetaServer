@@ -8,8 +8,8 @@ Tests token operations:
 - Token format and structure
 """
 
+
 import pytest
-import time
 
 
 @pytest.mark.asyncio
@@ -34,7 +34,6 @@ async def test_generate_token_creates_valid_token():
     # parts = token.split(".")
     # assert len(parts) == 2
 
-    pass
 
 
 @pytest.mark.asyncio
@@ -72,7 +71,6 @@ async def test_verify_token_validates_signature():
     # )
     # assert invalid is False
 
-    pass
 
 
 @pytest.mark.asyncio
@@ -102,7 +100,6 @@ async def test_verify_token_checks_expiration():
     # Now invalid
     # assert not verify_token(token, "test_session", "write_file", Config.HMAC_SECRET)
 
-    pass
 
 
 @pytest.mark.asyncio
@@ -128,7 +125,6 @@ async def test_verify_token_checks_client_id():
     # Verify with wrong client_id
     # assert not verify_token(token, "session_b", "write_file", Config.HMAC_SECRET)
 
-    pass
 
 
 @pytest.mark.asyncio
@@ -154,7 +150,6 @@ async def test_verify_token_checks_tool_id():
     # Verify with wrong tool_id
     # assert not verify_token(token, "test_session", "delete_file", Config.HMAC_SECRET)
 
-    pass
 
 
 @pytest.mark.asyncio
@@ -185,7 +180,6 @@ async def test_decode_token_without_verification():
     # assert "exp" in payload
     # assert "iat" in payload
 
-    pass
 
 
 @pytest.mark.asyncio
@@ -224,7 +218,6 @@ async def test_token_with_context_key():
     #     context_key="path=/workspace/other.txt"
     # )
 
-    pass
 
 
 @pytest.mark.asyncio
@@ -264,7 +257,6 @@ async def test_hmac_sha256_algorithm():
     # Verify signatures match
     # assert signature == expected_signature
 
-    pass
 
 
 @pytest.mark.asyncio
@@ -293,4 +285,3 @@ async def test_token_canonicalization():
     # But payload structure should be consistent
     # This test documents expected non-determinism due to timestamps
 
-    pass

@@ -4,9 +4,9 @@ Run optimized benchmarks and save results to JSON.
 """
 
 import json
+import statistics
 import sys
 import time
-import statistics
 from datetime import datetime
 from pathlib import Path
 
@@ -44,7 +44,7 @@ def benchmark_cached_searches(iterations: int = 100) -> dict:
         "p95_ms": statistics.quantiles(times, n=20)[18],
         "min_ms": min(times),
         "max_ms": max(times),
-        "iterations": iterations
+        "iterations": iterations,
     }
 
 
@@ -77,7 +77,7 @@ def benchmark_embedding_reuse() -> dict:
         "cache_size": cache_size,
         "build_time_ms": build_time * 1000,
         "avg_cache_retrieval_ms": statistics.mean(times) if times else 0,
-        "cache_hits": len(times)
+        "cache_hits": len(times),
     }
 
 
@@ -110,13 +110,12 @@ def benchmark_batch_vs_individual() -> dict:
         "individual_avg_ms": statistics.mean(individual_times),
         "batch_total_ms": batch_time * 1000,
         "speedup": sum(individual_times) / (batch_time * 1000),
-        "tool_count": len(sample_tools)
+        "tool_count": len(sample_tools),
     }
 
 
 def benchmark_memory_footprint() -> dict:
     """Estimate memory footprint of embeddings and cache."""
-    import sys
 
     registry = ToolRegistry.from_yaml("config/tools.yaml")
     searcher = SemanticSearch(registry)
@@ -137,7 +136,7 @@ def benchmark_memory_footprint() -> dict:
             "cached_embeddings": cache_size,
             "bytes_per_embedding": bytes_per_embedding,
             "total_embedding_kb": total_embedding_bytes / 1024,
-            "total_embedding_mb": total_embedding_bytes / (1024 * 1024)
+            "total_embedding_mb": total_embedding_bytes / (1024 * 1024),
         }
 
     return {"operation": "memory_footprint", "error": "No embeddings generated"}
@@ -154,12 +153,14 @@ def run_optimized_benchmarks():
         benchmark_embedding_reuse,
         lambda: benchmark_cached_searches(iterations=100),
         benchmark_batch_vs_individual,
-        benchmark_memory_footprint
+        benchmark_memory_footprint,
     ]
 
     results = []
     for bench in benchmarks:
-        print(f"Running {bench.__name__ if hasattr(bench, '__name__') else 'benchmark'}...", end=" ")
+        print(
+            f"Running {bench.__name__ if hasattr(bench, '__name__') else 'benchmark'}...", end=" "
+        )
         sys.stdout.flush()
 
         try:
@@ -207,12 +208,12 @@ if __name__ == "__main__":
         output = {
             "timestamp": datetime.now().isoformat(),
             "benchmark_type": "optimized",
-            "results": results
+            "results": results,
         }
 
         # Save to JSON
         output_path = project_root / "benchmarks" / "optimized_results.json"
-        with open(output_path, 'w') as f:
+        with open(output_path, "w") as f:
             json.dump(output, f, indent=2)
 
         print(f"\nResults saved to: {output_path}")
@@ -220,6 +221,7 @@ if __name__ == "__main__":
     except Exception as e:
         print(f"Error running benchmarks: {e}")
         import traceback
+
         traceback.print_exc()
 
         # Save error to JSON
@@ -227,11 +229,11 @@ if __name__ == "__main__":
             "timestamp": datetime.now().isoformat(),
             "benchmark_type": "optimized",
             "error": str(e),
-            "traceback": traceback.format_exc()
+            "traceback": traceback.format_exc(),
         }
 
         output_path = project_root / "benchmarks" / "optimized_results.json"
-        with open(output_path, 'w') as f:
+        with open(output_path, "w") as f:
             json.dump(error_output, f, indent=2)
 
         sys.exit(1)

@@ -4,9 +4,9 @@ Run baseline benchmarks and save results to JSON.
 """
 
 import json
+import statistics
 import sys
 import time
-import statistics
 from datetime import datetime
 from pathlib import Path
 
@@ -28,7 +28,7 @@ def benchmark_registry_loading() -> dict:
     return {
         "operation": "registry_loading",
         "time_ms": elapsed * 1000,
-        "tool_count": len(registry.get_all_summaries())
+        "tool_count": len(registry.get_all_summaries()),
     }
 
 
@@ -46,7 +46,7 @@ def benchmark_search_latency(iterations: int = 100) -> dict:
         "write data to storage",
         "network operations",
         "send email messages",
-        "list directory contents"
+        "list directory contents",
     ]
 
     times = []
@@ -65,7 +65,7 @@ def benchmark_search_latency(iterations: int = 100) -> dict:
         "p99_ms": statistics.quantiles(times, n=100)[98],  # 99th percentile
         "min_ms": min(times),
         "max_ms": max(times),
-        "iterations": len(times)
+        "iterations": len(times),
     }
 
 
@@ -81,7 +81,7 @@ def benchmark_index_building() -> dict:
     return {
         "operation": "index_building",
         "time_ms": elapsed * 1000,
-        "vocabulary_size": len(searcher.embedder._vocabulary)
+        "vocabulary_size": len(searcher.embedder._vocabulary),
     }
 
 
@@ -107,7 +107,7 @@ def benchmark_tool_retrieval(iterations: int = 1000) -> dict:
         "operation": "tool_retrieval",
         "mean_ms": statistics.mean(times),
         "median_ms": statistics.median(times),
-        "iterations": iterations
+        "iterations": iterations,
     }
 
 
@@ -122,12 +122,14 @@ def run_baseline_benchmarks():
         benchmark_registry_loading,
         benchmark_index_building,
         lambda: benchmark_search_latency(iterations=20),
-        lambda: benchmark_tool_retrieval(iterations=1000)
+        lambda: benchmark_tool_retrieval(iterations=1000),
     ]
 
     results = []
     for bench in benchmarks:
-        print(f"Running {bench.__name__ if hasattr(bench, '__name__') else 'benchmark'}...", end=" ")
+        print(
+            f"Running {bench.__name__ if hasattr(bench, '__name__') else 'benchmark'}...", end=" "
+        )
         sys.stdout.flush()
 
         try:
@@ -175,12 +177,12 @@ if __name__ == "__main__":
         output = {
             "timestamp": datetime.now().isoformat(),
             "benchmark_type": "baseline",
-            "results": results
+            "results": results,
         }
 
         # Save to JSON
         output_path = project_root / "benchmarks" / "baseline_results.json"
-        with open(output_path, 'w') as f:
+        with open(output_path, "w") as f:
             json.dump(output, f, indent=2)
 
         print(f"\nResults saved to: {output_path}")
@@ -188,6 +190,7 @@ if __name__ == "__main__":
     except Exception as e:
         print(f"Error running benchmarks: {e}")
         import traceback
+
         traceback.print_exc()
 
         # Save error to JSON
@@ -195,11 +198,11 @@ if __name__ == "__main__":
             "timestamp": datetime.now().isoformat(),
             "benchmark_type": "baseline",
             "error": str(e),
-            "traceback": traceback.format_exc()
+            "traceback": traceback.format_exc(),
         }
 
         output_path = project_root / "benchmarks" / "baseline_results.json"
-        with open(output_path, 'w') as f:
+        with open(output_path, "w") as f:
             json.dump(error_output, f, indent=2)
 
         sys.exit(1)

@@ -9,9 +9,9 @@ Tests:
 - Memory efficiency
 """
 
-import time
-import sys
 import statistics
+import sys
+import time
 from pathlib import Path
 
 # Add src to path
@@ -46,7 +46,7 @@ def benchmark_cached_searches(iterations: int = 100) -> dict:
         "p95_ms": statistics.quantiles(times, n=20)[18],
         "min_ms": min(times),
         "max_ms": max(times),
-        "iterations": iterations
+        "iterations": iterations,
     }
 
 
@@ -79,7 +79,7 @@ def benchmark_embedding_reuse() -> dict:
         "cache_size": cache_size,
         "build_time_ms": build_time * 1000,
         "avg_cache_retrieval_ms": statistics.mean(times) if times else 0,
-        "cache_hits": len(times)
+        "cache_hits": len(times),
     }
 
 
@@ -112,13 +112,12 @@ def benchmark_batch_vs_individual() -> dict:
         "individual_avg_ms": statistics.mean(individual_times),
         "batch_total_ms": batch_time * 1000,
         "speedup": sum(individual_times) / (batch_time * 1000),
-        "tool_count": len(sample_tools)
+        "tool_count": len(sample_tools),
     }
 
 
 def benchmark_memory_footprint() -> dict:
     """Estimate memory footprint of embeddings and cache."""
-    import sys
 
     registry = ToolRegistry.from_yaml("config/tools.yaml")
     searcher = SemanticSearch(registry)
@@ -139,7 +138,7 @@ def benchmark_memory_footprint() -> dict:
             "cached_embeddings": cache_size,
             "bytes_per_embedding": bytes_per_embedding,
             "total_embedding_kb": total_embedding_bytes / 1024,
-            "total_embedding_mb": total_embedding_bytes / (1024 * 1024)
+            "total_embedding_mb": total_embedding_bytes / (1024 * 1024),
         }
 
     return {"operation": "memory_footprint", "error": "No embeddings generated"}
@@ -156,12 +155,14 @@ def run_optimized_benchmarks():
         benchmark_embedding_reuse,
         lambda: benchmark_cached_searches(iterations=100),
         benchmark_batch_vs_individual,
-        benchmark_memory_footprint
+        benchmark_memory_footprint,
     ]
 
     results = []
     for bench in benchmarks:
-        print(f"Running {bench.__name__ if hasattr(bench, '__name__') else 'benchmark'}...", end=" ")
+        print(
+            f"Running {bench.__name__ if hasattr(bench, '__name__') else 'benchmark'}...", end=" "
+        )
         sys.stdout.flush()
 
         try:

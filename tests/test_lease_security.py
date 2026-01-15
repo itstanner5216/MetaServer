@@ -16,8 +16,8 @@ Security Requirements:
 4. Call Accounting: Lease consumption MUST happen ONLY on successful execution
 """
 
+
 import pytest
-from datetime import datetime, timedelta
 
 
 @pytest.mark.asyncio
@@ -52,7 +52,7 @@ async def test_cross_session_isolation():
     # lease_a_check = await lease_manager.validate("session_a", "write_file")
     # assert lease_a_check is not None, "Client A should have valid lease"
 
-    pass  # Placeholder until Phase 3
+    # Placeholder until Phase 3
 
 
 @pytest.mark.asyncio
@@ -88,7 +88,6 @@ async def test_lease_expiration():
     # expired = await lease_manager.validate("test_session", "read_file")
     # assert expired is None, "SECURITY BREACH: Expired lease accepted!"
 
-    pass
 
 
 @pytest.mark.asyncio
@@ -125,7 +124,6 @@ async def test_bootstrap_tools_skip_lease_check():
     # schema = await get_tool_schema.fn(tool_name="read_file")
     # assert schema is not None
 
-    pass
 
 
 @pytest.mark.asyncio
@@ -168,7 +166,6 @@ async def test_lease_consumption_only_on_success():
     # lease_check = await lease_manager.validate("test_session", "write_file")
     # assert lease_check.calls_remaining == 2
 
-    pass
 
 
 @pytest.mark.asyncio
@@ -212,7 +209,6 @@ async def test_lease_not_granted_without_client_id():
     # )
     # assert lease_valid is not None, "Should grant lease with valid client_id"
 
-    pass
 
 
 @pytest.mark.asyncio
@@ -243,7 +239,6 @@ async def test_calls_remaining_decrements_correctly():
     # exhausted = await lease_manager.validate("test_session", "read_file")
     # assert exhausted is None, "Lease should be invalid when calls exhausted"
 
-    pass
 
 
 @pytest.mark.asyncio
@@ -279,7 +274,6 @@ async def test_lease_revocation():
     # invalid = await lease_manager.validate("test_session", "write_file")
     # assert invalid is None, "Revoked lease should be invalid"
 
-    pass
 
 
 @pytest.mark.asyncio
@@ -316,7 +310,6 @@ async def test_lease_ttl_enforced():
     # exists = await redis.exists(key)
     # assert exists == 0, "Lease should be auto-expired by Redis"
 
-    pass
 
 
 @pytest.mark.asyncio
@@ -355,7 +348,6 @@ async def test_lease_mode_consistency():
     # valid = await lease_manager.validate("test_session", "write_file")
     # assert valid is not None, "Lease remains valid after mode change"
 
-    pass
 
 
 @pytest.mark.asyncio
@@ -403,7 +395,6 @@ async def test_multiple_leases_per_session():
     # write_check = await lease_manager.validate("test_session", "write_file")
     # assert write_check.calls_remaining == 3, "write_file lease should be unchanged"
 
-    pass
 
 
 @pytest.mark.asyncio
@@ -428,4 +419,3 @@ async def test_lease_fail_closed_on_redis_error():
     #     # Should fail closed (return None)
     #     assert lease is None, "SECURITY BREACH: Validation succeeded on Redis error"
 
-    pass

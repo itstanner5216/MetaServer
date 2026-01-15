@@ -4,10 +4,10 @@ Lightweight embedding system for tool descriptions.
 Uses simple TF-IDF word-based embeddings to avoid heavy ML dependencies.
 Focuses on correctness and speed over sophistication.
 """
+
 import math
 import re
 from collections import Counter
-from typing import Dict, List, Set
 
 from ..registry.models import ToolRecord
 
@@ -27,13 +27,13 @@ class ToolEmbedder:
 
     def __init__(self):
         """Initialize embedder with empty cache and vocabulary."""
-        self._cache: Dict[str, List[float]] = {}  # tool_id -> embedding vector
-        self._vocabulary: Set[str] = set()
-        self._vocab_list: List[str] = []  # Cached sorted vocabulary (PERF-001)
-        self._idf_scores: Dict[str, float] = {}
+        self._cache: dict[str, list[float]] = {}  # tool_id -> embedding vector
+        self._vocabulary: set[str] = set()
+        self._vocab_list: list[str] = []  # Cached sorted vocabulary (PERF-001)
+        self._idf_scores: dict[str, float] = {}
         self._document_count = 0
 
-    def _tokenize(self, text: str) -> List[str]:
+    def _tokenize(self, text: str) -> list[str]:
         """
         Tokenize text into lowercase words.
 
@@ -46,10 +46,10 @@ class ToolEmbedder:
         # Convert to lowercase and extract words (alphanumeric + underscore)
         text = text.lower()
         # Split on non-alphanumeric characters, keep underscores
-        words = re.findall(r'[a-z0-9_]+', text)
+        words = re.findall(r"[a-z0-9_]+", text)
         return words
 
-    def _build_vocabulary(self, tools: List[ToolRecord]) -> None:
+    def _build_vocabulary(self, tools: list[ToolRecord]) -> None:
         """
         Build vocabulary and IDF scores from tool corpus.
 
@@ -63,7 +63,7 @@ class ToolEmbedder:
         if self._document_count == 0:  # Defensive check
             return
 
-        document_frequency: Dict[str, int] = Counter()
+        document_frequency: dict[str, int] = Counter()
 
         # Count document frequency for each word
         for tool in tools:
@@ -85,7 +85,7 @@ class ToolEmbedder:
         # Cache sorted vocabulary for faster vector conversion (PERF-001)
         self._vocab_list = sorted(self._vocabulary)
 
-    def _compute_tf_idf(self, text: str) -> Dict[str, float]:
+    def _compute_tf_idf(self, text: str) -> dict[str, float]:
         """
         Compute TF-IDF scores for text.
 
@@ -103,7 +103,7 @@ class ToolEmbedder:
         word_counts = Counter(words)
         total_words = len(words)
 
-        tf_idf: Dict[str, float] = {}
+        tf_idf: dict[str, float] = {}
         for word, count in word_counts.items():
             if word in self._vocabulary:
                 tf = count / total_words
@@ -112,7 +112,7 @@ class ToolEmbedder:
 
         return tf_idf
 
-    def _normalize_vector(self, vector: List[float]) -> List[float]:
+    def _normalize_vector(self, vector: list[float]) -> list[float]:
         """
         Normalize vector to unit length.
 
@@ -127,7 +127,7 @@ class ToolEmbedder:
             return vector
         return [x / magnitude for x in vector]
 
-    def _tf_idf_to_vector(self, tf_idf: Dict[str, float]) -> List[float]:
+    def _tf_idf_to_vector(self, tf_idf: dict[str, float]) -> list[float]:
         """
         Convert TF-IDF scores to fixed-length vector.
 
@@ -146,7 +146,7 @@ class ToolEmbedder:
 
         return self._normalize_vector(vector)
 
-    def build_index(self, tools: List[ToolRecord]) -> None:
+    def build_index(self, tools: list[ToolRecord]) -> None:
         """
         Build embedding index from all registered tools.
 
@@ -164,7 +164,7 @@ class ToolEmbedder:
             embedding = self.embed_tool(tool)
             self._cache[tool.tool_id] = embedding
 
-    def embed_tool(self, tool: ToolRecord) -> List[float]:
+    def embed_tool(self, tool: ToolRecord) -> list[float]:
         """
         Generate embedding for a tool based on description and tags.
 
@@ -200,7 +200,7 @@ class ToolEmbedder:
 
         return vector
 
-    def embed_query(self, query: str) -> List[float]:
+    def embed_query(self, query: str) -> list[float]:
         """
         Generate embedding for search query.
 
@@ -225,7 +225,7 @@ class ToolEmbedder:
 
         return vector
 
-    def get_cached_embedding(self, tool_id: str) -> List[float]:
+    def get_cached_embedding(self, tool_id: str) -> list[float]:
         """
         Get cached embedding for a tool.
 
