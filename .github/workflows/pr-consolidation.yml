@@ -291,7 +291,8 @@ jobs:
     if: |
       always() && 
       (inputs.dry_run == false) && 
-      (inputs.auto_cleanup_comments == true || needs.close-duplicate-prs.result == 'success')
+      (inputs.auto_cleanup_comments == true) &&
+      (needs.close-duplicate-prs.result == 'success' || needs.close-duplicate-prs.result == 'skipped')
     
     steps:
       - name: Delete old AI review comments from remaining PRs
@@ -371,7 +372,8 @@ jobs:
     if: |
       always() && 
       (inputs.dry_run == false) && 
-      (inputs.auto_rerun_pipeline == true || needs.cleanup-comments.result == 'success')
+      (inputs.auto_rerun_pipeline == true) &&
+      (needs.cleanup-comments.result == 'success' || needs.cleanup-comments.result == 'skipped')
     
     steps:
       - name: Trigger AI review pipeline for remaining PRs
