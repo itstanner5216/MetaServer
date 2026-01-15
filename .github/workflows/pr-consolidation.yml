@@ -151,10 +151,13 @@ jobs:
                 if (pr.base.ref === 'main') score += 20;
                 
                 // Prefer PRs with more detailed descriptions
+                // Score: min(description_length / 100, 10) caps at 10 points for 1000+ char descriptions
                 score += Math.min((pr.body || '').length / 100, 10);
                 
                 // Prefer more recent PRs
-                const daysOld = (Date.now() - new Date(pr.created_at)) / (1000 * 60 * 60 * 24);
+                // Score: max(10 - days_old, 0) gives 10 points for today, 0 points for 10+ days old
+                const MILLISECONDS_PER_DAY = 1000 * 60 * 60 * 24;
+                const daysOld = (Date.now() - new Date(pr.created_at)) / MILLISECONDS_PER_DAY;
                 score += Math.max(10 - daysOld, 0);
                 
                 // Prefer PRs with assignees/reviewers (human attention)
@@ -288,6 +291,7 @@ jobs:
     name: Phase 2 - Clean Up AI Review Comments
     needs: [analyze-prs, close-duplicate-prs]
     runs-on: ubuntu-latest
+    # Run only when: not in dry-run mode, auto-cleanup enabled, and Phase 1 completed (success or skipped)
     if: |
       always() && 
       (inputs.dry_run == false) && 
@@ -369,6 +373,7 @@ jobs:
     name: Phase 3 - Re-run AI Review Pipeline
     needs: [analyze-prs, cleanup-comments]
     runs-on: ubuntu-latest
+    # Run only when: not in dry-run mode, auto-rerun enabled, and Phase 2 completed (success or skipped)
     if: |
       always() && 
       (inputs.dry_run == false) && 
