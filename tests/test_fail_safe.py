@@ -64,6 +64,7 @@ async def test_redis_down_never_returns_bypass():
 
 
 @pytest.mark.asyncio
+@pytest.mark.requires_redis
 async def test_elicitation_error_blocks(
     governance_in_permission,
     mock_fastmcp_context,
@@ -110,6 +111,7 @@ async def test_elicitation_error_blocks(
 
 
 @pytest.mark.asyncio
+@pytest.mark.requires_redis
 async def test_invalid_mode_defaults_to_permission(redis_client):
     """
     Test that invalid mode string in Redis returns PERMISSION.

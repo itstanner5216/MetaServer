@@ -23,6 +23,8 @@ from src.meta_mcp.registry.registry import ToolRegistry
 
 
 @pytest.mark.asyncio
+@pytest.mark.integration
+@pytest.mark.requires_redis
 async def test_batch_read_basic_operation(redis_client):
     """
     Verify batch read retrieves multiple tools efficiently.
@@ -68,6 +70,8 @@ async def test_batch_read_basic_operation(redis_client):
 
 
 @pytest.mark.asyncio
+@pytest.mark.integration
+@pytest.mark.requires_redis
 async def test_batch_read_with_risk_filtering(redis_client):
     """
     Verify batch read filters by max risk level.
@@ -125,6 +129,8 @@ async def test_batch_read_with_risk_filtering(redis_client):
 
 
 @pytest.mark.asyncio
+@pytest.mark.integration
+@pytest.mark.requires_redis
 async def test_batch_read_size_limit(redis_client):
     """
     Verify batch read enforces size limits.
@@ -148,6 +154,8 @@ async def test_batch_read_size_limit(redis_client):
 
 
 @pytest.mark.asyncio
+@pytest.mark.integration
+@pytest.mark.requires_redis
 async def test_batch_search_basic_operation(redis_client):
     """
     Verify batch search executes multiple queries efficiently.
@@ -192,6 +200,8 @@ async def test_batch_search_basic_operation(redis_client):
 
 
 @pytest.mark.asyncio
+@pytest.mark.integration
+@pytest.mark.requires_redis
 async def test_batch_search_with_risk_exclusion(redis_client):
     """
     Verify batch search excludes specified risk levels.
@@ -237,6 +247,8 @@ async def test_batch_search_with_risk_exclusion(redis_client):
 
 
 @pytest.mark.asyncio
+@pytest.mark.integration
+@pytest.mark.requires_redis
 async def test_batch_search_with_min_score(redis_client):
     """
     Verify batch search filters by minimum relevance score.
@@ -278,6 +290,8 @@ async def test_batch_search_with_min_score(redis_client):
 
 
 @pytest.mark.asyncio
+@pytest.mark.integration
+@pytest.mark.requires_redis
 async def test_batch_search_limit_per_query(redis_client):
     """
     Verify batch search respects per-query result limit.
@@ -310,6 +324,8 @@ async def test_batch_search_limit_per_query(redis_client):
 
 
 @pytest.mark.asyncio
+@pytest.mark.integration
+@pytest.mark.requires_redis
 async def test_macro_operations_respect_leases(redis_client):
     """
     Verify macro operations check leases before execution.
@@ -338,6 +354,8 @@ async def test_macro_operations_respect_leases(redis_client):
 
 
 @pytest.mark.asyncio
+@pytest.mark.integration
+@pytest.mark.requires_redis
 async def test_batch_read_audit_logging(redis_client):
     """
     Verify batch read logs operations when audit=True.
@@ -374,6 +392,8 @@ async def test_batch_read_audit_logging(redis_client):
 
 
 @pytest.mark.asyncio
+@pytest.mark.integration
+@pytest.mark.requires_redis
 async def test_batch_operations_empty_input(redis_client):
     """
     Verify batch operations handle empty input gracefully.
@@ -403,6 +423,8 @@ async def test_batch_operations_empty_input(redis_client):
 
 
 @pytest.mark.asyncio
+@pytest.mark.integration
+@pytest.mark.requires_redis
 async def test_batch_read_nonexistent_tools(redis_client):
     """
     Verify batch read handles nonexistent tools gracefully.
@@ -437,6 +459,8 @@ async def test_batch_read_nonexistent_tools(redis_client):
 
 
 @pytest.mark.asyncio
+@pytest.mark.integration
+@pytest.mark.requires_redis
 async def test_complete_macro_governance_workflow(redis_client):
     """
     End-to-end test of macro operations with governance.

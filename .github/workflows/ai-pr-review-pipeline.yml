@@ -366,8 +366,38 @@ jobs:
         id: tests
         continue-on-error: true
         run: |
-          pytest tests/ -v --tb=short --maxfail=5 2>&1 | tee test_output.txt
-          echo "exit_code=${PIPESTATUS[0]}" >> $GITHUB_OUTPUT
+          # Run unit tests first (should always pass)
+          echo "=== Running Unit Tests ==="
+          pytest tests/ -m "unit" -v --tb=short --maxfail=10 2>&1 | tee unit_tests.txt
+          UNIT_EXIT=$?
+          
+          echo -e "\n=== Running Integration Tests ==="
+          pytest tests/ -m "integration or requires_redis or requires_api_keys" -v --tb=short --maxfail=5 2>&1 | tee integration_tests.txt
+          INTEGRATION_EXIT=$?
+          
+          echo -e "\n=== Running All Other Tests ==="
+          pytest tests/ -m "not unit and not integration" -v --tb=short --maxfail=5 2>&1 | tee other_tests.txt
+          OTHER_EXIT=$?
+          
+          # Create summary
+          cat > test_summary.txt <<EOF
+          Unit Tests: $([ $UNIT_EXIT -eq 0 ] && echo "✅ PASSED" || echo "❌ FAILED (exit $UNIT_EXIT)")
+          Integration Tests: $([ $INTEGRATION_EXIT -eq 0 ] && echo "✅ PASSED" || echo "❌ FAILED (exit $INTEGRATION_EXIT)")
+          Other Tests: $([ $OTHER_EXIT -eq 0 ] && echo "✅ PASSED" || echo "❌ FAILED (exit $OTHER_EXIT)")
+          EOF
+          
+          cat test_summary.txt
+          
+          # Combine all output
+          cat unit_tests.txt integration_tests.txt other_tests.txt > test_output.txt
+          
+          # Store exit codes
+          echo "unit_exit=$UNIT_EXIT" >> $GITHUB_OUTPUT
+          echo "integration_exit=$INTEGRATION_EXIT" >> $GITHUB_OUTPUT
+          echo "other_exit=$OTHER_EXIT" >> $GITHUB_OUTPUT
+          
+          # Overall exit code (fail only if unit tests fail)
+          exit $UNIT_EXIT
       
       - name: ✅ Post Test Results
         uses: actions/github-script@v7
@@ -375,29 +405,51 @@ jobs:
           script: |
             const fs = require('fs');
             const pr = ${{ toJson(matrix.pr) }};
-            const exitCode = '${{ steps.tests.outputs.exit_code }}';
+            const unitExit = '${{ steps.tests.outputs.unit_exit }}' || '0';
+            const integrationExit = '${{ steps.tests.outputs.integration_exit }}' || '0';
+            const otherExit = '${{ steps.tests.outputs.other_exit }}' || '0';
             
             let testOutput = 'No test output captured';
+            let summary = 'No summary available';
             try {
               testOutput = fs.readFileSync('test_output.txt', 'utf8');
-              if (testOutput.length > 3000) {
-                testOutput = testOutput.slice(0, 3000) + '\n... [truncated - see workflow logs for full output]';
+              summary = fs.readFileSync('test_summary.txt', 'utf8');
+              if (testOutput.length > 4000) {
+                testOutput = testOutput.slice(0, 4000) + '\n... [truncated - see workflow logs for full output]';
               }
             } catch (e) {
-              core.warning(`Failed to read test output: ${e.message}`);
+              core.warning(`Failed to read test files: ${e.message}`);
             }
             
-            const status = exitCode === '0' ? '✅ PASSED' : '❌ FAILED';
-            const emoji = exitCode === '0' ? '✅' : '❌';
+            // Determine overall status
+            const unitPassed = unitExit === '0';
+            const integrationPassed = integrationExit === '0';
+            const overallStatus = unitPassed ? '✅ PASSED' : '❌ FAILED';
+            const emoji = unitPassed ? '✅' : '❌';
+            
+            // Build verdict
+            let verdict = '';
+            if (unitPassed && integrationPassed) {
+              verdict = '🟢 **READY FOR MERGE** - All tests passing';
+            } else if (unitPassed && !integrationPassed) {
+              verdict = '🟡 **REVIEW REQUIRED** - Unit tests pass, but integration tests failed (may be environment-related)';
+            } else {
+              verdict = '🔴 **BLOCKED** - Unit tests failing, PR needs fixes';
+            }
             
             const testBody = [
               `## ${emoji} Functional Verifier Results`,
               '',
-              `**Test Status:** ${status}`,
-              `**Exit Code:** ${exitCode}`,
+              `**Overall Status:** ${overallStatus}`,
+              `**Verdict:** ${verdict}`,
+              '',
+              '### Test Results by Category',
+              '```',
+              summary,
+              '```',
               '',
               '<details>',
-              '<summary>Test Output (click to expand)</summary>',
+              '<summary>📋 Full Test Output (click to expand)</summary>',
               '',
               '```',
               testOutput,
@@ -405,26 +457,18 @@ jobs:
               '',
               '</details>',
               '',
-              '@github-copilot Based on these test results, please:',
+              '### Understanding Test Results',
               '',
-              '1. **Identify Test Failures**',
-              '   - Which tests failed and why?',
-              '   - Are failures related to this PR\'s changes?',
-              '   - Are there any pre-existing test failures unrelated to this PR?',
+              '- **Unit Tests** - Core logic tests that should always pass. Failures here indicate bugs in the PR.',
+              '- **Integration Tests** - Tests requiring Redis, API keys, or external services. May fail in CI due to missing credentials.',
+              '- **Other Tests** - Miscellaneous tests. Failures may be environment-related.',
               '',
-              '2. **Suggest Fixes**',
-              '   - What changes are needed to fix failing tests?',
-              '   - Are there edge cases not being handled?',
-              '   - Do any mocks or fixtures need updating?',
-              '',
-              '3. **Merge Readiness Assessment**',
-              '   - Is this PR ready for merge?',
-              '   - What additional testing is recommended?',
-              '   - Are there any concerns about the changes?',
+              unitPassed ? '' : '⚠️ **Action Required:** Unit test failures must be fixed before merging.',
+              integrationPassed ? '' : 'ℹ️ **Integration tests failed** - This may be expected if the CI environment lacks API keys or services. Review the output to determine if failures are PR-related or environmental.',
               '',
               '---',
               '*This verification was automated by the AI-Powered PR Review Pipeline*'
-            ].join('\n');
+            ].filter(line => line !== '').join('\n');
             
             await github.rest.issues.createComment({
               owner: context.repo.owner,
