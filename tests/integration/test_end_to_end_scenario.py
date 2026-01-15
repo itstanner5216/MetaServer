@@ -14,9 +14,8 @@ verifying all phases work together correctly.
 import asyncio
 
 import pytest
-
 from src.meta_mcp.config import Config
-from src.meta_mcp.discovery import tool_registry
+from src.meta_mcp.registry import tool_registry
 from src.meta_mcp.governance.policy import evaluate_policy
 from src.meta_mcp.governance.tokens import generate_token, verify_token
 from src.meta_mcp.leases.manager import lease_manager

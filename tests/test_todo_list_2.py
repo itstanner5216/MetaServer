@@ -5,7 +5,7 @@ Test Coverage:
 1. remove_directory tool - path validation, recursive deletion, error cases
 2. Config.ENABLE_LEASE_MANAGEMENT - middleware skips leases when disabled
 3. client_id extraction - from context.session_id in middleware and supervisor
-4. format_search_results - works with both ToolSummary and ToolCandidate
+4. format_search_results - works with ToolCandidate results
 5. Package imports - admin_tools.py imports work without sys.path mutation
 """
 
@@ -18,7 +18,7 @@ import pytest
 from fastmcp.exceptions import ToolError
 
 from src.meta_mcp.config import Config
-from src.meta_mcp.discovery import ToolSummary, format_search_results
+from src.meta_mcp.discovery_utils import format_search_results
 from src.meta_mcp.middleware import GovernanceMiddleware
 from src.meta_mcp.state import ExecutionMode
 
@@ -501,50 +501,8 @@ async def test_supervisor_handles_missing_context_gracefully():
 
 
 # ============================================================================
-# TEST 4: format_search_results - works with both ToolSummary and ToolCandidate
+# TEST 4: format_search_results - works with ToolCandidate results
 # ============================================================================
-
-
-def test_format_search_results_handles_tool_summary():
-    """
-    Test that format_search_results correctly handles legacy ToolSummary objects.
-
-    Validates: Backward compatibility with old ToolSummary format
-    """
-    # Create ToolSummary objects (old format)
-    results = [
-        ToolSummary(
-            name="read_file",
-            description="Read file contents from workspace.",
-            category="core",
-            sensitive=False,
-        ),
-        ToolSummary(
-            name="write_file",
-            description="Write content to file in workspace.",
-            category="core",
-            sensitive=True,
-        ),
-    ]
-
-    # Format results
-    output = format_search_results(results)
-
-    # Verify output contains tool names
-    assert "read_file" in output
-    assert "write_file" in output
-
-    # Verify sensitivity flags are correct
-    assert "[SAFE]" in output  # read_file is not sensitive
-    assert "[SENSITIVE]" in output  # write_file is sensitive
-
-    # Verify descriptions are included
-    assert "Read file contents" in output
-    assert "Write content to file" in output
-
-    # Verify count
-    assert "2 tool(s)" in output
-
 
 def test_format_search_results_handles_tool_candidate():
     """
@@ -552,25 +510,24 @@ def test_format_search_results_handles_tool_candidate():
 
     Validates: Forward compatibility with new registry format
     """
-
-    # Create mock ToolCandidate objects (new format)
-    # ToolCandidate has: tool_id, description_1line, risk_level
-    class MockToolCandidate:
-        def __init__(self, tool_id, description_1line, risk_level):
-            self.tool_id = tool_id
-            self.description_1line = description_1line
-            self.risk_level = risk_level
+    from src.meta_mcp.registry.models import ToolCandidate
 
     results = [
-        MockToolCandidate(
+        ToolCandidate(
             tool_id="list_directory",
+            server_id="core_tools",
             description_1line="List directory contents with type indicators.",
+            tags=["file", "directory"],
             risk_level="safe",
+            relevance_score=0.9,
         ),
-        MockToolCandidate(
+        ToolCandidate(
             tool_id="execute_command",
+            server_id="core_tools",
             description_1line="Execute shell command with timeout.",
+            tags=["shell"],
             risk_level="dangerous",
+            relevance_score=0.8,
         ),
     ]
 
@@ -606,20 +563,34 @@ def test_format_search_results_mixed_risk_levels():
     """
     Test that format_search_results correctly maps all risk levels to sensitivity flags.
 
-    Validates: Risk level to sensitivity mapping logic (line 329 in discovery.py)
+    Validates: Risk level to sensitivity mapping logic
     """
 
     # Create tools with different risk levels
-    class MockToolCandidate:
-        def __init__(self, tool_id, description_1line, risk_level):
-            self.tool_id = tool_id
-            self.description_1line = description_1line
-            self.risk_level = risk_level
+    from src.meta_mcp.registry.models import ToolCandidate
 
     results = [
-        MockToolCandidate("tool1", "Safe tool.", "safe"),
-        MockToolCandidate("tool2", "Sensitive tool.", "sensitive"),
-        MockToolCandidate("tool3", "Dangerous tool.", "dangerous"),
+        ToolCandidate(
+            tool_id="tool1",
+            server_id="core_tools",
+            description_1line="Safe tool.",
+            tags=["safe"],
+            risk_level="safe",
+        ),
+        ToolCandidate(
+            tool_id="tool2",
+            server_id="core_tools",
+            description_1line="Sensitive tool.",
+            tags=["sensitive"],
+            risk_level="sensitive",
+        ),
+        ToolCandidate(
+            tool_id="tool3",
+            server_id="core_tools",
+            description_1line="Dangerous tool.",
+            tags=["dangerous"],
+            risk_level="dangerous",
+        ),
     ]
 
     output = format_search_results(results)
