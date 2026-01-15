@@ -17,7 +17,7 @@ permissions:
 jobs:
   step1-consolidate:
     name: "Step 1: Consolidate PRs"
-    if: inputs.skip_consolidation == false
+    if: inputs.skip_consolidation != true
     uses: ./.github/workflows/pr-consolidation.yml
     with:
       dry_run: false
@@ -25,16 +25,16 @@ jobs:
   
   step2-cleanup-comments:
     name: "Step 2: Clean Comments"
-    needs: [step1-consolidate]
-    if: always() && (needs.step1-consolidate.result == 'success' || needs.step1-consolidate.result == 'skipped')
+    needs: step1-consolidate
+    if: always() && !failure()
     uses: ./.github/workflows/cleanup-pr-comments.yml
     with:
       pr_numbers: 'all'
   
   step3-rerun-reviews:
     name: "Step 3: Re-run Reviews"
-    needs: [step2-cleanup-comments]
-    if: always() && needs.step2-cleanup-comments.result == 'success'
+    needs: step2-cleanup-comments
+    if: always() && !failure()
     uses: ./.github/workflows/rerun-pr-reviews.yml
     with:
       pr_numbers: 'all'

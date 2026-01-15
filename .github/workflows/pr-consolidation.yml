@@ -232,7 +232,7 @@ jobs:
   close-duplicates:
     name: Close Duplicate PRs
     needs: analyze-prs
-    if: inputs.dry_run == false
+    if: inputs.dry_run != true
     runs-on: ubuntu-latest
     steps:
       - name: Close Duplicate PRs
