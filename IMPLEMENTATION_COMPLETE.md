@@ -86,7 +86,7 @@ python -m scripts.agents.run_agent --pr 123 --all --dry-run
 ```bash
 # Set API keys
 export AZURE_OPENAI_API_KEY='...'
-export GITHUB_MODELS_TOKEN='...'
+export MODELS_API_TOKEN='...'
 export MOONSHOT_API_KEY='...'
 export OPENROUTER_API_KEY='...'
 export GITHUB_TOKEN='...'
@@ -105,7 +105,7 @@ gh workflow run ai-agent-pipeline.yml -f pr_number=123
 
 1. **Add Secrets**: Configure API keys in GitHub repository settings
    - `AZURE_OPENAI_API_KEY`
-   - `GITHUB_MODELS_TOKEN`
+   - `MODELS_API_TOKEN`
    - `MOONSHOT_API_KEY`
    - `OPENROUTER_API_KEY`
 

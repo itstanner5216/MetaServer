@@ -20,7 +20,7 @@ This pipeline uses specialized AI agents, each powered by different LLM models, 
 Add these secrets to your GitHub repository settings:
 
 - `AZURE_OPENAI_API_KEY` - For Validation Agent
-- `GITHUB_MODELS_TOKEN` - For Remediation Agent  
+- `MODELS_API_TOKEN` - For Remediation Agent  
 - `MOONSHOT_API_KEY` - For Architectural Guardian
 - `OPENROUTER_API_KEY` - For Functional Verifier
 
