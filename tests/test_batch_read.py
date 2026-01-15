@@ -7,7 +7,9 @@ Tests:
 - Error handling for missing tools
 - Partial success scenarios
 """
+
 import pytest
+
 from src.meta_mcp.registry.models import ToolRecord
 from src.meta_mcp.registry.registry import ToolRegistry
 
@@ -27,7 +29,7 @@ class TestBatchRead:
                 description_1line="Read files from disk",
                 description_full="Read text and binary files",
                 tags=["file", "read"],
-                risk_level="safe"
+                risk_level="safe",
             ),
             ToolRecord(
                 tool_id="write_file",
@@ -35,7 +37,7 @@ class TestBatchRead:
                 description_1line="Write files to disk",
                 description_full="Write text and binary files",
                 tags=["file", "write"],
-                risk_level="sensitive"
+                risk_level="sensitive",
             ),
             ToolRecord(
                 tool_id="list_directory",
@@ -43,7 +45,7 @@ class TestBatchRead:
                 description_1line="List directory contents",
                 description_full="List files and directories",
                 tags=["file", "list"],
-                risk_level="safe"
+                risk_level="safe",
             ),
             ToolRecord(
                 tool_id="send_email",
@@ -51,8 +53,8 @@ class TestBatchRead:
                 description_1line="Send email messages",
                 description_full="Send emails to recipients",
                 tags=["email", "network"],
-                risk_level="sensitive"
-            )
+                risk_level="sensitive",
+            ),
         ]
 
         for tool in tools:
@@ -142,6 +144,7 @@ class TestBatchRead:
     def test_batch_read_performance(self, sample_registry):
         """Test that batch read is faster than individual reads."""
         import time
+
         from src.meta_mcp.macros.batch_read import batch_read_tools
 
         tool_ids = ["read_file", "write_file", "list_directory", "send_email"]
@@ -190,7 +193,8 @@ class TestBatchRead:
 
         # Filter for safe tools only
         safe_tools = {
-            tid: tool for tid, tool in results.items()
+            tid: tool
+            for tid, tool in results.items()
             if tool is not None and tool.risk_level == "safe"
         }
 
@@ -223,16 +227,16 @@ class TestBatchRead:
 
     def test_batch_read_concurrent_safety(self, sample_registry):
         """Test batch read is safe for concurrent access."""
-        from src.meta_mcp.macros.batch_read import batch_read_tools
         import concurrent.futures
+
+        from src.meta_mcp.macros.batch_read import batch_read_tools
 
         tool_ids = ["read_file", "write_file", "send_email"]
 
         # Perform multiple batch reads concurrently
         with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
             futures = [
-                executor.submit(batch_read_tools, sample_registry, tool_ids)
-                for _ in range(10)
+                executor.submit(batch_read_tools, sample_registry, tool_ids) for _ in range(10)
             ]
 
             results = [f.result() for f in futures]

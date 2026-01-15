@@ -6,13 +6,13 @@ the complete schema from the ToolRecord.schema_full field.
 Design Plan Section: Phase 5 (Progressive Schemas)
 """
 
-from typing import Dict, Any, Optional
 import logging
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
 
-def expand_schema(tool_id: str) -> Optional[Dict[str, Any]]:
+def expand_schema(tool_id: str) -> dict[str, Any] | None:
     """
     Expand a minimal schema to its full form.
 
@@ -54,9 +54,7 @@ def expand_schema(tool_id: str) -> Optional[Dict[str, Any]]:
     # Fallback: If schema_full not populated, return minimal schema
     # This maintains backward compatibility during Phase 5 rollout
     if tool_record.schema_min:
-        logger.warning(
-            f"Full schema not available for '{tool_id}', returning minimal schema"
-        )
+        logger.warning(f"Full schema not available for '{tool_id}', returning minimal schema")
         return tool_record.schema_min
 
     # No schema available
@@ -64,7 +62,7 @@ def expand_schema(tool_id: str) -> Optional[Dict[str, Any]]:
     return None
 
 
-def expand_schema_from_live_tool(tool_id: str, mcp_instance) -> Optional[Dict[str, Any]]:
+def expand_schema_from_live_tool(tool_id: str, mcp_instance) -> dict[str, Any] | None:
     """
     Expand schema by retrieving from live MCP tool instance.
 
@@ -91,10 +89,7 @@ def expand_schema_from_live_tool(tool_id: str, mcp_instance) -> Optional[Dict[st
         # Get tool from MCP instance
         if asyncio.iscoroutinefunction(mcp_instance.get_tool):
             # Need to await in async context
-            logger.warning(
-                "expand_schema_from_live_tool called in sync context, "
-                "use async version"
-            )
+            logger.warning("expand_schema_from_live_tool called in sync context, use async version")
             return None
 
         tool = mcp_instance.get_tool(tool_id)
@@ -119,7 +114,7 @@ def expand_schema_from_live_tool(tool_id: str, mcp_instance) -> Optional[Dict[st
 
 async def expand_schema_from_live_tool_async(
     tool_id: str, mcp_instance
-) -> Optional[Dict[str, Any]]:
+) -> dict[str, Any] | None:
     """
     Async version of expand_schema_from_live_tool.
 

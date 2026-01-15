@@ -4,18 +4,18 @@ Batch search operations for tools.
 Provides efficient batch search across multiple queries.
 """
 
-from typing import Dict, List, Optional
+
 from ..registry.models import ToolCandidate
 from ..registry.registry import ToolRegistry
 
 
 def batch_search_tools(
     registry: ToolRegistry,
-    queries: Optional[List[str]],
+    queries: list[str] | None,
     limit: int = 10,
     min_score: float = 0.0,
-    exclude_risk_levels: Optional[List[str]] = None
-) -> Dict[str, List[ToolCandidate]]:
+    exclude_risk_levels: list[str] | None = None,
+) -> dict[str, list[ToolCandidate]]:
     """
     Perform multiple search queries in a single batch operation.
 
@@ -47,10 +47,7 @@ def batch_search_tools(
 
         # Apply risk level filter
         if exclude_risk_levels:
-            candidates = [
-                c for c in candidates
-                if c.risk_level not in exclude_risk_levels
-            ]
+            candidates = [c for c in candidates if c.risk_level not in exclude_risk_levels]
 
         results[query] = candidates
 

@@ -4,10 +4,9 @@ Semantic search implementation using cosine similarity.
 Provides ranking of tools based on semantic similarity between
 query and tool descriptions using embedding vectors.
 """
-import math
-from typing import List, Optional
 
-from ..registry.models import ToolCandidate, ToolRecord
+
+from ..registry.models import ToolCandidate
 from ..registry.registry import ToolRegistry
 from .embedder import ToolEmbedder
 
@@ -54,7 +53,7 @@ class SemanticSearch:
 
         self._index_built = True
 
-    def _cosine_similarity(self, vec_a: List[float], vec_b: List[float]) -> float:
+    def _cosine_similarity(self, vec_a: list[float], vec_b: list[float]) -> float:
         """
         Compute cosine similarity between two vectors.
 
@@ -74,12 +73,7 @@ class SemanticSearch:
         # Clamp to [0, 1] range (handles floating point errors)
         return max(0.0, min(1.0, dot_product))
 
-    def search(
-        self,
-        query: str,
-        limit: int = 10,
-        min_score: float = 0.0
-    ) -> List[ToolCandidate]:
+    def search(self, query: str, limit: int = 10, min_score: float = 0.0) -> list[ToolCandidate]:
         """
         Search tools using semantic similarity.
 
@@ -122,14 +116,16 @@ class SemanticSearch:
         # Convert to ToolCandidate objects
         results = []
         for tool, score in scored_tools[:limit]:
-            results.append(ToolCandidate(
-                tool_id=tool.tool_id,
-                server_id=tool.server_id,
-                description_1line=tool.description_1line,
-                tags=tool.tags,
-                risk_level=tool.risk_level,
-                relevance_score=score
-            ))
+            results.append(
+                ToolCandidate(
+                    tool_id=tool.tool_id,
+                    server_id=tool.server_id,
+                    description_1line=tool.description_1line,
+                    tags=tool.tags,
+                    risk_level=tool.risk_level,
+                    relevance_score=score,
+                )
+            )
 
         return results
 
@@ -145,10 +141,8 @@ class SemanticSearch:
 
 
 def search_tools_semantic(
-    registry: ToolRegistry,
-    query: str,
-    limit: int = 10
-) -> List[ToolCandidate]:
+    registry: ToolRegistry, query: str, limit: int = 10
+) -> list[ToolCandidate]:
     """
     Convenience function for semantic search.
 

@@ -2,14 +2,17 @@
 """
 Quick verification script for Phase 2: Semantic Retrieval
 """
-import sys
-sys.path.insert(0, '/home/tanner/Projects/MCPServer')
 
+import sys
+
+sys.path.insert(0, "/home/tanner/Projects/MCPServer")
+
+from src.meta_mcp.config import Config
 from src.meta_mcp.registry.models import ToolRecord
 from src.meta_mcp.registry.registry import ToolRegistry
 from src.meta_mcp.retrieval.embedder import ToolEmbedder
 from src.meta_mcp.retrieval.search import SemanticSearch
-from src.meta_mcp.config import Config
+
 
 def test_embedder():
     """Test basic embedder functionality."""
@@ -25,7 +28,7 @@ def test_embedder():
             description_1line="Read files from disk",
             description_full="Read text and binary files from the file system",
             tags=["file", "read", "disk"],
-            risk_level="safe"
+            risk_level="safe",
         ),
         ToolRecord(
             tool_id="write_file",
@@ -33,8 +36,8 @@ def test_embedder():
             description_1line="Write files to disk",
             description_full="Write text and binary files to the file system",
             tags=["file", "write", "disk"],
-            risk_level="sensitive"
-        )
+            risk_level="sensitive",
+        ),
     ]
 
     # Build index
@@ -52,6 +55,7 @@ def test_embedder():
     print("  ✓ ToolEmbedder working correctly")
     return True
 
+
 def test_semantic_search():
     """Test semantic search functionality."""
     print("Testing SemanticSearch...")
@@ -66,7 +70,7 @@ def test_semantic_search():
             description_1line="Read files from disk",
             description_full="Read text and binary files",
             tags=["file", "read"],
-            risk_level="safe"
+            risk_level="safe",
         ),
         ToolRecord(
             tool_id="send_email",
@@ -74,8 +78,8 @@ def test_semantic_search():
             description_1line="Send email messages",
             description_full="Send email to recipients",
             tags=["email", "send"],
-            risk_level="sensitive"
-        )
+            risk_level="sensitive",
+        ),
     ]
 
     for tool in tools:
@@ -92,17 +96,21 @@ def test_semantic_search():
     print("  ✓ SemanticSearch working correctly")
     return True
 
+
 def test_config_flag():
     """Test configuration flag."""
     print("Testing Config...")
 
     # Check flag exists
-    assert hasattr(Config, 'ENABLE_SEMANTIC_RETRIEVAL'), "Config should have ENABLE_SEMANTIC_RETRIEVAL flag"
+    assert hasattr(Config, "ENABLE_SEMANTIC_RETRIEVAL"), (
+        "Config should have ENABLE_SEMANTIC_RETRIEVAL flag"
+    )
     assert isinstance(Config.ENABLE_SEMANTIC_RETRIEVAL, bool), "Flag should be boolean"
     assert Config.ENABLE_SEMANTIC_RETRIEVAL is False, "Flag should default to False"
 
     print("  ✓ Config flag correct")
     return True
+
 
 def test_registry_integration():
     """Test registry integration."""
@@ -118,7 +126,7 @@ def test_registry_integration():
             description_1line="Test tool",
             description_full="A test tool",
             tags=["test"],
-            risk_level="safe"
+            risk_level="safe",
         )
     ]
 
@@ -141,11 +149,12 @@ def test_registry_integration():
 
     return True
 
+
 def main():
     """Run all verification tests."""
-    print("\n" + "="*60)
+    print("\n" + "=" * 60)
     print("Phase 2: Semantic Retrieval Verification")
-    print("="*60 + "\n")
+    print("=" * 60 + "\n")
 
     try:
         test_embedder()
@@ -153,16 +162,18 @@ def main():
         test_config_flag()
         test_registry_integration()
 
-        print("\n" + "="*60)
+        print("\n" + "=" * 60)
         print("✓ All Phase 2 components verified successfully!")
-        print("="*60 + "\n")
+        print("=" * 60 + "\n")
         return 0
 
     except Exception as e:
         print(f"\n✗ Verification failed: {e}")
         import traceback
+
         traceback.print_exc()
         return 1
+
 
 if __name__ == "__main__":
     sys.exit(main())
