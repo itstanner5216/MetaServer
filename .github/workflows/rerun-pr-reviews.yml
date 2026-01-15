@@ -1,0 +1,80 @@
+name: 🔄 Re-run AI PR Reviews
+
+on:
+  workflow_dispatch:
+    inputs:
+      pr_numbers:
+        description: 'PR numbers to review (comma-separated, or "all" for all open PRs)'
+        required: true
+        type: string
+        default: 'all'
+      agent_mode:
+        description: 'Agent operation mode'
+        required: true
+        default: 'review_and_fix'
+        type: choice
+        options:
+          - review_only
+          - review_and_fix
+          - fix_only
+
+permissions:
+  actions: write
+  pull-requests: read
+
+jobs:
+  trigger-reviews:
+    name: Trigger AI Reviews
+    runs-on: ubuntu-latest
+    steps:
+      - name: Get Target PRs
+        id: get-prs
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const input = '${{ inputs.pr_numbers }}';
+            let prNumbers = [];
+            
+            if (input.toLowerCase() === 'all') {
+              let page = 1;
+              while (true) {
+                const { data: prs } = await github.rest.pulls.list({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  state: 'open',
+                  per_page: 100,
+                  page: page
+                });
+                
+                if (prs.length === 0) break;
+                prNumbers = prNumbers.concat(prs.map(pr => pr.number));
+                page++;
+              }
+            } else {
+              prNumbers = input.split(',').map(n => n.trim()).join(',');
+            }
+            
+            core.setOutput('pr_numbers', typeof prNumbers === 'object' ? prNumbers.join(',') : prNumbers);
+      
+      - name: Trigger AI PR Review Pipeline
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const prNumbers = '${{ steps.get-prs.outputs.pr_numbers }}';
+            
+            console.log(`Triggering AI review pipeline for PRs: ${prNumbers}`);
+            
+            await github.rest.actions.createWorkflowDispatch({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              workflow_id: 'ai-pr-review-pipeline.yml',
+              ref: 'main',
+              inputs: {
+                pr_numbers: prNumbers,
+                agent_mode: '${{ inputs.agent_mode }}'
+              }
+            });
+            
+            console.log('✅ Workflow triggered successfully');
+            core.summary.addRaw(`# 🔄 AI PR Review Triggered\n\n**PRs:** ${prNumbers}\n**Mode:** ${{ inputs.agent_mode }}\n\nCheck the [Actions tab](https://github.com/${context.repo.owner}/${context.repo.repo}/actions) to monitor progress.`);
+            await core.summary.write();

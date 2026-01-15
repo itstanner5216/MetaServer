@@ -1,0 +1,107 @@
+name: 🧼 Clean Up AI Review Comments
+
+on:
+  workflow_dispatch:
+    inputs:
+      pr_numbers:
+        description: 'PR numbers to clean (comma-separated, or "all" for all open PRs)'
+        required: true
+        type: string
+        default: 'all'
+
+permissions:
+  pull-requests: write
+  issues: write
+
+jobs:
+  cleanup-comments:
+    name: Delete AI Review Comments
+    runs-on: ubuntu-latest
+    steps:
+      - name: Get Target PRs
+        id: get-prs
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const input = '${{ inputs.pr_numbers }}';
+            let prNumbers = [];
+            
+            if (input.toLowerCase() === 'all') {
+              // Fetch all open PRs
+              let page = 1;
+              while (true) {
+                const { data: prs } = await github.rest.pulls.list({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  state: 'open',
+                  per_page: 100,
+                  page: page
+                });
+                
+                if (prs.length === 0) break;
+                prNumbers = prNumbers.concat(prs.map(pr => pr.number));
+                page++;
+              }
+            } else {
+              prNumbers = input.split(',').map(n => parseInt(n.trim()));
+            }
+            
+            console.log(`Target PRs: ${prNumbers.join(', ')}`);
+            core.setOutput('pr_numbers', JSON.stringify(prNumbers));
+      
+      - name: Delete AI Comments
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const prNumbers = JSON.parse('${{ steps.get-prs.outputs.pr_numbers }}');
+            let totalDeleted = 0;
+            
+            for (const prNumber of prNumbers) {
+              console.log(`\nProcessing PR #${prNumber}...`);
+              
+              try {
+                // Fetch all comments on this PR
+                const { data: comments } = await github.rest.issues.listComments({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: prNumber,
+                  per_page: 100
+                });
+                
+                console.log(`  Found ${comments.length} total comments`);
+                
+                // Filter for AI review pipeline comments
+                const aiComments = comments.filter(comment => 
+                  comment.body.includes('AI-Powered PR Review Pipeline') ||
+                  comment.body.includes('🔍 Validation Agent') ||
+                  comment.body.includes('🔧 Remediation Agent') ||
+                  comment.body.includes('🏛️ Architectural Guardian') ||
+                  comment.body.includes('✅ Functional Verifier') ||
+                  comment.user.login === 'github-actions[bot]'
+                );
+                
+                console.log(`  Found ${aiComments.length} AI review comments`);
+                
+                // Delete each AI comment
+                for (const comment of aiComments) {
+                  await github.rest.issues.deleteComment({
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                    comment_id: comment.id
+                  });
+                  
+                  totalDeleted++;
+                  console.log(`  ✅ Deleted comment ${comment.id}`);
+                  
+                  // Rate limit pause
+                  await new Promise(resolve => setTimeout(resolve, 500));
+                }
+                
+              } catch (error) {
+                console.error(`  ❌ Error processing PR #${prNumber}: ${error.message}`);
+              }
+            }
+            
+            console.log(`\n🎉 Deleted ${totalDeleted} AI review comments across ${prNumbers.length} PRs`);
+            core.summary.addRaw(`# 🧼 Comment Cleanup Complete\n\n- **PRs Processed:** ${prNumbers.length}\n- **Comments Deleted:** ${totalDeleted}`);
+            await core.summary.write();

@@ -1,0 +1,314 @@
+name: 🧹 PR Consolidation - Close Duplicates
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Dry run - analyze only, do not close PRs'
+        required: true
+        type: boolean
+        default: true
+      auto_approve:
+        description: 'Skip manual review step'
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  pull-requests: write
+  issues: write
+  contents: read
+
+jobs:
+  analyze-prs:
+    name: Analyze Open PRs
+    runs-on: ubuntu-latest
+    outputs:
+      analysis: ${{ steps.analyze.outputs.analysis }}
+      to_keep: ${{ steps.analyze.outputs.to_keep }}
+      to_close: ${{ steps.analyze.outputs.to_close }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      
+      - name: Analyze PRs
+        id: analyze
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            
+            // Fetch ALL open PRs (GitHub API paginates at 100)
+            let allPRs = [];
+            let page = 1;
+            while (true) {
+              const { data: prs } = await github.rest.pulls.list({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                state: 'open',
+                per_page: 100,
+                page: page
+              });
+              
+              if (prs.length === 0) break;
+              allPRs = allPRs.concat(prs);
+              page++;
+            }
+            
+            console.log(`Found ${allPRs.length} open PRs`);
+            
+            // Group PRs by similarity
+            const groups = {};
+            
+            for (const pr of allPRs) {
+              // Extract key terms from title
+              const title = pr.title.toLowerCase();
+              const baseRef = pr.base.ref;
+              
+              // Categorize by issue type
+              let category = 'other';
+              if (title.includes('governance') || title.includes('hook')) {
+                category = 'governance-hooks';
+              } else if (title.includes('lease')) {
+                category = 'lease-management';
+              } else if (title.includes('import') || title.includes('modulenotfound') || title.includes('config')) {
+                category = 'imports-config';
+              } else if (title.includes('test')) {
+                category = 'testing';
+              } else if (title.includes('command') || title.includes('runner')) {
+                category = 'command-execution';
+              } else if (title.includes('elicit') || title.includes('approval')) {
+                category = 'elicitation';
+              } else if (title.includes('discovery') || title.includes('registry') || title.includes('bootstrap')) {
+                category = 'discovery-registry';
+              }
+              
+              const groupKey = `${category}::${baseRef}`;
+              
+              if (!groups[groupKey]) {
+                groups[groupKey] = {
+                  category,
+                  baseRef,
+                  prs: []
+                };
+              }
+              
+              groups[groupKey].prs.push({
+                number: pr.number,
+                title: pr.title,
+                created_at: pr.created_at,
+                updated_at: pr.updated_at,
+                author: pr.user.login,
+                draft: pr.draft,
+                url: pr.html_url,
+                labels: pr.labels.map(l => l.name),
+                commits: 0, // Will fetch if needed
+                changed_files: 0
+              });
+            }
+            
+            // Analyze each group and pick best PR
+            const toKeep = [];
+            const toClose = [];
+            
+            for (const [groupKey, group] of Object.entries(groups)) {
+              if (group.prs.length === 1) {
+                // Only one PR in this group, keep it
+                toKeep.push(group.prs[0]);
+                continue;
+              }
+              
+              console.log(`\n📦 Group: ${groupKey} (${group.prs.length} PRs)`);
+              
+              // Score each PR
+              for (const pr of group.prs) {
+                let score = 0;
+                
+                // Prefer non-draft
+                if (!pr.draft) score += 10;
+                
+                // Prefer newer (updated recently)
+                const hoursSinceUpdate = (Date.now() - new Date(pr.updated_at)) / (1000 * 60 * 60);
+                if (hoursSinceUpdate < 24) score += 5;
+                else if (hoursSinceUpdate < 72) score += 3;
+                
+                // Prefer human authors over bots
+                if (pr.author !== 'Copilot' && !pr.author.includes('bot')) score += 3;
+                
+                // Prefer PRs with labels
+                score += pr.labels.length;
+                
+                pr.score = score;
+                console.log(`  #${pr.number}: ${pr.title} (score: ${score})`);
+              }
+              
+              // Sort by score (highest first)
+              group.prs.sort((a, b) => b.score - a.score);
+              
+              // Keep the best one
+              const best = group.prs[0];
+              const duplicates = group.prs.slice(1);
+              
+              console.log(`  ✅ KEEP: #${best.number}`);
+              toKeep.push(best);
+              
+              duplicates.forEach(pr => {
+                console.log(`  ❌ CLOSE: #${pr.number}`);
+                toClose.push({
+                  ...pr,
+                  reason: `Duplicate of #${best.number}`,
+                  superseded_by: best.number,
+                  group: groupKey
+                });
+              });
+            }
+            
+            // Generate summary
+            const analysis = {
+              total_prs: allPRs.length,
+              groups: Object.keys(groups).length,
+              to_keep: toKeep.length,
+              to_close: toClose.length,
+              groups_detail: Object.entries(groups).map(([key, g]) => ({
+                key,
+                category: g.category,
+                base_branch: g.baseRef,
+                pr_count: g.prs.length,
+                kept: g.prs.length === 1 ? g.prs[0].number : g.prs[0].number,
+                closed: g.prs.slice(1).map(p => p.number)
+              }))
+            };
+            
+            // Save outputs
+            core.setOutput('analysis', JSON.stringify(analysis, null, 2));
+            core.setOutput('to_keep', JSON.stringify(toKeep.map(p => p.number)));
+            core.setOutput('to_close', JSON.stringify(toClose));
+            
+            // Write detailed report
+            const reportContent = [
+              '# PR Consolidation Analysis',
+              '',
+              '## Summary',
+              `- **Total Open PRs:** ${analysis.total_prs}`,
+              `- **Groups Identified:** ${analysis.groups}`,
+              `- **PRs to Keep:** ${analysis.to_keep}`,
+              `- **PRs to Close:** ${analysis.to_close}`,
+              '',
+              '## Groups',
+              '',
+              ...analysis.groups_detail.map(g => [
+                `### ${g.category} (base: \`${g.base_branch}\`)`,
+                `- **Count:** ${g.pr_count} PRs`,
+                `- **Keep:** #${g.kept}`,
+                g.closed.length > 0 ? `- **Close:** ${g.closed.map(n => `#${n}`).join(', ')}` : '',
+                ''
+              ].filter(line => line !== '').join('\n')).join('\n'),
+              '',
+              `## PRs to Keep (${toKeep.length})`,
+              '',
+              ...toKeep.map(pr => `- [ ] #${pr.number} - ${pr.title}`),
+              '',
+              `## PRs to Close (${toClose.length})`,
+              '',
+              ...toClose.map(pr => `- [ ] #${pr.number} - ${pr.title}\n  - Reason: ${pr.reason}\n  - Superseded by: #${pr.superseded_by}`)
+            ].join('\n');
+            
+            fs.writeFileSync('consolidation-report.md', reportContent);
+            
+            console.log('\n✅ Analysis complete!');
+      
+      - name: Upload Report
+        uses: actions/upload-artifact@v4
+        with:
+          name: consolidation-report
+          path: consolidation-report.md
+          retention-days: 30
+  
+  close-duplicates:
+    name: Close Duplicate PRs
+    needs: analyze-prs
+    if: inputs.dry_run == false
+    runs-on: ubuntu-latest
+    steps:
+      - name: Close Duplicate PRs
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const toClose = JSON.parse('${{ needs.analyze-prs.outputs.to_close }}');
+            
+            console.log(`Closing ${toClose.length} duplicate PRs...`);
+            
+            for (const pr of toClose) {
+              console.log(`\nClosing #${pr.number}: ${pr.title}`);
+              
+              // Post explanatory comment
+              const commentBody = [
+                '## 🧹 Closing as Duplicate',
+                '',
+                `This PR is being closed as part of repository cleanup because it duplicates work in #${pr.superseded_by}.`,
+                '',
+                `**Reason:** ${pr.reason}`,
+                `**Category:** ${pr.group}`,
+                '',
+                'If you believe this PR should remain open, please comment and it can be reopened.',
+                '',
+                '---',
+                '*Closed automatically by PR consolidation workflow*'
+              ].join('\n');
+              
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: pr.number,
+                body: commentBody
+              });
+              
+              // Close the PR
+              await github.rest.pulls.update({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                pull_number: pr.number,
+                state: 'closed'
+              });
+              
+              console.log(`✅ Closed #${pr.number}`);
+              
+              // Rate limit pause
+              await new Promise(resolve => setTimeout(resolve, 1000));
+            }
+            
+            console.log(`\n🎉 Closed ${toClose.length} duplicate PRs`);
+  
+  summary:
+    name: Generate Summary
+    needs: [analyze-prs, close-duplicates]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Post Summary
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const analysis = JSON.parse('${{ needs.analyze-prs.outputs.analysis }}');
+            const dryRun = ${{ inputs.dry_run }};
+            
+            const summaryLines = [
+              `# 🧹 PR Consolidation ${dryRun ? 'Analysis' : 'Complete'}`,
+              '',
+              '## Summary',
+              `- **Total Open PRs:** ${analysis.total_prs}`,
+              `- **Groups Identified:** ${analysis.groups}`,
+              `- **PRs to Keep:** ${analysis.to_keep}`,
+              `- **PRs ${dryRun ? 'Would Be' : 'Were'} Closed:** ${analysis.to_close}`,
+              '',
+              dryRun ? '⚠️ **DRY RUN** - No PRs were closed. Review the consolidation report and run again with dry_run=false to execute.' : '✅ **COMPLETE** - Duplicate PRs have been closed.',
+              '',
+              '## Next Steps',
+              dryRun ? '1. Download and review the consolidation report artifact' : '1. Run comment cleanup workflow to remove stale AI comments',
+              dryRun ? '2. Run workflow again with dry_run=false to close duplicates' : '2. Re-run AI PR review pipeline on remaining PRs'
+            ];
+            
+            const summary = summaryLines.join('\n');
+            
+            core.summary.addRaw(summary);
+            await core.summary.write();
