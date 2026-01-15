@@ -35,6 +35,11 @@ class Config:
     # ========================================================================
     REDIS_URL: str = os.getenv("REDIS_URL", "redis://localhost:6379")
     REDIS_DB: int = 0
+    REDIS_MAX_CONNECTIONS: int = int(os.getenv("REDIS_MAX_CONNECTIONS", "100"))
+    REDIS_SOCKET_CONNECT_TIMEOUT: float = float(
+        os.getenv("REDIS_SOCKET_CONNECT_TIMEOUT", "2")
+    )
+    REDIS_SOCKET_TIMEOUT: float = float(os.getenv("REDIS_SOCKET_TIMEOUT", "2"))
 
     # ========================================================================
     # Governance Configuration
@@ -135,6 +140,21 @@ class Config:
         # Validate ELICITATION_TIMEOUT
         if cls.ELICITATION_TIMEOUT <= 0:
             errors.append(f"ELICITATION_TIMEOUT must be > 0, got {cls.ELICITATION_TIMEOUT}")
+
+        # Validate Redis settings
+        if cls.REDIS_MAX_CONNECTIONS <= 0:
+            errors.append(
+                f"REDIS_MAX_CONNECTIONS must be > 0, got {cls.REDIS_MAX_CONNECTIONS}"
+            )
+        if cls.REDIS_SOCKET_CONNECT_TIMEOUT <= 0:
+            errors.append(
+                "REDIS_SOCKET_CONNECT_TIMEOUT must be > 0, "
+                f"got {cls.REDIS_SOCKET_CONNECT_TIMEOUT}"
+            )
+        if cls.REDIS_SOCKET_TIMEOUT <= 0:
+            errors.append(
+                f"REDIS_SOCKET_TIMEOUT must be > 0, got {cls.REDIS_SOCKET_TIMEOUT}"
+            )
 
         if errors:
             raise ValueError(f"Config validation failed: {'; '.join(errors)}")

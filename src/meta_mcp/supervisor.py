@@ -22,7 +22,7 @@ from .governance.policy import evaluate_policy
 from .governance.tokens import generate_token
 from .leases import lease_manager
 from .middleware import GovernanceMiddleware
-from .registry import tool_registry
+from .redis_client import check_redis_health
 from .state import governance_state
 from .validation import run_all_validations
 
@@ -177,6 +177,15 @@ async def lifespan(app):
     logger.info(f"Starting {SERVER_NAME} server...")
 
     # 1. Verify Redis connectivity (graceful degradation)
+    is_healthy, details = await check_redis_health()
+    if is_healthy:
+        logger.info(f"Redis health check passed: {details}")
+    else:
+        logger.warning(
+            f"Redis health check failed: {details}. "
+            "Degrading to PERMISSION mode (fail-safe default)."
+        )
+
     try:
         mode = await governance_state.get_mode()
         logger.info(f"Redis connected - Governance mode: {mode.value}")

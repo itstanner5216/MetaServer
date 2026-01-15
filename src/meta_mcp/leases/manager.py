@@ -7,7 +7,8 @@ from datetime import datetime, timezone
 from loguru import logger
 from redis import asyncio as aioredis
 
-from ..config import Config
+from ..redis_client import close_redis_client, get_redis_client
+from ..state import governance_state
 from .models import ToolLease
 
 
@@ -33,29 +34,18 @@ class LeaseManager:
 
     def __init__(self):
         """Initialize lease manager."""
-        self._redis_client: aioredis.Redis | None = None
-        self._redis_pool: aioredis.ConnectionPool | None = None
+        self._redis_client: Optional[aioredis.Redis] = None
         self._notification_callbacks = []  # Phase 8: Client notification callbacks
 
     async def _get_redis(self) -> aioredis.Redis:
         """
-        Get or create Redis client with connection pool (lazy initialization).
+        Get or create Redis client with shared connection pool.
 
         Returns:
             Redis client instance with connection pooling
         """
         if self._redis_client is None:
-            # Create connection pool if not exists
-            if self._redis_pool is None:
-                self._redis_pool = aioredis.ConnectionPool.from_url(
-                    Config.REDIS_URL,
-                    encoding="utf-8",
-                    decode_responses=True,
-                    max_connections=100,
-                    socket_connect_timeout=2,
-                    socket_timeout=2,
-                )
-            self._redis_client = aioredis.Redis(connection_pool=self._redis_pool)
+            self._redis_client = await get_redis_client()
         return self._redis_client
 
     @staticmethod
@@ -370,12 +360,8 @@ class LeaseManager:
 
     async def close(self):
         """Close Redis connection and pool."""
-        if self._redis_client is not None:
-            await self._redis_client.close()
-            self._redis_client = None
-        if self._redis_pool is not None:
-            await self._redis_pool.disconnect()
-            self._redis_pool = None
+        await close_redis_client()
+        self._redis_client = None
 
     async def _emit_list_changed(self, client_id: str):
         """
