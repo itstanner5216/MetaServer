@@ -42,12 +42,14 @@ def temp_git_repo():
         yield repo_path
 
 
+@pytest.mark.unit
 def test_git_operations_init(temp_git_repo):
     """Test GitOperations initialization."""
     git_ops = GitOperations(repo_path=str(temp_git_repo))
     assert git_ops.repo_path == temp_git_repo
 
 
+@pytest.mark.unit
 def test_get_current_branch(temp_git_repo):
     """Test getting current branch."""
     git_ops = GitOperations(repo_path=str(temp_git_repo))
@@ -55,6 +57,7 @@ def test_get_current_branch(temp_git_repo):
     assert branch in ["main", "master"]  # Could be either
 
 
+@pytest.mark.unit
 def test_has_uncommitted_changes(temp_git_repo):
     """Test detecting uncommitted changes."""
     git_ops = GitOperations(repo_path=str(temp_git_repo))
@@ -70,6 +73,7 @@ def test_has_uncommitted_changes(temp_git_repo):
     assert git_ops.has_uncommitted_changes()
 
 
+@pytest.mark.unit
 def test_create_and_checkout_branch(temp_git_repo):
     """Test branch creation and checkout."""
     git_ops = GitOperations(repo_path=str(temp_git_repo))
@@ -84,6 +88,7 @@ def test_create_and_checkout_branch(temp_git_repo):
     assert git_ops.get_current_branch() == "test-branch"
 
 
+@pytest.mark.unit
 def test_add_and_commit(temp_git_repo):
     """Test adding files and committing."""
     git_ops = GitOperations(repo_path=str(temp_git_repo))
@@ -100,6 +105,7 @@ def test_add_and_commit(temp_git_repo):
     assert not git_ops.has_uncommitted_changes()
 
 
+@pytest.mark.unit
 def test_get_changed_files(temp_git_repo):
     """Test getting list of changed files."""
     git_ops = GitOperations(repo_path=str(temp_git_repo))

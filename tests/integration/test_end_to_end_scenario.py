@@ -29,6 +29,8 @@ from src.meta_mcp.toon.encoder import encode_output
 
 
 @pytest.mark.asyncio
+@pytest.mark.integration
+@pytest.mark.requires_redis
 async def test_complete_safe_tool_workflow(redis_client):
     """
     End-to-end workflow for safe tool (no approval needed).
@@ -63,6 +65,8 @@ async def test_complete_safe_tool_workflow(redis_client):
 
 
 @pytest.mark.asyncio
+@pytest.mark.integration
+@pytest.mark.requires_redis
 async def test_complete_sensitive_tool_workflow(redis_client):
     """
     End-to-end workflow for sensitive tool (requires approval).
@@ -133,6 +137,8 @@ async def test_complete_sensitive_tool_workflow(redis_client):
 
 
 @pytest.mark.asyncio
+@pytest.mark.integration
+@pytest.mark.requires_redis
 async def test_mode_transition_read_only_to_permission(redis_client):
     """
     Test mode transition from READ_ONLY to PERMISSION.
@@ -179,6 +185,8 @@ async def test_mode_transition_read_only_to_permission(redis_client):
 
 
 @pytest.mark.asyncio
+@pytest.mark.integration
+@pytest.mark.requires_redis
 async def test_mode_transition_permission_to_bypass(redis_client):
     """
     Test mode transition from PERMISSION to BYPASS.
@@ -210,6 +218,8 @@ async def test_mode_transition_permission_to_bypass(redis_client):
 
 
 @pytest.mark.asyncio
+@pytest.mark.integration
+@pytest.mark.requires_redis
 async def test_lease_lifecycle_with_notifications(redis_client):
     """
     Test complete lease lifecycle with notifications.
@@ -265,6 +275,8 @@ async def test_lease_lifecycle_with_notifications(redis_client):
 
 
 @pytest.mark.asyncio
+@pytest.mark.integration
+@pytest.mark.requires_redis
 async def test_progressive_discovery_with_toon_encoding(redis_client):
     """
     Test progressive discovery with TOON encoding for large results.
@@ -298,6 +310,8 @@ async def test_progressive_discovery_with_toon_encoding(redis_client):
 
 
 @pytest.mark.asyncio
+@pytest.mark.integration
+@pytest.mark.requires_redis
 async def test_batch_operations_with_governance(redis_client):
     """
     Test batch operations respect governance policies.
@@ -351,6 +365,8 @@ async def test_batch_operations_with_governance(redis_client):
 
 
 @pytest.mark.asyncio
+@pytest.mark.integration
+@pytest.mark.requires_redis
 async def test_multi_client_isolation(redis_client):
     """
     Test that multiple clients are properly isolated.
@@ -407,6 +423,8 @@ async def test_multi_client_isolation(redis_client):
 
 
 @pytest.mark.asyncio
+@pytest.mark.integration
+@pytest.mark.requires_redis
 async def test_token_forgery_prevention(redis_client):
     """
     Test that forged tokens are rejected.
@@ -446,6 +464,8 @@ async def test_token_forgery_prevention(redis_client):
 
 
 @pytest.mark.asyncio
+@pytest.mark.integration
+@pytest.mark.requires_redis
 async def test_complete_user_journey(redis_client):
     """
     Simulate complete user journey from start to finish.
@@ -525,6 +545,8 @@ async def test_complete_user_journey(redis_client):
 
 
 @pytest.mark.asyncio
+@pytest.mark.integration
+@pytest.mark.requires_redis
 async def test_security_invariants_maintained(redis_client):
     """
     Verify critical security invariants across all phases.

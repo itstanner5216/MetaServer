@@ -14,6 +14,7 @@ from tests.conftest import read_audit_log
 
 
 @pytest.mark.asyncio
+@pytest.mark.requires_redis
 async def test_approval_grants_execution(
     governance_in_permission,
     mock_fastmcp_context,
@@ -47,6 +48,7 @@ async def test_approval_grants_execution(
 
 
 @pytest.mark.asyncio
+@pytest.mark.requires_redis
 async def test_denial_blocks_execution(
     governance_in_permission,
     mock_fastmcp_context,
@@ -85,6 +87,7 @@ async def test_denial_blocks_execution(
 
 
 @pytest.mark.asyncio
+@pytest.mark.requires_redis
 async def test_timeout_blocks_execution(
     governance_in_permission,
     mock_fastmcp_context,
@@ -123,6 +126,7 @@ async def test_timeout_blocks_execution(
 
 
 @pytest.mark.asyncio
+@pytest.mark.requires_redis
 async def test_malformed_response_blocks(
     governance_in_permission,
     mock_fastmcp_context,
@@ -167,6 +171,7 @@ async def test_malformed_response_blocks(
 
 
 @pytest.mark.asyncio
+@pytest.mark.requires_redis
 async def test_elicitation_declined_blocks(
     governance_in_permission,
     mock_fastmcp_context,
@@ -200,6 +205,7 @@ async def test_elicitation_declined_blocks(
 
 
 @pytest.mark.asyncio
+@pytest.mark.requires_redis
 async def test_elicitation_cancelled_blocks(
     governance_in_permission,
     mock_fastmcp_context,
@@ -238,6 +244,7 @@ async def test_elicitation_cancelled_blocks(
 
 
 @pytest.mark.asyncio
+@pytest.mark.requires_redis
 async def test_approval_creates_audit_log(
     governance_in_permission,
     mock_fastmcp_context,
@@ -291,6 +298,7 @@ async def test_approval_creates_audit_log(
 
 
 @pytest.mark.asyncio
+@pytest.mark.requires_redis
 async def test_substring_attacks_denied(
     governance_in_permission,
     mock_fastmcp_context,
