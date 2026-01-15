@@ -1,318 +1,363 @@
-# PR Consolidation & Cleanup Workflow
+# PR Consolidation Workflow
 
-Automated three-phase workflow to consolidate duplicate PRs, clean up outdated AI review comments, and trigger fresh AI reviews.
+## Overview
 
-## 🎯 Overview
+This workflow helps manage PR sprawl by automatically identifying and closing duplicate PRs while preserving the highest-quality version of each proposed change.
 
-The **PR Consolidation workflow** helps manage repositories with many open PRs by:
+## How It Works
 
-1. **Analyzing** all open PRs and categorizing them by issue type
-2. **Closing** duplicate PRs while keeping the highest-quality one per category
-3. **Cleaning** outdated AI review comments from remaining PRs
-4. **Re-running** AI reviews with accurate test results
+### Phase 1: Analysis
+1. Fetches all open PRs (handles pagination automatically)
+2. Groups PRs by keyword similarity (configurable threshold)
+3. Scores each PR based on quality factors:
+   - **Recency** (0-10 points): Newer PRs score higher
+   - **Non-draft status** (+10 points): Complete PRs preferred
+   - **Targets main branch** (+15 points): Main branch PRs prioritized
+   - **Has assignees** (+5 points): Assigned work is valued
+   - **Focused title** (+5 points): Titles under 80 characters
+   - **Has labels** (+2 per label, max 6): Properly categorized PRs
+   - **Clean discussion** (+3 points): Fewer than 5 comments
 
-## 📊 Problem Statement
+### Phase 2: Consolidation
+1. Selects highest-scoring PR from each group as the "keeper"
+2. Closes duplicates with explanatory comments
+3. Cleans up stale AI review comments from keeper PRs
+4. Re-runs AI review pipeline with fresh context (optional)
 
-This workflow solves the following issues:
+### Phase 3: Reporting
+Generates detailed summary showing what was kept, what was closed, and why.
 
-- **93+ open PRs** with many duplicates
-- **Overlapping fixes** for the same issues
-- **Outdated AI comments** with incorrect test results
-- **Difficulty** determining which PRs are valuable
-- **Cluttered** PR review experience
+## Usage
 
-## 🚀 Usage
-
-### Step 1: Dry Run (Recommended)
-
-Run the workflow in **dry-run mode** first to see what would happen:
-
-1. Go to **Actions** → **🧹 PR Consolidation & Cleanup**
-2. Click **Run workflow**
-3. Configure inputs:
-   - ✅ **Dry run mode**: `true` (enabled)
-   - ✅ **Auto cleanup comments**: `true` (enabled)
-   - ✅ **Auto rerun pipeline**: `true` (enabled)
-4. Click **Run workflow**
-
-This will:
-- Analyze all PRs and generate a report
-- Show which PRs would be closed
-- NOT make any actual changes
-
-### Step 2: Review the Report
-
-1. Wait for the workflow to complete
-2. Download the **consolidation-report** artifact
-3. Review `consolidation-report.json` to see:
-   - Which PRs will be kept
-   - Which PRs will be closed
-   - Category classifications
-   - PR scores
-
-### Step 3: Execute Consolidation
-
-If the report looks good, run the workflow again:
+### Dry Run (Recommended First)
 
 1. Go to **Actions** → **🧹 PR Consolidation & Cleanup**
 2. Click **Run workflow**
-3. Configure inputs:
-   - ❌ **Dry run mode**: `false` (disabled)
-   - ✅ **Auto cleanup comments**: `true` (enabled)
-   - ✅ **Auto rerun pipeline**: `true` (enabled)
-4. Click **Run workflow**
+3. Leave `dry_run: true` ✅ (default)
+4. Set `min_similarity_threshold` if needed (default: 40%)
+5. Review the summary in the workflow run
+6. Download `consolidation-plan.json` artifact for full details
+7. Verify the plan looks correct
 
-This will:
-1. Close duplicate PRs with explanatory comments
-2. Delete old AI review comments from remaining PRs
-3. Trigger fresh AI reviews
+### Live Run
 
-## 📁 PR Categories
+1. Re-run the workflow from Actions
+2. Set `dry_run: false` ❌
+3. Optionally adjust `min_similarity_threshold` (default: 40%)
+4. Set `re_run_reviews: true` if you want fresh AI reviews
+5. Confirm and run
 
-PRs are automatically categorized by keywords in their title and description:
+## Safety Features
 
-| Category | Keywords | Example Issues |
-|----------|----------|----------------|
-| **governance-hook-mutations** | governance, before_tool, hook, mutate, mutation, re-evaluate | Governance bypass via hooks |
-| **lease-overuse** | lease, overuse, concurrent, race, reserve, refund, consume | Lease consumption race conditions |
-| **import-fixes** | modulenotfound, import, src.meta_mcp, meta_mcp.config | Import path and module errors |
-| **test-fixes** | test, pytest, automated tests | Test infrastructure improvements |
-| **command-execution** | command, execute_command, subprocess, command_runner | Command execution refactoring |
-| **discovery-registry** | discovery, registry, tool_registry, bootstrap | Tool discovery system changes |
-| **elicitation** | elicit, approval, fastmcp, structured response | Approval request parsing |
-| **pipeline-workflow** | ai agent pipeline, workflow, ai-pr-review, secret | AI pipeline configuration |
-| **other** | - | Uncategorized PRs |
+- ✅ **Dry run by default** - Always preview before executing
+- ✅ **Explanatory comments** - Closed PRs receive detailed explanations
+- ✅ **Audit trail** - Full consolidation plan saved as artifact
+- ✅ **Rate limiting** - Respects GitHub API limits with delays
+- ✅ **Same-base-branch grouping** - Never groups PRs with different target branches
+- ✅ **Idempotent** - Safe to run multiple times
+- ✅ **Keep-open label protection** - PRs with `keep-open` label are never closed
+- ✅ **Recency protection** - PRs created in the last 6 hours are not closed
+- ✅ **Bulk closure safety** - Workflow fails if trying to close more than 50 PRs
 
-## 🏆 PR Scoring Algorithm
+## Workflow Inputs
 
-For each category with multiple PRs, the workflow scores them and keeps the highest-scoring one:
+### `dry_run` (boolean, default: true)
+- **true**: Preview mode - shows what would happen without making changes
+- **false**: Live mode - actually closes PRs and cleans up comments
 
-| Factor | Points | Rationale |
-|--------|--------|-----------|
-| Targets `main` branch | +20 | Preferred merge destination |
-| Non-draft status | +10 | Ready for review |
-| Has assignees | +5 | Human attention |
-| Has reviewers | +5 | Under active review |
-| Description quality | +0 to +10 | More details = better |
-| Recency | +0 to +10 | Newer PRs preferred |
-| Created by bot | -5 | Prefer human-created PRs |
+### `min_similarity_threshold` (number, default: 40)
+- Minimum percentage of keyword overlap to group PRs together
+- Range: 0-100
+- **Lower (20-30%)**: More aggressive grouping, closes more PRs
+- **Higher (50-70%)**: Conservative grouping, keeps more PRs
+- **Default (40%)**: Balanced approach
 
-**The PR with the highest score in each category is kept; all others are closed.**
+### `re_run_reviews` (boolean, default: true)
+- **true**: Triggers AI review pipeline for keeper PRs after cleanup
+- **false**: Skips AI review re-run (useful for manual review)
 
-## 🔄 Three-Phase Process
+## Grouping Algorithm
 
-### Phase 1: Analyze & Close Duplicates
+The workflow uses a keyword-based similarity algorithm to identify duplicate PRs:
 
-**Jobs:**
-- `analyze-prs` - Categorizes and scores all PRs
-- `close-duplicate-prs` - Closes lower-scored duplicates (skipped in dry-run)
+1. **Keyword Extraction**: Extracts relevant keywords from PR title and body
+   - Keywords: governance, lease, hook, mutation, config, import, test, redis, refactor, tool, call, path, fix, update
 
-**Outputs:**
-- List of PRs to keep
-- List of PRs to close
-- Consolidation report (JSON)
+2. **Similarity Calculation**: Uses Jaccard similarity
+   - Similarity = (Intersection of keywords) / (Union of keywords)
+   - PRs must also target the same base branch
 
-### Phase 2: Clean Up AI Comments
+3. **Theme Inference**: Automatically categorizes PRs into themes:
+   - Governance Hook Mutation Fixes
+   - Lease Management Improvements
+   - Import Path Fixes
+   - Test Infrastructure
+   - Redis Integration
+   - Configuration Updates
+   - Code Refactoring
+   - Tool Call Mutation Handling
+   - General Improvements
 
-**Job:** `cleanup-comments`
+## Quality Scoring
 
-Removes outdated AI review comments from remaining PRs:
-- Searches for comments from `github-actions` bot
-- Matches signature patterns:
+Each PR receives a score based on multiple factors:
+
+```
+Score Breakdown:
+- Recency: 0-10 points (newer = higher)
+- Not draft: +10 points
+- Targets main: +15 points
+- Has assignees: +5 points
+- Title < 80 chars: +5 points
+- Labels: +2 per label (max +6)
+- Comments < 5: +3 points
+
+Maximum possible score: ~53 points
+```
+
+The PR with the highest score in each group is kept; others are closed.
+
+## Workflow Jobs
+
+### 1. `analyze-prs`
+- Fetches all open PRs with pagination
+- Filters out PRs with `keep-open` label
+- Filters out PRs created in the last 6 hours
+- Groups similar PRs by keyword matching
+- Scores each PR and selects keepers
+- Generates consolidation plan
+- Creates detailed summary
+- Saves plan as JSON artifact
+
+### 2. `close-duplicates`
+- Depends on: `analyze-prs`
+- Validates closure count (max 50 PRs)
+- Posts explanatory comment on each duplicate PR
+- Closes duplicate PRs
+- Includes rate limiting (2 seconds between closures)
+
+### 3. `cleanup-comments`
+- Depends on: `analyze-prs`, `close-duplicates`
+- Fetches comments from keeper PRs
+- Identifies stale AI review comments:
   - "AI-Powered PR Review Pipeline"
-  - "Validation Agent"
-  - "Remediation Agent"
-  - "Architectural Guardian"
-  - "Functional Verifier"
+  - "🔍 Validation Agent"
+  - "🔧 Remediation Agent"
+  - "🏛️ Architectural Guardian"
+  - "✅ Functional Verifier"
 - Deletes matching comments
-- Posts a single cleanup notice
+- Includes rate limiting (500ms between deletions)
 
-### Phase 3: Re-run AI Reviews
+### 4. `re-run-reviews`
+- Depends on: `analyze-prs`, `cleanup-comments`
+- Only runs if `dry_run: false` and `re_run_reviews: true`
+- Triggers `ai-pr-review-pipeline.yml` workflow
+- Passes keeper PR numbers for fresh reviews
 
-**Job:** `rerun-ai-pipeline`
+### 5. `generate-summary`
+- Runs always (even if previous jobs fail)
+- Aggregates results from all jobs
+- Creates comprehensive summary with:
+  - Job statuses
+  - PRs kept and closed
+  - Next steps
+  - Full audit trail
 
-Triggers the `ai-pr-review-pipeline.yml` workflow with:
-- Comma-separated list of remaining PR numbers
-- `review_and_fix` mode
-- Fresh reviews with accurate test results
+## Customization
 
-## 📋 Workflow Summary
+### Adjusting Keyword Matching
 
-**Job:** `summary`
+Edit the `keywords` array in `.github/workflows/pr-consolidation.yml` (line ~161):
 
-Generates a comprehensive summary showing:
-- Total PRs analyzed
-- PRs to keep vs. close
-- Category breakdown
-- List of actions taken
-- Next steps
-
-## 🛡️ Safety Features
-
-1. **Dry-run by default** - Must explicitly disable to make changes
-2. **Explanation comments** - Each closed PR receives a detailed comment explaining why
-3. **Reopen instructions** - Users can contest closures and tag maintainers
-4. **Downloadable reports** - Full analysis saved as artifact (30-day retention)
-5. **Gradual execution** - Three separate phases with checkpoints
-6. **Conditional execution** - Later phases only run if earlier phases succeed
-
-## 📊 Expected Outcome
-
-### Before
-
-- **93+ open PRs**
-- Many duplicate fixes for the same issues
-- Conflicting solutions
-- Outdated AI comments with incorrect test results
-- Difficult to identify valuable PRs
-
-### After
-
-- **~10-15 consolidated PRs**
-- Each represents a distinct fix
-- No duplicates
-- Fresh AI review comments
-- Accurate test results
-- Clear path to merging
-
-## 🔍 Example Workflow Run
-
-### Dry Run Output
-
-```
-📊 Consolidation Summary:
-  Total PRs: 93
-  PRs to keep: 12
-  PRs to close: 81
-
-📁 Categories:
-  governance-hook-mutations: 15 PRs → Keep PR #145
-  lease-overuse: 12 PRs → Keep PR #178
-  import-fixes: 8 PRs → Keep PR #192
-  test-fixes: 5 PRs → Keep PR #201
-  ...
+```javascript
+const keywords = ['governance', 'lease', 'hook', 'mutation', 'config', 'import', 'test', 'redis', 'refactor', 'tool', 'call', 'path', 'fix', 'update'];
 ```
 
-### Actual Execution Output
+Add or remove keywords relevant to your repository's common PR patterns.
 
-```
-Phase 1: Closed 81 duplicate PRs
-Phase 2: Deleted 324 outdated AI comments from 12 PRs
-Phase 3: Triggered AI reviews for PRs: 145,178,192,201,...
-```
+### Modifying Quality Scoring
 
-## 🎯 Next Steps After Running
+Edit the `scorePR()` function in the workflow (lines ~172-195) to adjust scoring weights:
 
-1. **Monitor AI reviews** - Check remaining PRs for new AI feedback
-2. **Address blockers** - Fix any issues identified by AI agents
-3. **Merge approved PRs** - PRs with ✅ status can be merged
-4. **Handle reopened PRs** - Review any PRs that users reopened with justification
-
-## ⚙️ Configuration
-
-The workflow is configured via inputs when triggered:
-
-```yaml
-inputs:
-  dry_run:
-    description: 'Dry run mode (analyze only, do not close PRs)'
-    type: boolean
-    default: true
-
-  auto_cleanup_comments:
-    description: 'Automatically clean up comments after consolidation'
-    type: boolean
-    default: true
-
-  auto_rerun_pipeline:
-    description: 'Automatically re-run AI review pipeline after cleanup'
-    type: boolean
-    default: true
+```javascript
+function scorePR(pr) {
+  let score = 0;
+  
+  // Customize weights here
+  if (!pr.draft) score += 10;  // Increase/decrease as needed
+  if (pr.base.ref === 'main') score += 15;  // Adjust priority
+  
+  // Add custom scoring criteria
+  if (pr.title.includes('[URGENT]')) score += 20;
+  
+  return Math.round(score * 10) / 10;
+}
 ```
 
-## 🔐 Required Permissions
+### Adding Theme Categories
 
-The workflow requires:
+Edit the `inferTheme()` function (lines ~149-159) to add custom themes:
 
-```yaml
-permissions:
-  contents: write        # To checkout repository
-  pull-requests: write   # To close PRs and manage comments
-  actions: write         # To trigger ai-pr-review-pipeline workflow
+```javascript
+function inferTheme(pr) {
+  const text = (pr.title + ' ' + pr.body).toLowerCase();
+  
+  // Add your custom themes
+  if (text.includes('security') && text.includes('fix')) return 'Security Fixes';
+  if (text.includes('performance')) return 'Performance Improvements';
+  
+  // ... existing themes ...
+  return 'General Improvements';
+}
 ```
 
-## 📦 Dependencies
+## Troubleshooting
 
-- `actions/checkout@v4` - Repository checkout
-- `actions/github-script@v7` - GitHub API interactions
-- `actions/upload-artifact@v4` - Report artifact upload
-
-## 🔧 Integration with AI Review Pipeline
-
-This workflow is designed to work with `ai-pr-review-pipeline.yml`:
-
-1. **Run PR Consolidation** - Reduces PRs and cleans comments
-2. **Auto-triggers AI Pipeline** - Fresh reviews on remaining PRs
-3. **Wait for AI reviews** - Check consolidated PRs for feedback
-4. **Merge when ready** - PRs with ✅ can be merged
-
-## 🐛 Troubleshooting
-
-### "No PRs to close" in dry-run
-
-**Cause:** All PRs are in different categories or there's only one PR per category
-
-**Solution:** This is expected - the workflow keeps PRs that don't have duplicates
-
-### Closed PR should have been kept
-
-**Cause:** Scoring algorithm favored a different PR
+### A PR was closed that shouldn't have been
 
 **Solution:**
-1. Reopen the PR
-2. Comment explaining why it should be kept
-3. Tag @itstanner5216
-4. Close the duplicate manually
+1. Reopen the PR manually
+2. Add the `keep-open` label to prevent future auto-closure
+3. Tag @itstanner5216 in a comment explaining why it should stay open
+4. Future consolidation runs will skip this PR
 
-### AI pipeline not triggered
+### The workflow didn't group similar PRs
 
-**Cause:** `auto_rerun_pipeline` was set to `false` or Phase 2 failed
+**Possible causes:**
+- Similarity threshold too high
+- PRs target different base branches
+- Different keyword sets
 
-**Solution:** Manually trigger `ai-pr-review-pipeline.yml` with the PR numbers from the report
+**Solutions:**
+1. Lower `min_similarity_threshold` (try 30% instead of 40%)
+2. Review keyword list and add missing terms
+3. Check that PRs actually target the same branch
 
-### Comment cleanup deleted important comments
+### Too many PRs were kept
 
-**Cause:** Comment matched one of the AI signature patterns
+**Possible causes:**
+- Similarity threshold too high
+- PRs are genuinely unique
+- Quality scoring doesn't differentiate well
 
-**Solution:** AI comments are recreated in Phase 3; important non-AI comments won't match the patterns
+**Solutions:**
+1. Raise the threshold (try 50-60%)
+2. Adjust quality scoring weights to better differentiate
+3. Review themes - may need better categorization
 
-## 📚 Related Documentation
+### Workflow failed with "too many PRs to close"
 
-- [AI Agent Pipeline](./AI_AGENT_PIPELINE.md) - Details on the AI review system
-- [Contributing Guide](../CONTRIBUTING.md) - PR contribution guidelines
-- [Workflow File](../.github/workflows/pr-consolidation.yml) - Source code
+**Cause:** Safety limit prevents closing more than 50 PRs in one run
 
-## 🤝 Contributing
+**Solutions:**
+1. Increase similarity threshold to reduce closures
+2. Manually review and close some PRs first
+3. Run workflow multiple times with different thresholds
 
-To improve this workflow:
+### AI review pipeline didn't trigger
 
-1. Test changes with `dry_run: true` first
-2. Update this documentation
-3. Submit a PR with your improvements
-4. Tag @itstanner5216 for review
+**Possible causes:**
+- `re_run_reviews` was set to false
+- Workflow is in dry run mode
+- `ai-pr-review-pipeline.yml` workflow not found
 
-## 📝 Notes
+**Solutions:**
+1. Ensure `dry_run: false` and `re_run_reviews: true`
+2. Check that `ai-pr-review-pipeline.yml` exists in `.github/workflows/`
+3. Verify workflow has correct permissions
 
-- The workflow runs **manually** via `workflow_dispatch` only
-- It does **not** run automatically on PR events
-- **Dry-run mode is the default** to prevent accidental closures
-- The consolidation report is retained for **30 days**
-- Closed PRs can be **reopened** by users or maintainers
+## Best Practices
 
-## 💡 Tips
+1. **Always dry-run first**
+   - Review the consolidation plan before executing
+   - Verify grouping logic makes sense for your PRs
 
-- Run dry-run mode first to preview changes
-- Download and review the consolidation report before executing
-- Consider running this after merging a major test infrastructure fix
-- Keep an eye on the GitHub Actions summary for execution status
-- Use this periodically (e.g., monthly) to keep PRs manageable
+2. **Run after major test fixes**
+   - Clean up stale AI reviews that were based on broken tests
+   - Get fresh, accurate reviews on keeper PRs
+
+3. **Manually review keeper PRs**
+   - Just because a PR was kept doesn't mean it's ready to merge
+   - Review AI comments and verify changes
+
+4. **Set up branch protection**
+   - Prevent future PR sprawl with stricter merge requirements
+   - Require reviews, passing tests, etc.
+
+5. **Run periodically**
+   - Consider running weekly or after major refactors
+   - Prevents accumulation of duplicate PRs
+
+6. **Monitor the artifacts**
+   - Download and review `consolidation-plan.json`
+   - Keep records for audit purposes
+
+7. **Customize for your workflow**
+   - Adjust scoring weights based on your priorities
+   - Add repository-specific keywords and themes
+
+## Example Workflow Run
+
+### Initial State
+- 93 open PRs
+- Many duplicates addressing same issues
+- Stale AI comments from broken test suite
+
+### Dry Run
+```
+Actions → PR Consolidation & Cleanup → Run workflow
+  dry_run: true
+  min_similarity_threshold: 40
+  re_run_reviews: true
+```
+
+**Result:**
+- 12 groups identified
+- 13 PRs would be kept
+- 80 PRs would be closed
+- Review plan in summary and artifact
+
+### Live Run
+```
+Actions → PR Consolidation & Cleanup → Run workflow
+  dry_run: false
+  min_similarity_threshold: 40
+  re_run_reviews: true
+```
+
+**Result:**
+- 80 duplicate PRs closed with explanatory comments
+- 247 stale AI comments deleted
+- AI review pipeline triggered for 13 keeper PRs
+- Repository reduced from 93 → 13 high-quality PRs
+
+## Architecture
+
+The workflow is designed to be:
+
+- **Safe**: Multiple safety guards prevent accidental data loss
+- **Transparent**: Full audit trail and explanatory comments
+- **Configurable**: Easy to customize for different repositories
+- **Efficient**: Rate-limited to respect GitHub API limits
+- **Idempotent**: Safe to run multiple times
+
+## Related Workflows
+
+- **AI PR Review Pipeline** (`ai-pr-review-pipeline.yml`): Automatically reviews and suggests fixes for PRs
+- **Intelligent PR Validation** (`intelligent-pr-validation.yml`): Validates PR structure and content
+
+## Support
+
+For issues, questions, or suggestions:
+1. Review this documentation
+2. Check the workflow run summary and artifacts
+3. Review closed PRs for explanation comments
+4. Tag @itstanner5216 in a GitHub issue or PR comment
+
+## Version History
+
+- **v1.0** (2026-01-15): Initial implementation
+  - Automated PR grouping and consolidation
+  - Stale comment cleanup
+  - AI review re-triggering
+  - Comprehensive safety guards and reporting
