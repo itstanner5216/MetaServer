@@ -77,7 +77,9 @@ if __name__ == '__main__':
     if not token:
         raise ValueError("GitHub token required")
     
-    pr_numbers = [int(n.strip()) for n in args.prs.split(',')] if args.prs else None
+    pr_numbers = None
+    if args.prs:
+        pr_numbers = [int(n.strip()) for n in args.prs.split(',')]
     
     cleanup_ai_comments(
         repo_name=args.repo,

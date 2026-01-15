@@ -72,6 +72,7 @@ jobs:
     needs: consolidate
     if: |
       always() && 
+      (needs.consolidate.result != 'failure') &&
       (inputs.mode == 'cleanup_comments' || inputs.mode == 'full_process')
     
     steps:

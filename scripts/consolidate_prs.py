@@ -70,8 +70,9 @@ class PRAnalysis:
             score += 2.0
         
         # Prefer recent PRs (they likely incorporate learnings)
-        # This is a simplified heuristic
-        score += 1.0
+        # Note: Could be enhanced with actual timestamp comparison
+        # For now, all PRs get equal scoring on this dimension
+        score += 0.0
         
         # Prefer PRs with tests
         if 'test' in self.body.lower() or any('test' in label for label in self.labels):

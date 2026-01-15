@@ -274,16 +274,20 @@ class GitHubClient:
         content = base64.b64decode(response["content"]).decode("utf-8")
         return content
     
-    def close_pr(self, pr_number: int):
+    def close_pr(self, pr_number: int) -> bool:
         """
         Close a pull request.
         
         Args:
             pr_number: PR number to close
+            
+        Returns:
+            True if successful
         """
         endpoint = f"/repos/{self.owner}/{self.repo_name}/pulls/{pr_number}"
         data = {"state": "closed"}
         self._request("PATCH", endpoint, json=data)
+        return True
     
     def get_pr_details(self, pr_number: int) -> Dict[str, Any]:
         """
