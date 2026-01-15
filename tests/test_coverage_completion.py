@@ -187,6 +187,7 @@ async def test_approval_request_long_argument_truncation(
 
 
 @pytest.mark.asyncio
+@pytest.mark.requires_redis
 async def test_unknown_mode_fail_safe_denies(
     redis_client,
     mock_fastmcp_context,
