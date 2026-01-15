@@ -59,8 +59,13 @@ class PRConsolidator:
             
             for pr_data in prs:
                 # Fetch files for each PR
-                files_resp = self.client.get(pr_data["url"] + "/files")
-                files = [f["filename"] for f in files_resp.json()]
+                try:
+                    files_resp = self.client.get(pr_data["url"] + "/files")
+                    files_resp.raise_for_status()
+                    files = [f["filename"] for f in files_resp.json()]
+                except Exception as e:
+                    print(f"   Warning: Failed to fetch files for PR #{pr_data['number']}: {e}")
+                    files = []
                 
                 all_prs.append(PR(
                     number=pr_data["number"],
