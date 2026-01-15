@@ -273,3 +273,69 @@ class GitHubClient:
         import base64
         content = base64.b64decode(response["content"]).decode("utf-8")
         return content
+    
+    def close_pr(self, pr_number: int):
+        """
+        Close a pull request.
+        
+        Args:
+            pr_number: PR number to close
+        """
+        endpoint = f"/repos/{self.owner}/{self.repo_name}/pulls/{pr_number}"
+        data = {"state": "closed"}
+        self._request("PATCH", endpoint, json=data)
+    
+    def get_pr_details(self, pr_number: int) -> Dict[str, Any]:
+        """
+        Get detailed PR information including stats.
+        
+        Args:
+            pr_number: PR number
+            
+        Returns:
+            Dictionary with PR details
+        """
+        endpoint = f"/repos/{self.owner}/{self.repo_name}/pulls/{pr_number}"
+        return self._request("GET", endpoint)
+    
+    def get_pr_comments(self, pr_number: int) -> List[Dict[str, Any]]:
+        """
+        Get all comments on a PR.
+        
+        Args:
+            pr_number: PR number
+            
+        Returns:
+            List of comment dictionaries
+        """
+        comments = []
+        page = 1
+        per_page = 100
+        
+        while True:
+            endpoint = f"/repos/{self.owner}/{self.repo_name}/issues/{pr_number}/comments"
+            params = {"page": page, "per_page": per_page}
+            
+            response = self._request("GET", endpoint, params=params)
+            
+            if not response:
+                break
+            
+            comments.extend(response)
+            
+            if len(response) < per_page:
+                break
+            
+            page += 1
+        
+        return comments
+    
+    def delete_comment(self, comment_id: int):
+        """
+        Delete a comment.
+        
+        Args:
+            comment_id: Comment ID to delete
+        """
+        endpoint = f"/repos/{self.owner}/{self.repo_name}/issues/comments/{comment_id}"
+        self._request("DELETE", endpoint)
