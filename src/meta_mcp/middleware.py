@@ -653,6 +653,7 @@ class GovernanceMiddleware(Middleware):
         client_id = None
 
         inflight_acquired = False
+        reserved_lease = None
 
         if Config.ENABLE_LEASE_MANAGEMENT and tool_name not in bootstrap_tools:
             # Extract client_id from FastMCP session context
@@ -712,25 +713,34 @@ class GovernanceMiddleware(Middleware):
                 )
 
         async def _execute_tool() -> Any:
+            nonlocal reserved_lease
             try:
-                result = await call_next()
                 if should_consume_lease and client_id is not None:
-                    consumed_lease = await lease_manager.consume(client_id, tool_name)
-                    if consumed_lease is None:
+                    reserved_lease_local = await lease_manager.reserve_call(
+                        client_id, tool_name
+                    )
+                    if reserved_lease_local is None:
                         logger.warning(
-                            f"Failed to consume lease for {tool_name} "
+                            f"Failed to reserve lease for {tool_name} "
                             f"(client: {client_id}, session: {session_id})"
                         )
                         raise ToolError(
                             f"Lease exhausted for tool '{tool_name}'. "
                             f"Please request a new lease via get_tool_schema('{tool_name}')."
                         )
+                    reserved_lease = reserved_lease_local
 
-                    logger.info(
-                        f"Lease consumed for {tool_name} "
-                        f"(client: {client_id}, remaining={consumed_lease.calls_remaining})"
-                    )
+                result = await call_next()
                 return self._apply_toon_encoding(result)
+            except Exception:
+                if should_consume_lease and reserved_lease is not None:
+                    restored = await lease_manager.restore_call(reserved_lease)
+                    if not restored:
+                        logger.error(
+                            f"Failed to restore lease for {tool_name} "
+                            f"(client: {client_id}, session: {session_id})"
+                        )
+                raise
             finally:
                 if should_consume_lease and client_id is not None and inflight_acquired:
                     await lease_manager.release_inflight(client_id, tool_name)
