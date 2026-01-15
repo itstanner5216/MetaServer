@@ -39,6 +39,7 @@ class TestClass:
         yield repo_path, "test_module.py"
 
 
+@pytest.mark.unit
 def test_ast_analyzer_init(temp_python_file):
     """Test ASTAnalyzer initialization."""
     repo_path, _ = temp_python_file
@@ -46,6 +47,7 @@ def test_ast_analyzer_init(temp_python_file):
     assert analyzer.repo_path == repo_path
 
 
+@pytest.mark.unit
 def test_analyze_file_functions(temp_python_file):
     """Test analyzing function definitions."""
     repo_path, file_path = temp_python_file
@@ -62,6 +64,7 @@ def test_analyze_file_functions(temp_python_file):
     assert "add_numbers" in func_names
 
 
+@pytest.mark.unit
 def test_analyze_file_classes(temp_python_file):
     """Test analyzing class definitions."""
     repo_path, file_path = temp_python_file
@@ -77,6 +80,7 @@ def test_analyze_file_classes(temp_python_file):
     assert "TestClass" in class_names
 
 
+@pytest.mark.unit
 def test_analyze_file_imports(temp_python_file):
     """Test analyzing import statements."""
     repo_path, file_path = temp_python_file
@@ -93,6 +97,7 @@ def test_analyze_file_imports(temp_python_file):
     assert "typing" in import_modules
 
 
+@pytest.mark.unit
 def test_find_api_functions(temp_python_file):
     """Test finding public API functions."""
     repo_path, file_path = temp_python_file
@@ -108,6 +113,7 @@ def test_find_api_functions(temp_python_file):
     assert "_private_method" not in func_names
 
 
+@pytest.mark.unit
 def test_compare_signatures():
     """Test comparing function signatures."""
     analyzer = ASTAnalyzer()

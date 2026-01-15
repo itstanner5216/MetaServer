@@ -22,6 +22,8 @@ from src.meta_mcp.toon.encoder import encode_output
 
 
 @pytest.mark.asyncio
+@pytest.mark.integration
+@pytest.mark.requires_redis
 async def test_bootstrap_discovery(redis_client):
     """
     Verify only bootstrap tools are visible initially.
@@ -49,6 +51,8 @@ async def test_bootstrap_discovery(redis_client):
 
 
 @pytest.mark.asyncio
+@pytest.mark.integration
+@pytest.mark.requires_redis
 async def test_search_finds_registered_tools(redis_client):
     """
     Verify search_tools finds registered tools by name/description.
@@ -76,6 +80,8 @@ async def test_search_finds_registered_tools(redis_client):
 
 
 @pytest.mark.asyncio
+@pytest.mark.integration
+@pytest.mark.requires_redis
 async def test_search_prioritizes_name_matches(redis_client):
     """
     Verify search prioritizes name matches over description matches.
@@ -95,6 +101,8 @@ async def test_search_prioritizes_name_matches(redis_client):
 
 
 @pytest.mark.asyncio
+@pytest.mark.integration
+@pytest.mark.requires_redis
 async def test_progressive_schema_delivery(redis_client):
     """
     Verify schemas are delivered progressively, not all at once.
@@ -125,6 +133,8 @@ async def test_progressive_schema_delivery(redis_client):
 
 
 @pytest.mark.asyncio
+@pytest.mark.integration
+@pytest.mark.requires_redis
 async def test_schema_expansion_with_examples(redis_client):
     """
     Verify expand_schema function exists and handles tool IDs correctly.
@@ -157,6 +167,8 @@ async def test_schema_expansion_with_examples(redis_client):
 
 
 @pytest.mark.asyncio
+@pytest.mark.integration
+@pytest.mark.requires_redis
 async def test_toon_encoding_for_large_arrays(redis_client):
     """
     Verify TOON encoder compresses large arrays.
@@ -186,6 +198,8 @@ async def test_toon_encoding_for_large_arrays(redis_client):
 
 
 @pytest.mark.asyncio
+@pytest.mark.integration
+@pytest.mark.requires_redis
 async def test_toon_encoding_nested_structures(redis_client):
     """
     Verify TOON encoder handles nested structures recursively.
@@ -214,6 +228,8 @@ async def test_toon_encoding_nested_structures(redis_client):
 
 
 @pytest.mark.asyncio
+@pytest.mark.integration
+@pytest.mark.requires_redis
 async def test_discovery_security_no_schema_leakage(redis_client):
     """
     Verify search results don't leak full schemas.
@@ -237,6 +253,8 @@ async def test_discovery_security_no_schema_leakage(redis_client):
 
 
 @pytest.mark.asyncio
+@pytest.mark.integration
+@pytest.mark.requires_redis
 async def test_toon_threshold_boundary_conditions(redis_client):
     """
     Verify TOON encoder handles boundary conditions correctly.
@@ -271,6 +289,8 @@ async def test_toon_threshold_boundary_conditions(redis_client):
 
 
 @pytest.mark.asyncio
+@pytest.mark.integration
+@pytest.mark.requires_redis
 async def test_complete_discovery_workflow(redis_client):
     """
     End-to-end test of complete discovery workflow.
@@ -311,6 +331,8 @@ async def test_complete_discovery_workflow(redis_client):
 
 
 @pytest.mark.asyncio
+@pytest.mark.integration
+@pytest.mark.requires_redis
 async def test_search_empty_query_returns_empty(redis_client):
     """
     Verify search with empty query returns empty results.
@@ -327,6 +349,8 @@ async def test_search_empty_query_returns_empty(redis_client):
 
 
 @pytest.mark.asyncio
+@pytest.mark.integration
+@pytest.mark.requires_redis
 async def test_toon_preserves_primitive_types(redis_client):
     """
     Verify TOON encoder preserves primitive types unchanged.
