@@ -125,20 +125,35 @@ jobs:
             echo "=== Error Log ==="
             cat agent_error.log
             
-            # Create error result file
-            error_msg=$(cat agent_error.log | head -n 100 | jq -Rs .)
-            cat > results/${{ matrix.agent }}_pr${{ matrix.pr }}.json << EOF
-          {
-            "agent": "${{ matrix.agent }}",
-            "pr": ${{ matrix.pr }},
-            "verdict": "ERROR",
-            "summary": "Agent execution failed - see workflow logs for details",
-            "error": "Exit code: $exit_code",
-            "error_log": $error_msg,
-            "findings": []
+            # Create error result file using Python for proper JSON generation
+            python << 'PYEOF'
+          import json
+          import sys
+          
+          # Read error log
+          try:
+              with open('agent_error.log', 'r') as f:
+                  error_log = f.read()[:5000]  # Limit to first 5000 chars
+          except Exception as e:
+              error_log = f"Failed to read error log: {e}"
+          
+          # Create error result
+          error_result = {
+              "agent": "${{ matrix.agent }}",
+              "pr": ${{ matrix.pr }},
+              "verdict": "ERROR",
+              "summary": "Agent execution failed - see workflow logs for details",
+              "error": "Exit code: $exit_code",
+              "error_log": error_log,
+              "findings": []
           }
-          EOF
-            echo "✅ Created error result file"
+          
+          # Write to file
+          with open('results/${{ matrix.agent }}_pr${{ matrix.pr }}.json', 'w') as f:
+              json.dump(error_result, f, indent=2)
+          
+          print("✅ Created error result file")
+          PYEOF
           fi
         continue-on-error: true
       
