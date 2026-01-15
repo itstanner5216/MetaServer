@@ -22,6 +22,9 @@ dev = [
 gui-approval = [
     "dasbus>=1.7",
 ]
+scripts = [
+    "httpx>=0.27.0",
+]
 
 [build-system]
 requires = ["hatchling"]

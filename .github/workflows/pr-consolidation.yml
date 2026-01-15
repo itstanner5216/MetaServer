@@ -1,0 +1,142 @@
+name: 🔄 PR Consolidation & Cleanup
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'Execution mode'
+        required: true
+        type: choice
+        options:
+          - dry-run
+          - execute
+        default: 'dry-run'
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+
+jobs:
+  consolidate:
+    name: Phase 1 - Consolidate Duplicate PRs
+    runs-on: ubuntu-latest
+    outputs:
+      kept_prs: ${{ steps.consolidate.outputs.kept_prs }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      
+      - name: Install dependencies
+        run: pip install httpx
+      
+      - name: Run consolidation script
+        id: consolidate
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: |
+          if [ "${{ inputs.mode }}" = "execute" ]; then
+            python scripts/consolidate_prs.py --execute > consolidation_report.txt
+          else
+            python scripts/consolidate_prs.py --dry-run > consolidation_report.txt
+          fi
+          
+          # Extract kept PR numbers (simplified - adjust based on actual output format)
+          KEPT_PRS=$(cat consolidation_report.txt | grep "Kept PRs:" | sed 's/.*: //')
+          echo "kept_prs=$KEPT_PRS" >> $GITHUB_OUTPUT
+      
+      - name: Upload consolidation report
+        uses: actions/upload-artifact@v4
+        with:
+          name: consolidation-report
+          path: consolidation_report.txt
+  
+  cleanup-comments:
+    name: Phase 2 - Delete Stale AI Comments
+    runs-on: ubuntu-latest
+    needs: consolidate
+    if: needs.consolidate.outputs.kept_prs != ''
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      
+      - name: Install dependencies
+        run: pip install httpx
+      
+      - name: Delete AI comments
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: |
+          if [ "${{ inputs.mode }}" = "execute" ]; then
+            python scripts/cleanup_ai_comments.py --all
+          else
+            python scripts/cleanup_ai_comments.py --all --dry-run
+          fi
+  
+  re-run-review:
+    name: Phase 3 - Re-run Review Pipeline
+    runs-on: ubuntu-latest
+    needs: [consolidate, cleanup-comments]
+    if: inputs.mode == 'execute' && needs.consolidate.outputs.kept_prs != ''
+    steps:
+      - name: Trigger AI PR Review Pipeline
+        uses: actions/github-script@v7
+        with:
+          script: |
+            // Trigger the AI review pipeline on remaining PRs
+            await github.rest.actions.createWorkflowDispatch({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              workflow_id: 'ai-pr-review-pipeline.yml',
+              ref: 'main',
+              inputs: {
+                pr_numbers: '', // Empty = all open PRs
+                agent_mode: 'review_and_fix'
+              }
+            });
+            
+            console.log('✅ Triggered AI PR Review Pipeline on remaining PRs');
+  
+  summary:
+    name: Generate Summary
+    runs-on: ubuntu-latest
+    needs: [consolidate, cleanup-comments, re-run-review]
+    if: always()
+    steps:
+      - name: Download consolidation report
+        uses: actions/download-artifact@v4
+        with:
+          name: consolidation-report
+      
+      - name: Create workflow summary
+        run: |
+          cat >> $GITHUB_STEP_SUMMARY <<'EOF'
+          # 🔄 PR Consolidation Complete
+          
+          ## Mode
+          **${{ inputs.mode }}**
+          
+          ## Results
+          
+          $(cat consolidation_report.txt)
+          
+          ## Next Steps
+          
+          - ✅ Duplicate PRs closed
+          - ✅ AI review comments deleted
+          - ✅ Fresh review pipeline triggered
+          
+          Review the remaining PRs and merge when ready!
+          EOF
