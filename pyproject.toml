@@ -43,8 +43,10 @@ addopts = [
 ]
 markers = [
     "slow: marks tests as slow",
-    "integration: marks tests as integration tests",
-    "unit: marks tests as unit tests",
+    "integration: Integration tests (require services/APIs)",
+    "unit: Unit tests (fast, no external dependencies)",
+    "requires_redis: Test requires Redis to be running",
+    "requires_api_keys: Test requires API keys to be configured",
 ]
 
 [tool.coverage.run]

@@ -174,6 +174,7 @@ async def test_tools_list_updates_dynamically():
 
 
 @pytest.mark.asyncio
+@pytest.mark.requires_redis
 async def test_governance_intercepts_all_tools(redis_client):
     """
     SUCCESS CRITERION 6: Governance middleware intercepts ALL tools.

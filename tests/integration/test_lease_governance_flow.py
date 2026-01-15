@@ -27,6 +27,8 @@ from src.meta_mcp.state import ExecutionMode, governance_state
 
 
 @pytest.mark.asyncio
+@pytest.mark.integration
+@pytest.mark.requires_redis
 async def test_policy_evaluation_read_only_mode(redis_client):
     """
     Verify policy evaluation in READ_ONLY mode.
@@ -56,6 +58,8 @@ async def test_policy_evaluation_read_only_mode(redis_client):
 
 
 @pytest.mark.asyncio
+@pytest.mark.integration
+@pytest.mark.requires_redis
 async def test_policy_evaluation_permission_mode(redis_client):
     """
     Verify policy evaluation in PERMISSION mode.
@@ -86,6 +90,8 @@ async def test_policy_evaluation_permission_mode(redis_client):
 
 
 @pytest.mark.asyncio
+@pytest.mark.integration
+@pytest.mark.requires_redis
 async def test_policy_evaluation_bypass_mode(redis_client):
     """
     Verify policy evaluation in BYPASS mode.
@@ -103,6 +109,8 @@ async def test_policy_evaluation_bypass_mode(redis_client):
 
 
 @pytest.mark.asyncio
+@pytest.mark.integration
+@pytest.mark.requires_redis
 async def test_bootstrap_tools_always_allowed(redis_client):
     """
     Verify bootstrap tools are always allowed regardless of mode.
@@ -120,6 +128,8 @@ async def test_bootstrap_tools_always_allowed(redis_client):
 
 
 @pytest.mark.asyncio
+@pytest.mark.integration
+@pytest.mark.requires_redis
 async def test_lease_grant_and_validate(redis_client):
     """
     Verify lease can be granted and validated.
@@ -151,6 +161,8 @@ async def test_lease_grant_and_validate(redis_client):
 
 
 @pytest.mark.asyncio
+@pytest.mark.integration
+@pytest.mark.requires_redis
 async def test_lease_scoped_to_client_and_tool(redis_client):
     """
     Verify leases are scoped to (client_id, tool_id) pairs.
@@ -177,6 +189,8 @@ async def test_lease_scoped_to_client_and_tool(redis_client):
 
 
 @pytest.mark.asyncio
+@pytest.mark.integration
+@pytest.mark.requires_redis
 async def test_lease_consume_decrements_calls(redis_client):
     """
     Verify lease consumption decrements calls_remaining.
@@ -214,6 +228,8 @@ async def test_lease_consume_decrements_calls(redis_client):
 
 
 @pytest.mark.asyncio
+@pytest.mark.integration
+@pytest.mark.requires_redis
 async def test_lease_expiration_via_ttl(redis_client):
     """
     Verify leases expire automatically via Redis TTL.
@@ -246,6 +262,8 @@ async def test_lease_expiration_via_ttl(redis_client):
 
 
 @pytest.mark.asyncio
+@pytest.mark.integration
+@pytest.mark.requires_redis
 async def test_lease_revocation(redis_client):
     """
     Verify leases can be manually revoked.
@@ -278,6 +296,8 @@ async def test_lease_revocation(redis_client):
 
 
 @pytest.mark.asyncio
+@pytest.mark.integration
+@pytest.mark.requires_redis
 async def test_capability_token_generation_and_verification(redis_client):
     """
     Verify capability tokens can be generated and verified.
@@ -315,6 +335,8 @@ async def test_capability_token_generation_and_verification(redis_client):
 
 
 @pytest.mark.asyncio
+@pytest.mark.integration
+@pytest.mark.requires_redis
 async def test_capability_token_expiration(redis_client):
     """
     Verify capability tokens expire after TTL.
@@ -350,6 +372,8 @@ async def test_capability_token_expiration(redis_client):
 
 
 @pytest.mark.asyncio
+@pytest.mark.integration
+@pytest.mark.requires_redis
 async def test_lease_with_capability_token(redis_client):
     """
     Verify lease can be granted with capability token.
@@ -392,6 +416,8 @@ async def test_lease_with_capability_token(redis_client):
 
 
 @pytest.mark.asyncio
+@pytest.mark.integration
+@pytest.mark.requires_redis
 async def test_mode_change_doesnt_affect_existing_leases(redis_client):
     """
     Verify mode changes don't affect existing leases.
@@ -438,6 +464,8 @@ async def test_mode_change_doesnt_affect_existing_leases(redis_client):
 
 
 @pytest.mark.asyncio
+@pytest.mark.integration
+@pytest.mark.requires_redis
 async def test_empty_client_id_rejected(redis_client):
     """
     Verify empty client_id is rejected.
@@ -466,6 +494,8 @@ async def test_empty_client_id_rejected(redis_client):
 
 
 @pytest.mark.asyncio
+@pytest.mark.integration
+@pytest.mark.requires_redis
 async def test_complete_governance_lease_workflow(redis_client):
     """
     End-to-end test of governance + lease workflow.

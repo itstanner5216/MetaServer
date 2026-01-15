@@ -22,6 +22,8 @@ from src.meta_mcp.leases.manager import lease_manager
 
 
 @pytest.mark.asyncio
+@pytest.mark.integration
+@pytest.mark.requires_redis
 async def test_notification_callback_registration(redis_client):
     """
     Verify notification callbacks can be registered and unregistered.
@@ -45,6 +47,8 @@ async def test_notification_callback_registration(redis_client):
 
 
 @pytest.mark.asyncio
+@pytest.mark.integration
+@pytest.mark.requires_redis
 async def test_lease_grant_emits_notification(redis_client):
     """
     Verify lease grant triggers list_changed notification.
@@ -80,6 +84,8 @@ async def test_lease_grant_emits_notification(redis_client):
 
 
 @pytest.mark.asyncio
+@pytest.mark.integration
+@pytest.mark.requires_redis
 async def test_lease_revocation_emits_notification(redis_client):
     """
     Verify lease revocation triggers list_changed notification.
@@ -118,6 +124,8 @@ async def test_lease_revocation_emits_notification(redis_client):
 
 
 @pytest.mark.asyncio
+@pytest.mark.integration
+@pytest.mark.requires_redis
 async def test_lease_expiration_cleanup(redis_client):
     """
     Verify expired leases are cleaned up properly.
@@ -147,6 +155,8 @@ async def test_lease_expiration_cleanup(redis_client):
 
 
 @pytest.mark.asyncio
+@pytest.mark.integration
+@pytest.mark.requires_redis
 async def test_multiple_clients_isolated_notifications(redis_client):
     """
     Verify notifications are scoped to correct client.
@@ -193,6 +203,8 @@ async def test_multiple_clients_isolated_notifications(redis_client):
 
 
 @pytest.mark.asyncio
+@pytest.mark.integration
+@pytest.mark.requires_redis
 async def test_notification_with_sync_callback(redis_client):
     """
     Verify synchronous callbacks work alongside async callbacks.
@@ -219,6 +231,8 @@ async def test_notification_with_sync_callback(redis_client):
 
 
 @pytest.mark.asyncio
+@pytest.mark.integration
+@pytest.mark.requires_redis
 async def test_notification_callback_exception_handling(redis_client):
     """
     Verify exceptions in callbacks don't break notification system.
@@ -252,6 +266,8 @@ async def test_notification_callback_exception_handling(redis_client):
 
 
 @pytest.mark.asyncio
+@pytest.mark.integration
+@pytest.mark.requires_redis
 async def test_notification_on_lease_exhaustion(redis_client):
     """
     Verify notification when lease is exhausted via consumption.
@@ -291,6 +307,8 @@ async def test_notification_on_lease_exhaustion(redis_client):
 
 
 @pytest.mark.asyncio
+@pytest.mark.integration
+@pytest.mark.requires_redis
 async def test_multiple_notifications_same_client(redis_client):
     """
     Verify multiple lease changes trigger multiple notifications.
@@ -336,6 +354,8 @@ async def test_multiple_notifications_same_client(redis_client):
 
 
 @pytest.mark.asyncio
+@pytest.mark.integration
+@pytest.mark.requires_redis
 async def test_notification_includes_correct_client_id(redis_client):
     """
     Verify notification includes correct client_id parameter.
@@ -379,6 +399,8 @@ async def test_notification_includes_correct_client_id(redis_client):
 
 
 @pytest.mark.asyncio
+@pytest.mark.integration
+@pytest.mark.requires_redis
 async def test_no_notification_when_no_callbacks(redis_client):
     """
     Verify no errors when emitting notification with no callbacks.
@@ -398,6 +420,8 @@ async def test_no_notification_when_no_callbacks(redis_client):
 
 
 @pytest.mark.asyncio
+@pytest.mark.integration
+@pytest.mark.requires_redis
 async def test_notification_after_callback_unregistration(redis_client):
     """
     Verify callback not called after unregistration.
@@ -424,6 +448,8 @@ async def test_notification_after_callback_unregistration(redis_client):
 
 
 @pytest.mark.asyncio
+@pytest.mark.integration
+@pytest.mark.requires_redis
 async def test_complete_notification_workflow(redis_client):
     """
     End-to-end test of notification workflow.

@@ -16,6 +16,7 @@ from src.meta_mcp.leases.models import ToolLease
 
 
 @pytest.mark.asyncio
+@pytest.mark.unit
 async def test_lease_creation():
     """
     Verify ToolLease can be created with valid parameters.
@@ -36,6 +37,7 @@ async def test_lease_creation():
 
 
 @pytest.mark.asyncio
+@pytest.mark.unit
 async def test_lease_expiration_check():
     """
     Verify is_expired() correctly identifies expired leases.
@@ -62,6 +64,7 @@ async def test_lease_expiration_check():
 
 
 @pytest.mark.asyncio
+@pytest.mark.unit
 async def test_lease_can_consume():
     """
     Verify can_consume() checks both expiration and calls_remaining.
@@ -84,6 +87,7 @@ async def test_lease_can_consume():
 
 
 @pytest.mark.asyncio
+@pytest.mark.unit
 async def test_lease_validation_errors():
     """
     Verify ToolLease.create() raises errors for invalid parameters.
@@ -120,6 +124,7 @@ async def test_lease_validation_errors():
 
 
 @pytest.mark.asyncio
+@pytest.mark.unit
 async def test_lease_serialization():
     """
     Verify ToolLease can be serialized to/from dict for Redis storage.

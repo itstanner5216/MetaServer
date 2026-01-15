@@ -13,6 +13,7 @@ from src.meta_mcp.middleware import GovernanceMiddleware
 
 
 @pytest.mark.asyncio
+@pytest.mark.requires_redis
 async def test_read_only_blocks_sensitive_tools(
     governance_in_read_only, mock_fastmcp_context, lease_for_tool
 ):
@@ -48,6 +49,7 @@ async def test_read_only_blocks_sensitive_tools(
 
 
 @pytest.mark.asyncio
+@pytest.mark.requires_redis
 async def test_read_only_allows_safe_tools(
     governance_in_read_only, mock_fastmcp_context, lease_for_tool
 ):
@@ -82,6 +84,7 @@ async def test_read_only_allows_safe_tools(
 
 
 @pytest.mark.asyncio
+@pytest.mark.requires_redis
 async def test_bypass_allows_sensitive_tools(
     governance_in_bypass, mock_fastmcp_context, lease_for_tool
 ):
@@ -114,6 +117,7 @@ async def test_bypass_allows_sensitive_tools(
 
 
 @pytest.mark.asyncio
+@pytest.mark.requires_redis
 async def test_bypass_logs_warning(governance_in_bypass, mock_fastmcp_context, lease_for_tool):
     """
     Test that BYPASS mode executes tools and does not block.
@@ -150,6 +154,7 @@ async def test_bypass_logs_warning(governance_in_bypass, mock_fastmcp_context, l
 
 
 @pytest.mark.asyncio
+@pytest.mark.requires_redis
 async def test_permission_requires_approval(
     governance_in_permission, mock_fastmcp_context, mock_elicit_approve, lease_for_tool
 ):
@@ -189,6 +194,7 @@ async def test_permission_requires_approval(
 
 
 @pytest.mark.asyncio
+@pytest.mark.requires_redis
 async def test_permission_allows_safe_tools(
     governance_in_permission, mock_fastmcp_context, lease_for_tool
 ):
