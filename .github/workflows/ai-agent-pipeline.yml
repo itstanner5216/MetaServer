@@ -126,7 +126,7 @@ jobs:
             cat agent_error.log
             
             # Create error result file using Python for proper JSON generation
-            python << 'PYEOF'
+            python << PYEOF
           import json
           import sys
           
@@ -140,7 +140,7 @@ jobs:
           # Create error result
           error_result = {
               "agent": "${{ matrix.agent }}",
-              "pr": ${{ matrix.pr }},
+              "pr": int("${{ matrix.pr }}"),
               "verdict": "ERROR",
               "summary": "Agent execution failed - see workflow logs for details",
               "error": "Exit code: $exit_code",
