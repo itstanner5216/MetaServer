@@ -1,0 +1,318 @@
+name: 🤖 Intelligent PR Validation & Auto-Remediation
+
+on:
+  workflow_dispatch:
+    inputs:
+      auto_fix:
+        description: 'Enable auto-remediation agent?'
+        required: true
+        default: true
+        type: boolean
+      architectural_check:
+        description: 'Enable architectural guardian?'
+        required: true
+        default: true
+        type: boolean
+      create_meta_prs:
+        description: 'Auto-create meta-PRs?'
+        required: true
+        default: true
+        type: boolean
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: read
+
+jobs:
+  validate-all-prs:
+    name: 🔍 Validation Agent
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    
+    steps:
+      - name: 📥 Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      
+      - name: 🐍 Setup Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+      
+      - name: 📦 Install dependencies
+        run: |
+          pip install -e ".[dev]"
+          pip install pytest pytest-asyncio pytest-cov bandit httpx
+      
+      - name: 🚀 Start Redis (for tests)
+        run: |
+          docker run -d -p 6379:6379 redis:7-alpine
+          sleep 3
+      
+      - name: 🔍 Run Validation Agent
+        id: validation
+        run: |
+          python scripts/agents/validation_agent.py \
+            --output reports/validation_results.json
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        continue-on-error: true
+      
+      - name: 📊 Upload Validation Report
+        uses: actions/upload-artifact@v4
+        with:
+          name: validation-results
+          path: reports/validation_results.json
+          if-no-files-found: warn
+  
+  auto-remediation:
+    name: 🔧 Remediation Agent
+    runs-on: ubuntu-latest
+    needs: validate-all-prs
+    if: ${{ inputs.auto_fix }}
+    timeout-minutes: 60
+    
+    steps:
+      - name: 📥 Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: 🐍 Setup Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+      
+      - name: 📦 Install dependencies
+        run: |
+          pip install -e ".[dev]"
+          pip install pytest pytest-asyncio pytest-cov bandit httpx
+      
+      - name: 📥 Download Validation Results
+        uses: actions/download-artifact@v4.1.3
+        with:
+          name: validation-results
+          path: reports/
+      
+      - name: 🔧 Run Remediation Agent
+        run: |
+          python scripts/agents/remediation_agent.py \
+            --input reports/validation_results.json \
+            --output reports/remediation_results.json \
+            --auto-commit
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        continue-on-error: true
+      
+      - name: 📊 Upload Remediation Report
+        uses: actions/upload-artifact@v4
+        with:
+          name: remediation-results
+          path: reports/remediation_results.json
+          if-no-files-found: warn
+  
+  architectural-analysis:
+    name: 🏛️ Architectural Guardian
+    runs-on: ubuntu-latest
+    needs: auto-remediation
+    if: always() && ${{ inputs.architectural_check }}
+    timeout-minutes: 60
+    
+    steps:
+      - name: 📥 Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      
+      - name: 🐍 Setup Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+      
+      - name: 📦 Install dependencies
+        run: |
+          pip install -e ".[dev]"
+          pip install httpx
+      
+      - name: 📥 Download Previous Results
+        uses: actions/download-artifact@v4.1.3
+        with:
+          pattern: '*-results'
+          path: reports/
+          merge-multiple: true
+      
+      - name: 🏛️ Run Architectural Guardian
+        run: |
+          python scripts/agents/architectural_guardian.py \
+            --validation reports/validation_results.json \
+            --output reports/architectural_analysis.json
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        continue-on-error: true
+      
+      - name: 📊 Upload Architectural Report
+        uses: actions/upload-artifact@v4
+        with:
+          name: architectural-analysis
+          path: reports/architectural_analysis.json
+          if-no-files-found: warn
+  
+  create-meta-prs:
+    name: 📦 Create Meta-PRs
+    runs-on: ubuntu-latest
+    needs: architectural-analysis
+    if: always() && ${{ inputs.create_meta_prs }}
+    timeout-minutes: 30
+    
+    steps:
+      - name: 📥 Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: 🐍 Setup Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+      
+      - name: 📦 Install dependencies
+        run: |
+          pip install -e ".[dev]"
+          pip install httpx
+      
+      - name: 📥 Download All Reports
+        uses: actions/download-artifact@v4.1.3
+        with:
+          pattern: '*-results'
+          path: reports/
+          merge-multiple: true
+      
+      - name: 📥 Download Architectural Analysis
+        uses: actions/download-artifact@v4.1.3
+        with:
+          name: architectural-analysis
+          path: reports/
+      
+      - name: 📦 Generate Meta-PRs
+        id: meta-prs
+        run: |
+          python scripts/agents/meta_pr_creator.py \
+            --architectural reports/architectural_analysis.json \
+            --output reports/meta_prs_created.json \
+            --create-drafts
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        continue-on-error: true
+      
+      - name: 📊 Upload Meta-PR Report
+        uses: actions/upload-artifact@v4
+        with:
+          name: meta-prs-created
+          path: reports/meta_prs_created.json
+          if-no-files-found: warn
+  
+  functional-verification:
+    name: ✅ Functional Verification
+    runs-on: ubuntu-latest
+    needs: create-meta-prs
+    if: always()
+    timeout-minutes: 60
+    
+    steps:
+      - name: 📥 Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      
+      - name: 🐍 Setup Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+      
+      - name: 📦 Install dependencies
+        run: |
+          pip install -e ".[dev]"
+          pip install pytest pytest-asyncio pytest-cov httpx
+      
+      - name: 🚀 Start Redis
+        run: |
+          docker run -d -p 6379:6379 redis:7-alpine
+          sleep 3
+      
+      - name: 📥 Download Meta-PR List
+        uses: actions/download-artifact@v4.1.3
+        with:
+          name: meta-prs-created
+          path: reports/
+      
+      - name: ✅ Run Functional Verifier
+        run: |
+          python scripts/agents/functional_verifier.py \
+            --meta-prs reports/meta_prs_created.json \
+            --output reports/functional_verification.json
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        continue-on-error: true
+      
+      - name: 📊 Upload Verification Report
+        uses: actions/upload-artifact@v4
+        with:
+          name: functional-verification
+          path: reports/functional_verification.json
+          if-no-files-found: warn
+  
+  generate-summary:
+    name: 📊 Generate Summary Report
+    runs-on: ubuntu-latest
+    needs: [validate-all-prs, auto-remediation, architectural-analysis, create-meta-prs, functional-verification]
+    if: always()
+    
+    steps:
+      - name: 📥 Checkout repository
+        uses: actions/checkout@v4
+      
+      - name: 🐍 Setup Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+      
+      - name: 📦 Install dependencies
+        run: |
+          pip install -e .
+      
+      - name: 📥 Download All Artifacts
+        uses: actions/download-artifact@v4.1.3
+        with:
+          path: reports/
+          merge-multiple: true
+      
+      - name: 📊 Generate Summary
+        run: |
+          python scripts/agents/generate_summary.py \
+            --reports-dir reports/ \
+            --output reports/FINAL_SUMMARY.md
+      
+      - name: 📝 Post Summary to Workflow
+        run: |
+          if [ -f reports/FINAL_SUMMARY.md ]; then
+            cat reports/FINAL_SUMMARY.md >> $GITHUB_STEP_SUMMARY
+          else
+            echo "⚠️ Summary file not generated" >> $GITHUB_STEP_SUMMARY
+          fi
+      
+      - name: 📊 Upload Final Summary
+        uses: actions/upload-artifact@v4
+        with:
+          name: final-summary
+          path: reports/
+          if-no-files-found: warn

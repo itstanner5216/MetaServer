@@ -2,6 +2,7 @@
 
 import json
 import logging
+import os
 from datetime import datetime, timezone
 from enum import Enum
 from logging.handlers import RotatingFileHandler
@@ -11,6 +12,7 @@ from typing import Any, Dict, Optional
 from loguru import logger
 
 from .config import Config
+from typing import Any
 
 # Constants
 MAX_CONTENT_LENGTH = 1000  # Truncate large content to prevent log bloat
@@ -108,9 +110,9 @@ class AuditLogger:
         """
         if isinstance(value, str) and len(value) > max_length:
             return value[:max_length] + f"... [truncated, {len(value)} total chars]"
-        elif isinstance(value, dict):
+        if isinstance(value, dict):
             return {k: AuditLogger._truncate_content(v, max_length) for k, v in value.items()}
-        elif isinstance(value, list):
+        if isinstance(value, list):
             return [AuditLogger._truncate_content(item, max_length) for item in value]
         return value
 
@@ -153,7 +155,7 @@ class AuditLogger:
     def log_tool_call(
         self,
         tool_name: str,
-        arguments: Dict[str, Any],
+        arguments: dict[str, Any],
         session_id: str,
         mode: str,
     ):
@@ -177,15 +179,15 @@ class AuditLogger:
     def log_approval(
         self,
         tool_name: str,
-        arguments: Dict[str, Any],
+        arguments: dict[str, Any],
         session_id: str,
         approved: bool,
-        elevation_ttl: Optional[int] = None,
-        request_id: Optional[str] = None,
-        selected_scopes: Optional[list] = None,
-        lease_seconds: Optional[int] = None,
-        error: Optional[str] = None,
-        reason: Optional[str] = None,
+        elevation_ttl: int | None = None,
+        request_id: str | None = None,
+        selected_scopes: list | None = None,
+        lease_seconds: int | None = None,
+        error: str | None = None,
+        reason: str | None = None,
     ):
         """
         Log approval decision (granted or denied).
@@ -235,10 +237,10 @@ class AuditLogger:
     def log_approval_timeout(
         self,
         tool_name: str,
-        arguments: Dict[str, Any],
+        arguments: dict[str, Any],
         session_id: str,
         timeout_seconds: int,
-        request_id: Optional[str] = None,
+        request_id: str | None = None,
     ):
         """
         Log approval timeout.
@@ -332,7 +334,7 @@ class AuditLogger:
     def log_blocked(
         self,
         tool_name: str,
-        arguments: Dict[str, Any],
+        arguments: dict[str, Any],
         session_id: str,
         reason: str,
     ):
@@ -356,7 +358,7 @@ class AuditLogger:
     def log_bypass(
         self,
         tool_name: str,
-        arguments: Dict[str, Any],
+        arguments: dict[str, Any],
         session_id: str,
     ):
         """

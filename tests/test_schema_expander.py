@@ -1,8 +1,8 @@
 """Tests for schema expansion (Phase 5)."""
 
 import pytest
+
 from src.meta_mcp.schemas.expander import expand_schema
-from src.meta_mcp.registry.models import ToolRecord
 
 
 def test_expand_schema_returns_full_schema():
@@ -272,8 +272,8 @@ async def test_expand_schema_from_live_tool_async():
 
 def test_expansion_restores_full_schema():
     """Integration test: minimization + expansion should restore full schema."""
-    from src.meta_mcp.schemas.minimizer import minimize_schema
     from src.meta_mcp.registry import tool_registry
+    from src.meta_mcp.schemas.minimizer import minimize_schema
 
     tool_record = tool_registry.get("read_file")
 

@@ -16,10 +16,10 @@ Design Plan Section: Phase 5 (Progressive Schemas)
 """
 
 import json
-from typing import Any, Dict, Optional
+from typing import Any
 
 
-def minimize_schema(full_schema: Dict[str, Any], token_budget: int = 50) -> Dict[str, Any]:
+def minimize_schema(full_schema: dict[str, Any], token_budget: int = 50) -> dict[str, Any]:
     """
     Minimize a JSON schema to fit within token budget.
 
@@ -96,7 +96,7 @@ def minimize_schema(full_schema: Dict[str, Any], token_budget: int = 50) -> Dict
     return minimal
 
 
-def _minimize_property(prop_schema: Dict[str, Any]) -> Dict[str, Any]:
+def _minimize_property(prop_schema: dict[str, Any]) -> dict[str, Any]:
     """
     Minimize a single property schema.
 
@@ -153,7 +153,7 @@ def _minimize_property(prop_schema: Dict[str, Any]) -> Dict[str, Any]:
     return minimal
 
 
-def estimate_token_count(schema: Dict[str, Any]) -> int:
+def estimate_token_count(schema: dict[str, Any]) -> int:
     """
     Estimate token count for a schema (rough approximation).
 
@@ -170,13 +170,13 @@ def estimate_token_count(schema: Dict[str, Any]) -> int:
         return 0
 
     # Serialize to JSON without whitespace
-    json_str = json.dumps(schema, separators=(',', ':'))
+    json_str = json.dumps(schema, separators=(",", ":"))
 
     # Rough token estimate: 1 token ≈ 4 characters
     return len(json_str) // 4
 
 
-def validate_minimal_schema(minimal_schema: Dict[str, Any], max_tokens: int = 50) -> bool:
+def validate_minimal_schema(minimal_schema: dict[str, Any], max_tokens: int = 50) -> bool:
     """
     Validate that a minimal schema meets requirements.
 
@@ -202,9 +202,7 @@ def validate_minimal_schema(minimal_schema: Dict[str, Any], max_tokens: int = 50
     # Check token budget
     token_count = estimate_token_count(minimal_schema)
     if token_count > max_tokens:
-        raise ValueError(
-            f"Minimal schema exceeds token budget: {token_count} > {max_tokens}"
-        )
+        raise ValueError(f"Minimal schema exceeds token budget: {token_count} > {max_tokens}")
 
     # Check has type
     if "type" not in minimal_schema:

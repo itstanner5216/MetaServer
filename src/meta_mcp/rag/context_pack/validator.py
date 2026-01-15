@@ -13,7 +13,6 @@ import logging
 from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
-from typing import Optional, Tuple
 
 from .builder import ContextPack
 
@@ -27,6 +26,7 @@ logger = logging.getLogger(__name__)
 
 class ValidationStatus(Enum):
     """Validation status codes."""
+
     VALID = "valid"
     INVALID_SIGNATURE = "invalid_signature"
     EXPIRED = "expired"
@@ -44,6 +44,7 @@ class ValidationResult:
         error_message: Human-readable error message (empty if valid)
         validated_at: When validation was performed
     """
+
     is_valid: bool
     status: ValidationStatus
     error_message: str
@@ -135,9 +136,7 @@ class ContextPackValidator:
             # Check 1: Verify signature
             if not self._verify_signature(pack):
                 self._validations_failed_signature += 1
-                logger.warning(
-                    f"Signature verification failed: pack_id={pack.pack_id}"
-                )
+                logger.warning(f"Signature verification failed: pack_id={pack.pack_id}")
                 return ValidationResult(
                     is_valid=False,
                     status=ValidationStatus.INVALID_SIGNATURE,
@@ -175,7 +174,7 @@ class ContextPackValidator:
             return ValidationResult(
                 is_valid=False,
                 status=ValidationStatus.MALFORMED,
-                error_message=f"Validation error: {str(e)}",
+                error_message=f"Validation error: {e!s}",
                 validated_at=validated_at,
             )
 
@@ -242,7 +241,7 @@ class ContextPackValidator:
         """
         return datetime.utcnow() > pack.expires_at
 
-    def time_until_expiration(self, pack: ContextPack) -> Optional[float]:
+    def time_until_expiration(self, pack: ContextPack) -> float | None:
         """
         Get seconds until pack expiration.
 
@@ -293,7 +292,7 @@ def create_validator(hmac_secret: str) -> ContextPackValidator:
     return ContextPackValidator(hmac_secret=hmac_secret)
 
 
-def validate_pack(pack: ContextPack, hmac_secret: str) -> Tuple[bool, str]:
+def validate_pack(pack: ContextPack, hmac_secret: str) -> tuple[bool, str]:
     """
     Convenience function to validate a pack with a given secret.
 

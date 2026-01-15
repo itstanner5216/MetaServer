@@ -6,7 +6,8 @@ Validates:
 """
 
 import pytest
-from src.meta_mcp.audit import AuditLogger, AuditEvent
+
+from src.meta_mcp.audit import AuditLogger
 
 
 class TestAuditLoggingFixes:
