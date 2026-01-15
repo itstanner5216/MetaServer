@@ -13,6 +13,7 @@ from src.meta_mcp.middleware import GovernanceMiddleware
 
 
 @pytest.mark.asyncio
+@pytest.mark.requires_redis
 async def test_execute_command_context_key_truncation(
     governance_in_permission,
     mock_fastmcp_context,
@@ -43,6 +44,7 @@ async def test_execute_command_context_key_truncation(
 
 
 @pytest.mark.asyncio
+@pytest.mark.requires_redis
 async def test_directory_operations_context_key(
     governance_in_permission,
     mock_fastmcp_context,
@@ -72,6 +74,7 @@ async def test_directory_operations_context_key(
 
 
 @pytest.mark.asyncio
+@pytest.mark.requires_redis
 async def test_git_operations_context_key(
     governance_in_permission,
     mock_fastmcp_context,
@@ -101,6 +104,7 @@ async def test_git_operations_context_key(
 
 
 @pytest.mark.asyncio
+@pytest.mark.requires_redis
 async def test_admin_operations_context_key(
     governance_in_permission,
     mock_fastmcp_context,
@@ -135,6 +139,7 @@ async def test_admin_operations_context_key(
 
 
 @pytest.mark.asyncio
+@pytest.mark.requires_redis
 async def test_approval_request_long_argument_truncation(
     governance_in_permission,
     mock_fastmcp_context,

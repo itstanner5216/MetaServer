@@ -14,11 +14,13 @@ from scripts.agents.llm_functional_verifier import LLMFunctionalVerifier
 class TestLLMConfig:
     """Test configuration loading."""
     
+    @pytest.mark.unit
     def test_config_loads(self):
         """Test that configuration loads successfully."""
         config = get_config()
         assert config is not None
     
+    @pytest.mark.unit
     def test_all_agents_configured(self):
         """Test that all 4 agents are configured."""
         config = get_config()
@@ -30,6 +32,7 @@ class TestLLMConfig:
             assert model_config.endpoint is not None
             assert model_config.api_key_env is not None
     
+    @pytest.mark.unit
     def test_validator_config(self):
         """Test validator agent configuration."""
         config = get_config()
@@ -39,6 +42,7 @@ class TestLLMConfig:
         assert model_config.provider == "azure_openai"
         assert model_config.api_key_env == "AZURE_OPENAI_API_KEY"
     
+    @pytest.mark.unit
     def test_remediator_config(self):
         """Test remediator agent configuration."""
         config = get_config()
@@ -48,6 +52,7 @@ class TestLLMConfig:
         assert model_config.provider == "github_models"
         assert model_config.api_key_env == "MODELS_API_TOKEN"
     
+    @pytest.mark.unit
     def test_guardian_config(self):
         """Test guardian agent configuration."""
         config = get_config()
@@ -57,6 +62,7 @@ class TestLLMConfig:
         assert model_config.provider == "moonshot"
         assert model_config.api_key_env == "MOONSHOT_API_KEY"
     
+    @pytest.mark.unit
     def test_verifier_config(self):
         """Test verifier agent configuration."""
         config = get_config()
@@ -66,6 +72,7 @@ class TestLLMConfig:
         assert model_config.provider == "openrouter"
         assert model_config.api_key_env == "OPENROUTER_API_KEY"
     
+    @pytest.mark.unit
     def test_provider_configs(self):
         """Test provider-specific configurations."""
         config = get_config()
@@ -85,6 +92,7 @@ class TestLLMConfig:
 class TestLLMClient:
     """Test LLM client."""
     
+    @pytest.mark.unit
     def test_client_instantiation(self):
         """Test that client can be instantiated for all roles."""
         for role in AgentRole:
@@ -93,6 +101,7 @@ class TestLLMClient:
             assert client.model_config is not None
             assert client.provider_config is not None
     
+    @pytest.mark.unit
     def test_build_headers(self):
         """Test header building (without API key)."""
         # This will fail on get_api_key, but we can test the structure
@@ -102,6 +111,7 @@ class TestLLMClient:
         # We can't test auth headers without API keys
         assert client.provider_config.auth_header == "api-key"
     
+    @pytest.mark.unit
     def test_build_payload(self):
         """Test payload building."""
         client = LLMClient(AgentRole.VALIDATOR)
@@ -124,6 +134,7 @@ class TestLLMClient:
 class TestLLMAgents:
     """Test LLM-based agents."""
     
+    @pytest.mark.unit
     def test_validation_agent_instantiation(self):
         """Test validation agent instantiation."""
         agent = LLMValidationAgent(dry_run=True)
@@ -131,6 +142,7 @@ class TestLLMAgents:
         assert agent.dry_run is True
         assert len(agent.system_prompt) > 0
     
+    @pytest.mark.unit
     def test_remediation_agent_instantiation(self):
         """Test remediation agent instantiation."""
         agent = LLMRemediationAgent(dry_run=True)
@@ -138,6 +150,7 @@ class TestLLMAgents:
         assert agent.dry_run is True
         assert len(agent.system_prompt) > 0
     
+    @pytest.mark.unit
     def test_guardian_agent_instantiation(self):
         """Test guardian agent instantiation."""
         agent = LLMArchitecturalGuardian(dry_run=True)
@@ -145,6 +158,7 @@ class TestLLMAgents:
         assert agent.dry_run is True
         assert len(agent.system_prompt) > 0
     
+    @pytest.mark.unit
     def test_verifier_agent_instantiation(self):
         """Test verifier agent instantiation."""
         agent = LLMFunctionalVerifier(dry_run=True)
@@ -152,6 +166,7 @@ class TestLLMAgents:
         assert agent.dry_run is True
         assert len(agent.system_prompt) > 0
     
+    @pytest.mark.unit
     def test_validation_agent_prompt_building(self):
         """Test validation agent prompt building."""
         agent = LLMValidationAgent(dry_run=True)
@@ -171,6 +186,7 @@ class TestLLMAgents:
         assert "Test PR" in prompt
         assert "test.py" in prompt
     
+    @pytest.mark.unit
     def test_validation_agent_response_parsing(self):
         """Test validation agent response parsing."""
         agent = LLMValidationAgent(dry_run=True)
@@ -191,6 +207,7 @@ class TestLLMAgents:
         assert output.summary == "Code looks good"
         assert output.confidence == 0.9
     
+    @pytest.mark.unit
     def test_validation_agent_fallback_parsing(self):
         """Test validation agent fallback parsing."""
         agent = LLMValidationAgent(dry_run=True)
@@ -203,6 +220,7 @@ class TestLLMAgents:
         assert output.verdict == "WARN"
         assert "Unable to parse" in output.summary
     
+    @pytest.mark.unit
     def test_remediation_agent_response_parsing(self):
         """Test remediation agent response parsing."""
         agent = LLMRemediationAgent(dry_run=True)
@@ -230,6 +248,7 @@ class TestLLMAgents:
         assert len(output.suggested_fixes) == 1
         assert output.suggested_fixes[0]["file"] == "test.py"
     
+    @pytest.mark.unit
     def test_guardian_verdict_mapping(self):
         """Test guardian agent verdict mapping."""
         agent = LLMArchitecturalGuardian(dry_run=True)
@@ -249,6 +268,7 @@ class TestLLMAgents:
         output = agent.parse_response(response, 123)
         assert output.verdict == "PASS"  # SAFE maps to PASS
     
+    @pytest.mark.unit
     def test_verifier_merge_readiness(self):
         """Test verifier agent merge readiness."""
         agent = LLMFunctionalVerifier(dry_run=True)
@@ -267,6 +287,7 @@ class TestLLMAgents:
         assert output.verdict == "PASS"
         assert "ready" in output.summary
     
+    @pytest.mark.unit
     def test_agent_markdown_output(self):
         """Test agent markdown output generation."""
         agent = LLMValidationAgent(dry_run=True)

@@ -27,6 +27,7 @@ class TestListChangedEmission:
         await manager.close()
 
     @pytest.mark.asyncio
+    @pytest.mark.requires_redis
     async def test_grant_emits_list_changed(self, lease_manager):
         """Test that granting a lease emits list_changed notification."""
         # Mock notification emitter
@@ -48,6 +49,7 @@ class TestListChangedEmission:
                 mock_emit.assert_called_once()
 
     @pytest.mark.asyncio
+    @pytest.mark.requires_redis
     async def test_revoke_emits_list_changed(self, lease_manager):
         """Test that revoking a lease emits list_changed notification."""
         # Grant a lease first
@@ -71,6 +73,7 @@ class TestListChangedEmission:
                 mock_emit.assert_called_once()
 
     @pytest.mark.asyncio
+    @pytest.mark.requires_redis
     async def test_consume_exhaustion_emits_list_changed(self, lease_manager):
         """Test that consuming last call emits list_changed notification."""
         # Grant a lease with single call
@@ -96,6 +99,7 @@ class TestListChangedEmission:
                 mock_emit.assert_called_once()
 
     @pytest.mark.asyncio
+    @pytest.mark.requires_redis
     async def test_no_notification_on_consume_with_remaining(self, lease_manager):
         """Test that consuming with calls remaining doesn't emit notification."""
         # Grant a lease with multiple calls
@@ -120,6 +124,7 @@ class TestListChangedEmission:
                 mock_emit.assert_not_called()
 
     @pytest.mark.asyncio
+    @pytest.mark.requires_redis
     async def test_notification_includes_client_id(self, lease_manager):
         """Test that notification includes client ID."""
         with patch.object(lease_manager, "_emit_list_changed", new_callable=AsyncMock) as mock_emit:
@@ -140,6 +145,7 @@ class TestListChangedEmission:
                 assert client_id in str(call_args) or call_args[0] == (client_id,)
 
     @pytest.mark.asyncio
+    @pytest.mark.requires_redis
     async def test_multiple_changes_emit_multiple_notifications(self, lease_manager):
         """Test that multiple changes emit separate notifications."""
         with patch.object(lease_manager, "_emit_list_changed", new_callable=AsyncMock) as mock_emit:
@@ -166,6 +172,7 @@ class TestListChangedEmission:
                 assert mock_emit.call_count == 2
 
     @pytest.mark.asyncio
+    @pytest.mark.requires_redis
     async def test_notification_throttling(self, lease_manager):
         """Test that rapid changes are throttled."""
         with patch.object(lease_manager, "_emit_list_changed", new_callable=AsyncMock) as mock_emit:
@@ -187,6 +194,7 @@ class TestListChangedEmission:
                 assert call_count > 0
 
     @pytest.mark.asyncio
+    @pytest.mark.requires_redis
     async def test_notification_on_expiration_cleanup(self, lease_manager):
         """Test that cleaning up expired leases emits notification."""
         # Grant lease with very short TTL
@@ -211,6 +219,7 @@ class TestListChangedEmission:
                 mock_emit.assert_called()
 
     @pytest.mark.asyncio
+    @pytest.mark.requires_redis
     async def test_notification_format(self, lease_manager):
         """Test notification format is correct."""
         notifications_received = []
@@ -235,6 +244,7 @@ class TestListChangedEmission:
                 assert "args" in notification or "kwargs" in notification
 
     @pytest.mark.asyncio
+    @pytest.mark.requires_redis
     async def test_failed_grant_no_notification(self, lease_manager):
         """Test that failed grant doesn't emit notification."""
         with patch.object(lease_manager, "_emit_list_changed", new_callable=AsyncMock) as mock_emit:
@@ -254,6 +264,7 @@ class TestListChangedEmission:
                 mock_emit.assert_not_called()
 
     @pytest.mark.asyncio
+    @pytest.mark.requires_redis
     async def test_notification_isolation_between_clients(self, lease_manager):
         """Test notifications are isolated per client."""
         client1_notifications = []

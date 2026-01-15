@@ -7,6 +7,7 @@ import pytest
 from src.meta_mcp.registry.models import ServerRecord, ToolCandidate, ToolRecord
 
 
+@pytest.mark.unit
 def test_server_record_creation():
     """ServerRecord should be created with valid fields."""
     server = ServerRecord(
@@ -20,6 +21,7 @@ def test_server_record_creation():
     assert server.embedding_vector is None
 
 
+@pytest.mark.unit
 def test_tool_record_creation():
     """ToolRecord should be created with valid fields."""
     tool = ToolRecord(
@@ -40,6 +42,7 @@ def test_tool_record_creation():
     assert isinstance(tool.registered_at, datetime)
 
 
+@pytest.mark.unit
 def test_tool_record_invariants_valid_risk_level():
     """ToolRecord invariants should pass for valid risk levels."""
     for risk in ["safe", "sensitive", "dangerous"]:
@@ -55,6 +58,7 @@ def test_tool_record_invariants_valid_risk_level():
         assert tool.validate_invariants() is True
 
 
+@pytest.mark.unit
 def test_tool_record_invariants_invalid_risk_level():
     """ToolRecord invariants should fail for invalid risk level."""
     tool = ToolRecord(
@@ -71,6 +75,7 @@ def test_tool_record_invariants_invalid_risk_level():
         tool.validate_invariants()
 
 
+@pytest.mark.unit
 def test_tool_record_invariants_empty_description():
     """ToolRecord invariants should fail for empty description."""
     tool = ToolRecord(
@@ -87,6 +92,7 @@ def test_tool_record_invariants_empty_description():
         tool.validate_invariants()
 
 
+@pytest.mark.unit
 def test_tool_record_invariants_empty_tags():
     """ToolRecord invariants should fail for empty tags list."""
     tool = ToolRecord(
@@ -103,6 +109,7 @@ def test_tool_record_invariants_empty_tags():
         tool.validate_invariants()
 
 
+@pytest.mark.unit
 def test_tool_candidate_creation():
     """ToolCandidate should be created without schema fields."""
     candidate = ToolCandidate(
@@ -122,6 +129,7 @@ def test_tool_candidate_creation():
     assert candidate.relevance_score == 0.95
 
 
+@pytest.mark.unit
 def test_tool_candidate_no_schema_fields():
     """ToolCandidate must NOT have schema fields (Nuance 5.1)."""
     candidate = ToolCandidate(
@@ -134,6 +142,7 @@ def test_tool_candidate_no_schema_fields():
     assert not hasattr(candidate, "description_full")
 
 
+@pytest.mark.unit
 def test_tool_candidate_default_relevance_score():
     """ToolCandidate should have default relevance_score of 0.0."""
     candidate = ToolCandidate(
@@ -143,6 +152,7 @@ def test_tool_candidate_default_relevance_score():
     assert candidate.relevance_score == 0.0
 
 
+@pytest.mark.unit
 def test_tool_record_optional_fields():
     """ToolRecord optional fields should default to None."""
     tool = ToolRecord(
