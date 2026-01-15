@@ -6,9 +6,10 @@ on:
   workflow_dispatch:
     inputs:
       pr_number:
-        description: 'PR number to analyze'
+        description: 'PR number to analyze (or "all" for all open PRs)'
         required: true
-        type: number
+        type: string
+        default: 'all'
       agents:
         description: 'Agents to run (comma-separated: validator,remediator,guardian,verifier or "all")'
         required: false
@@ -30,12 +31,37 @@ jobs:
     steps:
       - name: Get PR numbers
         id: get-prs
-        run: |
-          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
-            echo "pr_numbers=[\"${{ inputs.pr_number }}\"]" >> $GITHUB_OUTPUT
-          else
-            echo "pr_numbers=[\"${{ github.event.pull_request.number }}\"]" >> $GITHUB_OUTPUT
-          fi
+        uses: actions/github-script@v7
+        with:
+          script: |
+            let prNumbers = [];
+            
+            if (context.eventName === 'pull_request') {
+              // Triggered by PR event
+              prNumbers = [context.payload.pull_request.number];
+            } else if (context.eventName === 'workflow_dispatch') {
+              const input = '${{ inputs.pr_number }}';
+              
+              if (input.toLowerCase() === 'all') {
+                // Fetch all open PRs
+                console.log('Fetching all open PRs...');
+                const { data: pullRequests } = await github.rest.pulls.list({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  state: 'open',
+                  per_page: 100
+                });
+                
+                prNumbers = pullRequests.map(pr => pr.number);
+                console.log(`Found ${prNumbers.length} open PRs: ${prNumbers.join(', ')}`);
+              } else {
+                // Single PR number
+                prNumbers = [parseInt(input)];
+              }
+            }
+            
+            // Output as JSON array
+            core.setOutput('pr_numbers', JSON.stringify(prNumbers));
       
       - name: Show target PRs
         run: |
@@ -45,6 +71,7 @@ jobs:
   run-agents:
     name: ${{ matrix.agent }} (PR ${{ matrix.pr }})
     runs-on: ubuntu-latest
+    environment: METASERVER  # Access environment secrets
     needs: collect-prs
     if: needs.collect-prs.outputs.pr_numbers != '[]'
     
@@ -76,22 +103,69 @@ jobs:
             pip install -e .
           fi
       
+      - name: Verify environment
+        run: |
+          echo "=== Python Version ==="
+          python --version
+          
+          echo "=== Installed Packages ==="
+          pip list | grep -E "(httpx|pyyaml)"
+          
+          echo "=== Import Test ==="
+          python -c "import httpx; import yaml; print('✅ Imports successful')"
+          
+          echo "=== Environment Variables Check ==="
+          echo "GITHUB_TOKEN: ${GITHUB_TOKEN:+SET}"
+          echo "AZURE_OPENAI_API_KEY: ${AZURE_OPENAI_API_KEY:+SET}"
+          echo "MODELS_API_TOKEN: ${MODELS_API_TOKEN:+SET}"
+          echo "MOONSHOT_API_KEY: ${MOONSHOT_API_KEY:+SET}"
+          echo "OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:+SET}"
+      
       - name: Run ${{ matrix.agent }} agent
+        id: run-agent
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # Azure OpenAI (for validator)
           AZURE_OPENAI_API_KEY: ${{ secrets.AZURE_OPENAI_API_KEY }}
           # GitHub Models (for remediator)
-          GITHUB_MODELS_TOKEN: ${{ secrets.GITHUB_MODELS_TOKEN }}
+          MODELS_API_TOKEN: ${{ secrets.MODELS_API_TOKEN }}
           # Moonshot (for guardian)
           MOONSHOT_API_KEY: ${{ secrets.MOONSHOT_API_KEY }}
           # OpenRouter (for verifier)
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
         run: |
+          set +e  # Don't exit on error immediately
+          mkdir -p results
+          
+          echo "=== Running ${{ matrix.agent }} agent on PR ${{ matrix.pr }} ==="
+          
           python -m scripts.agents.run_agent \
             --pr ${{ matrix.pr }} \
             --agent ${{ matrix.agent }} \
-            --output results/${{ matrix.agent }}_pr${{ matrix.pr }}.json
+            --output results/${{ matrix.agent }}_pr${{ matrix.pr }}.json 2>&1 | tee agent_error.log
+          
+          exit_code=$?
+          
+          if [ $exit_code -ne 0 ]; then
+            echo "❌ Agent failed with exit code: $exit_code"
+            echo "=== Error Log ==="
+            cat agent_error.log
+            
+            # Create error result file
+            error_msg=$(cat agent_error.log | head -n 100 | jq -Rs .)
+            cat > results/${{ matrix.agent }}_pr${{ matrix.pr }}.json << EOF
+          {
+            "agent": "${{ matrix.agent }}",
+            "pr": ${{ matrix.pr }},
+            "verdict": "ERROR",
+            "summary": "Agent execution failed - see workflow logs for details",
+            "error": "Exit code: $exit_code",
+            "error_log": $error_msg,
+            "findings": []
+          }
+          EOF
+            echo "✅ Created error result file"
+          fi
         continue-on-error: true
       
       - name: Upload results
@@ -134,20 +208,49 @@ jobs:
           results_dir = Path("results")
           all_results = {}
           
+          # Handle case where results directory doesn't exist or is empty
+          if not results_dir.exists():
+              print("⚠️ No results directory found - all agents may have failed")
+              summary = "# 🤖 AI Agent Pipeline Results\n\n"
+              summary += "⚠️ **Warning**: No results directory found. All agents may have failed to execute.\n"
+              summary += "\nCheck individual job logs for details.\n"
+              with open(os.environ["GITHUB_STEP_SUMMARY"], "w") as f:
+                  f.write(summary)
+              print(summary)
+              exit(0)
+          
+          # Check if directory is empty
+          if not any(results_dir.iterdir()):
+              print("⚠️ Results directory is empty - no artifacts were uploaded")
+              summary = "# 🤖 AI Agent Pipeline Results\n\n"
+              summary += "⚠️ **Warning**: No agent results were uploaded.\n"
+              summary += "\nCheck individual job logs for details.\n"
+              with open(os.environ["GITHUB_STEP_SUMMARY"], "w") as f:
+                  f.write(summary)
+              print(summary)
+              exit(0)
+          
           for artifact_dir in results_dir.iterdir():
               if artifact_dir.is_dir():
                   for result_file in artifact_dir.glob("*.json"):
-                      with open(result_file) as f:
-                          data = json.load(f)
-                          agent_name = result_file.stem.split("_")[0]
-                          pr_num = result_file.stem.split("pr")[1].replace(".json", "")
-                          
-                          if pr_num not in all_results:
-                              all_results[pr_num] = {}
-                          all_results[pr_num][agent_name] = data
+                      try:
+                          with open(result_file) as f:
+                              data = json.load(f)
+                              agent_name = result_file.stem.split("_")[0]
+                              pr_num = result_file.stem.split("pr")[1].replace(".json", "")
+                              
+                              if pr_num not in all_results:
+                                  all_results[pr_num] = {}
+                              all_results[pr_num][agent_name] = data
+                      except Exception as e:
+                          print(f"⚠️ Failed to parse {result_file}: {e}")
           
           # Generate markdown summary
           summary = "# 🤖 AI Agent Pipeline Results\n\n"
+          
+          if not all_results:
+              summary += "⚠️ **Warning**: No valid results found.\n"
+              summary += "\nCheck individual job logs for details.\n"
           
           for pr_num, agents in sorted(all_results.items()):
               summary += f"## PR #{pr_num}\n\n"
@@ -156,7 +259,7 @@ jobs:
               
               for agent_name, result in sorted(agents.items()):
                   verdict = result.get("verdict", "UNKNOWN")
-                  emoji = {"PASS": "✅", "WARN": "⚠️", "FAIL": "❌", "BLOCK": "🚫"}.get(verdict, "❓")
+                  emoji = {"PASS": "✅", "WARN": "⚠️", "FAIL": "❌", "BLOCK": "🚫", "ERROR": "💥"}.get(verdict, "❓")
                   agent_display = agent_name.title()
                   summary_text = result.get("summary", "No summary")[:100]
                   
@@ -204,11 +307,21 @@ jobs:
           has_fail = False
           has_error = False
           
+          # Handle missing results directory
+          if not results_dir.exists():
+              print("⚠️ No results directory found - treating as error state")
+              sys.exit(1)
+          
+          # Handle empty directory
+          if not any(results_dir.iterdir()):
+              print("⚠️ No results found - treating as error state")
+              sys.exit(1)
+          
           for artifact_dir in results_dir.iterdir():
               if artifact_dir.is_dir():
                   for result_file in artifact_dir.glob("*.json"):
-                      with open(result_file) as f:
-                          try:
+                      try:
+                          with open(result_file) as f:
                               data = json.load(f)
                               verdict = data.get("verdict", "")
                               
@@ -218,11 +331,15 @@ jobs:
                               elif verdict == "FAIL":
                                   has_fail = True
                                   print(f"❌ FAIL found in {result_file.name}")
-                              elif "error" in data:
+                              elif verdict == "ERROR" or "error" in data:
                                   has_error = True
                                   print(f"⚠️ ERROR found in {result_file.name}")
-                          except json.JSONDecodeError:
-                              print(f"⚠️ Could not parse {result_file.name}")
+                      except json.JSONDecodeError as e:
+                          print(f"⚠️ Could not parse {result_file.name}: {e}")
+                          has_error = True
+                      except Exception as e:
+                          print(f"⚠️ Error reading {result_file.name}: {e}")
+                          has_error = True
           
           if has_block:
               print("\n🚫 BLOCKING ISSUES FOUND - PR should not be merged")
