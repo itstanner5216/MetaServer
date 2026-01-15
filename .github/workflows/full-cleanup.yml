@@ -26,7 +26,7 @@ jobs:
   step2-cleanup-comments:
     name: "Step 2: Clean Comments"
     needs: step1-consolidate
-    if: always() && !cancelled()
+    if: always() && !cancelled() && (needs.step1-consolidate.result == 'success' || needs.step1-consolidate.result == 'skipped')
     uses: ./.github/workflows/cleanup-pr-comments.yml
     with:
       pr_numbers: 'all'
@@ -34,7 +34,7 @@ jobs:
   step3-rerun-reviews:
     name: "Step 3: Re-run Reviews"
     needs: step2-cleanup-comments
-    if: always() && !cancelled() && !failure()
+    if: always() && needs.step2-cleanup-comments.result == 'success'
     uses: ./.github/workflows/rerun-pr-reviews.yml
     with:
       pr_numbers: 'all'
