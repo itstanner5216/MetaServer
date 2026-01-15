@@ -236,8 +236,16 @@ jobs:
                       try:
                           with open(result_file) as f:
                               data = json.load(f)
-                              agent_name = result_file.stem.split("_")[0]
-                              pr_num = result_file.stem.split("pr")[1].replace(".json", "")
+                              # Parse filename: agent_prNNN.json
+                              filename = result_file.stem  # e.g., "validator_pr123"
+                              if "_pr" in filename:
+                                  parts = filename.split("_pr")
+                                  agent_name = parts[0]
+                                  pr_num = parts[1]
+                              else:
+                                  # Fallback for unexpected format
+                                  agent_name = filename.split("_")[0]
+                                  pr_num = filename.split("pr")[1] if "pr" in filename else "unknown"
                               
                               if pr_num not in all_results:
                                   all_results[pr_num] = {}
