@@ -7,7 +7,9 @@ Tests:
 - Performance comparison
 - Deduplication of results
 """
+
 import pytest
+
 from src.meta_mcp.registry.models import ToolRecord
 from src.meta_mcp.registry.registry import ToolRegistry
 
@@ -27,7 +29,7 @@ class TestBatchSearch:
                 description_1line="Read files from disk",
                 description_full="Read text and binary files from disk storage",
                 tags=["file", "read", "disk"],
-                risk_level="safe"
+                risk_level="safe",
             ),
             ToolRecord(
                 tool_id="write_file",
@@ -35,7 +37,7 @@ class TestBatchSearch:
                 description_1line="Write files to disk",
                 description_full="Write text and binary files to disk storage",
                 tags=["file", "write", "disk"],
-                risk_level="sensitive"
+                risk_level="sensitive",
             ),
             ToolRecord(
                 tool_id="list_directory",
@@ -43,7 +45,7 @@ class TestBatchSearch:
                 description_1line="List directory contents",
                 description_full="List all files and subdirectories",
                 tags=["file", "directory", "list"],
-                risk_level="safe"
+                risk_level="safe",
             ),
             ToolRecord(
                 tool_id="send_email",
@@ -51,7 +53,7 @@ class TestBatchSearch:
                 description_1line="Send email messages",
                 description_full="Send email messages to recipients",
                 tags=["email", "network", "communication"],
-                risk_level="sensitive"
+                risk_level="sensitive",
             ),
             ToolRecord(
                 tool_id="http_request",
@@ -59,8 +61,8 @@ class TestBatchSearch:
                 description_1line="Make HTTP requests",
                 description_full="Send HTTP/HTTPS requests to web APIs",
                 tags=["http", "network", "web"],
-                risk_level="sensitive"
-            )
+                risk_level="sensitive",
+            ),
         ]
 
         for tool in tools:
@@ -176,6 +178,7 @@ class TestBatchSearch:
     def test_batch_search_performance(self, sample_registry):
         """Test batch search performance."""
         import time
+
         from src.meta_mcp.macros.batch_search import batch_search_tools
 
         queries = ["file", "network", "email", "disk"]
@@ -192,16 +195,16 @@ class TestBatchSearch:
 
     def test_batch_search_concurrent_queries(self, sample_registry):
         """Test batch search handles concurrent execution."""
-        from src.meta_mcp.macros.batch_search import batch_search_tools
         import concurrent.futures
+
+        from src.meta_mcp.macros.batch_search import batch_search_tools
 
         queries = ["file", "network", "email"]
 
         # Run multiple batch searches concurrently
         with concurrent.futures.ThreadPoolExecutor(max_workers=3) as executor:
             futures = [
-                executor.submit(batch_search_tools, sample_registry, queries)
-                for _ in range(5)
+                executor.submit(batch_search_tools, sample_registry, queries) for _ in range(5)
             ]
 
             results_list = [f.result() for f in futures]

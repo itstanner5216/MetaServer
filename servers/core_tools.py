@@ -1,17 +1,14 @@
 """Filesystem and command tools as a standalone FastMCP server."""
 
-import asyncio
 import json
 import os
 import shutil
 import subprocess
 from pathlib import Path
-from typing import Optional
 
 from fastmcp import FastMCP
 from fastmcp.exceptions import ToolError
 from loguru import logger
-
 
 # Constants
 WORKSPACE_ROOT = os.getenv("WORKSPACE_ROOT", "./workspace")
@@ -239,7 +236,7 @@ def remove_directory(path: str) -> str:
 
 
 @core_server.tool()
-def execute_command(command: str, cwd: Optional[str] = None) -> str:
+def execute_command(command: str, cwd: str | None = None) -> str:
     """
     Execute shell command with timeout.
 
@@ -280,15 +277,13 @@ def execute_command(command: str, cwd: Optional[str] = None) -> str:
         return "\n\n".join(output) if output else "Command produced no output"
 
     except subprocess.TimeoutExpired:
-        raise ToolError(
-            f"Command timed out after {COMMAND_TIMEOUT} seconds: {command}"
-        )
+        raise ToolError(f"Command timed out after {COMMAND_TIMEOUT} seconds: {command}")
     except Exception as e:
         raise ToolError(f"Failed to execute command: {e}")
 
 
 @core_server.tool()
-async def git_commit(message: str, cwd: Optional[str] = None) -> str:
+async def git_commit(message: str, cwd: str | None = None) -> str:
     """
     Commit staged changes to git repository.
 
@@ -345,7 +340,7 @@ async def git_commit(message: str, cwd: Optional[str] = None) -> str:
 
 @core_server.tool()
 async def git_push(
-    remote: str = "origin", branch: Optional[str] = None, cwd: Optional[str] = None
+    remote: str = "origin", branch: str | None = None, cwd: str | None = None
 ) -> str:
     """
     Push commits to remote git repository.
@@ -408,9 +403,7 @@ async def git_push(
 
 
 @core_server.tool()
-async def git_reset(
-    ref: str = "HEAD", hard: bool = False, cwd: Optional[str] = None
-) -> str:
+async def git_reset(ref: str = "HEAD", hard: bool = False, cwd: str | None = None) -> str:
     """
     Reset git repository to a specific commit.
 

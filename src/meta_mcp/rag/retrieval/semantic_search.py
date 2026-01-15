@@ -5,11 +5,9 @@ Hybrid semantic + lexical retriever with governance-aware ranking.
 Main entry point for Phase 3 RAG retrieval system.
 """
 
-import time
 import logging
-from typing import List, Dict, Optional, Tuple
-from dataclasses import dataclass, field
-from functools import lru_cache
+import time
+from dataclasses import dataclass
 from datetime import datetime, timedelta
 
 from ..embedding import GeminiEmbedderAdapter
@@ -38,15 +36,15 @@ class RetrievalCandidate:
     path: str
     score: float  # 0-1, combined score after all adjustments
     semantic_score: float  # Raw semantic similarity score
-    bm25_score: Optional[float]  # BM25 lexical score (None if BM25 disabled)
+    bm25_score: float | None  # BM25 lexical score (None if BM25 disabled)
     snippet: str  # First 300 chars of text for preview
     scope: str  # Capability scope (e.g., "core_tools", "admin")
     risk_level: str  # "safe", "sensitive", "dangerous"
     allowed_in_mode: str  # "allowed", "blocked", "prompt_required"
-    metadata: Dict  # Additional metadata from payload
+    metadata: dict  # Additional metadata from payload
     rank: int  # Position in final ranking (1-indexed)
 
-    def to_dict(self) -> Dict:
+    def to_dict(self) -> dict:
         """Convert to dictionary for serialization."""
         return {
             "chunk_id": self.chunk_id,
@@ -80,9 +78,9 @@ class QueryEmbeddingCache:
     def __init__(self, ttl_seconds: int = 60, max_size: int = 100):
         self.ttl_seconds = ttl_seconds
         self.max_size = max_size
-        self._cache: Dict[str, Tuple[List[float], datetime]] = {}
+        self._cache: dict[str, tuple[list[float], datetime]] = {}
 
-    def get(self, query: str) -> Optional[List[float]]:
+    def get(self, query: str) -> list[float] | None:
         """Get cached embedding if not expired."""
         if query not in self._cache:
             return None
@@ -95,7 +93,7 @@ class QueryEmbeddingCache:
 
         return embedding
 
-    def set(self, query: str, embedding: List[float]) -> None:
+    def set(self, query: str, embedding: list[float]) -> None:
         """Cache an embedding."""
         # Evict oldest entries if at capacity
         if len(self._cache) >= self.max_size:
@@ -220,8 +218,8 @@ class SemanticRetriever:
             )
 
         # BM25 index (lazy loaded)
-        self._bm25_index: Optional[BM25Index] = None
-        self._bm25_scope: Optional[str] = None
+        self._bm25_index: BM25Index | None = None
+        self._bm25_scope: str | None = None
 
         # Query embedding cache
         self._query_cache = QueryEmbeddingCache(ttl_seconds=cache_ttl_seconds)
@@ -243,8 +241,8 @@ class SemanticRetriever:
         scope: str,
         top_k: int = 30,
         mode: str = "PERMISSION",
-        filters: Optional[Dict] = None,
-    ) -> List[RetrievalCandidate]:
+        filters: dict | None = None,
+    ) -> list[RetrievalCandidate]:
         """
         Search for relevant chunks using hybrid semantic + lexical retrieval.
 
@@ -305,9 +303,7 @@ class SemanticRetriever:
 
             # Step 4: Merge hybrid scores
             if bm25_results:
-                merged_results = self._merge_hybrid_scores(
-                    semantic_results, bm25_results
-                )
+                merged_results = self._merge_hybrid_scores(semantic_results, bm25_results)
             else:
                 # Semantic only
                 merged_results = [
@@ -345,9 +341,7 @@ class SemanticRetriever:
 
             # Warn if latency exceeds target
             if latency_ms > 170:
-                logger.warning(
-                    f"Search latency {latency_ms:.1f}ms exceeds 170ms target"
-                )
+                logger.warning(f"Search latency {latency_ms:.1f}ms exceeds 170ms target")
 
             return candidates
 
@@ -355,7 +349,7 @@ class SemanticRetriever:
             logger.error(f"Search failed: {e}", exc_info=True)
             return []
 
-    def _get_query_embedding(self, query: str) -> Optional[List[float]]:
+    def _get_query_embedding(self, query: str) -> list[float] | None:
         """
         Get embedding for query, using cache if available.
 
@@ -388,11 +382,11 @@ class SemanticRetriever:
 
     def _search_qdrant(
         self,
-        embedding: List[float],
+        embedding: list[float],
         scope: str,
         top_k: int,
-        filters: Optional[Dict] = None,
-    ) -> List[Dict]:
+        filters: dict | None = None,
+    ) -> list[dict]:
         """
         Search Qdrant for semantically similar chunks.
 
@@ -424,7 +418,7 @@ class SemanticRetriever:
         query: str,
         scope: str,
         top_k: int,
-    ) -> List[Tuple[str, float]]:
+    ) -> list[tuple[str, float]]:
         """
         Search BM25 index for lexical matches.
 
@@ -495,10 +489,12 @@ class SemanticRetriever:
                 text = payload.get("text", "")
 
                 if text:
-                    chunks.append({
-                        "chunk_id": chunk_id,
-                        "text": text,
-                    })
+                    chunks.append(
+                        {
+                            "chunk_id": chunk_id,
+                            "text": text,
+                        }
+                    )
 
             # Build index
             self._bm25_index = BM25Index()
@@ -513,9 +509,9 @@ class SemanticRetriever:
 
     def _merge_hybrid_scores(
         self,
-        semantic_results: List[Dict],
-        bm25_results: List[Tuple[str, float]],
-    ) -> List[Dict]:
+        semantic_results: list[dict],
+        bm25_results: list[tuple[str, float]],
+    ) -> list[dict]:
         """
         Combine semantic and BM25 scores using weighted sum.
 
@@ -538,13 +534,10 @@ class SemanticRetriever:
             range_bm25 = max_bm25 - min_bm25
 
             if range_bm25 > 0:
-                bm25_scores = {
-                    k: (v - min_bm25) / range_bm25
-                    for k, v in bm25_scores.items()
-                }
+                bm25_scores = {k: (v - min_bm25) / range_bm25 for k, v in bm25_scores.items()}
             else:
                 # All same score, normalize to 0.5
-                bm25_scores = {k: 0.5 for k in bm25_scores}
+                bm25_scores = dict.fromkeys(bm25_scores, 0.5)
 
         # Normalize semantic scores (typically already 0-1 from cosine similarity)
         # but let's ensure it
@@ -585,26 +578,25 @@ class SemanticRetriever:
             bm25_score = bm25_scores.get(chunk_id, 0)
 
             # Combined score
-            combined_score = (
-                self.semantic_weight * semantic_score +
-                self.bm25_weight * bm25_score
-            )
+            combined_score = self.semantic_weight * semantic_score + self.bm25_weight * bm25_score
 
-            merged.append({
-                "chunk_id": chunk_id,
-                "score": combined_score,
-                "semantic_score": raw_semantic,
-                "bm25_score": bm25_score if chunk_id in bm25_scores else None,
-                "payload": payload,
-            })
+            merged.append(
+                {
+                    "chunk_id": chunk_id,
+                    "score": combined_score,
+                    "semantic_score": raw_semantic,
+                    "bm25_score": bm25_score if chunk_id in bm25_scores else None,
+                    "payload": payload,
+                }
+            )
 
         return merged
 
     def _apply_governance_ranking(
         self,
-        merged_results: List[Dict],
+        merged_results: list[dict],
         mode: str,
-    ) -> List[RetrievalCandidate]:
+    ) -> list[RetrievalCandidate]:
         """
         Apply governance-based score adjustments.
 
@@ -653,7 +645,8 @@ class SemanticRetriever:
 
             # Build metadata dict (exclude known fields)
             metadata = {
-                k: v for k, v in payload.items()
+                k: v
+                for k, v in payload.items()
                 if k not in {"doc_id", "path", "text", "scope", "risk_level"}
             }
 
@@ -687,18 +680,14 @@ class SemanticRetriever:
         self._query_cache.clear()
         logger.info("Query embedding cache cleared")
 
-    def get_metrics(self) -> Dict:
+    def get_metrics(self) -> dict:
         """
         Get retrieval metrics.
 
         Returns:
             Dict with search statistics
         """
-        avg_latency = (
-            self._total_latency_ms / self._search_count
-            if self._search_count > 0
-            else 0
-        )
+        avg_latency = self._total_latency_ms / self._search_count if self._search_count > 0 else 0
 
         return {
             "search_count": self._search_count,
@@ -709,8 +698,5 @@ class SemanticRetriever:
             "bm25_weight": self.bm25_weight,
             "semantic_weight": self.semantic_weight,
             "bm25_index_scope": self._bm25_scope,
-            "bm25_index_stats": (
-                self._bm25_index.get_index_stats()
-                if self._bm25_index else None
-            ),
+            "bm25_index_stats": (self._bm25_index.get_index_stats() if self._bm25_index else None),
         }

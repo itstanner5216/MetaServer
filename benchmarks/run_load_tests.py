@@ -9,12 +9,12 @@ Tests:
 """
 
 import json
+import statistics
 import sys
 import time
-import statistics
-from pathlib import Path
-from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from datetime import datetime
+from pathlib import Path
 from threading import Lock
 
 # Set up proper Python path
@@ -39,7 +39,9 @@ class LoadTester:
 
     def concurrent_search_test(self, num_threads: int = 10, queries_per_thread: int = 50) -> dict:
         """Test concurrent search queries."""
-        print(f"Running concurrent search test ({num_threads} threads, {queries_per_thread} queries each)...")
+        print(
+            f"Running concurrent search test ({num_threads} threads, {queries_per_thread} queries each)..."
+        )
 
         queries = [
             "read files from disk",
@@ -51,7 +53,7 @@ class LoadTester:
             "authentication",
             "file operations",
             "data processing",
-            "configuration management"
+            "configuration management",
         ]
 
         def search_worker(thread_id: int) -> list:
@@ -66,7 +68,7 @@ class LoadTester:
                     times.append(elapsed * 1000)
                 except Exception as e:
                     with self.lock:
-                        self.errors.append(f"Thread {thread_id}: {str(e)}")
+                        self.errors.append(f"Thread {thread_id}: {e!s}")
             return times
 
         all_times = []
@@ -81,7 +83,7 @@ class LoadTester:
                     all_times.extend(times)
                 except Exception as e:
                     with self.lock:
-                        self.errors.append(f"Future error: {str(e)}")
+                        self.errors.append(f"Future error: {e!s}")
 
         total_time = time.perf_counter() - start_total
 
@@ -95,21 +97,26 @@ class LoadTester:
                 "throughput_qps": len(all_times) / total_time,
                 "mean_latency_ms": statistics.mean(all_times),
                 "median_latency_ms": statistics.median(all_times),
-                "p95_latency_ms": statistics.quantiles(all_times, n=20)[18] if len(all_times) > 20 else max(all_times),
+                "p95_latency_ms": statistics.quantiles(all_times, n=20)[18]
+                if len(all_times) > 20
+                else max(all_times),
                 "min_latency_ms": min(all_times),
                 "max_latency_ms": max(all_times),
-                "errors": len(self.errors)
+                "errors": len(self.errors),
             }
-        else:
-            return {
-                "test": "concurrent_search",
-                "error": "No successful queries",
-                "errors": self.errors
-            }
+        return {
+            "test": "concurrent_search",
+            "error": "No successful queries",
+            "errors": self.errors,
+        }
 
-    def concurrent_retrieval_test(self, num_threads: int = 10, retrievals_per_thread: int = 100) -> dict:
+    def concurrent_retrieval_test(
+        self, num_threads: int = 10, retrievals_per_thread: int = 100
+    ) -> dict:
         """Test concurrent tool retrieval."""
-        print(f"Running concurrent retrieval test ({num_threads} threads, {retrievals_per_thread} retrievals each)...")
+        print(
+            f"Running concurrent retrieval test ({num_threads} threads, {retrievals_per_thread} retrievals each)..."
+        )
 
         if not self.tools:
             return {"test": "concurrent_retrieval", "error": "No tools available"}
@@ -128,7 +135,7 @@ class LoadTester:
                     times.append(elapsed * 1000)
                 except Exception as e:
                     with self.lock:
-                        self.errors.append(f"Thread {thread_id}: {str(e)}")
+                        self.errors.append(f"Thread {thread_id}: {e!s}")
             return times
 
         all_times = []
@@ -143,7 +150,7 @@ class LoadTester:
                     all_times.extend(times)
                 except Exception as e:
                     with self.lock:
-                        self.errors.append(f"Future error: {str(e)}")
+                        self.errors.append(f"Future error: {e!s}")
 
         total_time = time.perf_counter() - start_total
 
@@ -157,17 +164,18 @@ class LoadTester:
                 "throughput_ops": len(all_times) / total_time,
                 "mean_latency_ms": statistics.mean(all_times),
                 "median_latency_ms": statistics.median(all_times),
-                "p95_latency_ms": statistics.quantiles(all_times, n=20)[18] if len(all_times) > 20 else max(all_times),
+                "p95_latency_ms": statistics.quantiles(all_times, n=20)[18]
+                if len(all_times) > 20
+                else max(all_times),
                 "min_latency_ms": min(all_times),
                 "max_latency_ms": max(all_times),
-                "errors": len(self.errors)
+                "errors": len(self.errors),
             }
-        else:
-            return {
-                "test": "concurrent_retrieval",
-                "error": "No successful retrievals",
-                "errors": self.errors
-            }
+        return {
+            "test": "concurrent_retrieval",
+            "error": "No successful retrievals",
+            "errors": self.errors,
+        }
 
     def batch_stress_test(self, batch_sizes: list = None) -> dict:
         """Test batch operations under various loads."""
@@ -182,8 +190,7 @@ class LoadTester:
         results = []
 
         for batch_size in batch_sizes:
-            if batch_size > len(self.tools):
-                batch_size = len(self.tools)
+            batch_size = min(batch_size, len(self.tools))
 
             sample_tools = self.tools[:batch_size]
             iterations = 100
@@ -197,33 +204,27 @@ class LoadTester:
                     times.append(elapsed * 1000)
                 except Exception as e:
                     with self.lock:
-                        self.errors.append(f"Batch size {batch_size}: {str(e)}")
+                        self.errors.append(f"Batch size {batch_size}: {e!s}")
 
             if times:
-                results.append({
-                    "batch_size": batch_size,
-                    "iterations": iterations,
-                    "mean_time_ms": statistics.mean(times),
-                    "median_time_ms": statistics.median(times),
-                    "throughput_batches_per_sec": iterations / (sum(times) / 1000),
-                    "avg_time_per_item_ms": statistics.mean(times) / batch_size
-                })
+                results.append(
+                    {
+                        "batch_size": batch_size,
+                        "iterations": iterations,
+                        "mean_time_ms": statistics.mean(times),
+                        "median_time_ms": statistics.median(times),
+                        "throughput_batches_per_sec": iterations / (sum(times) / 1000),
+                        "avg_time_per_item_ms": statistics.mean(times) / batch_size,
+                    }
+                )
 
-        return {
-            "test": "batch_stress",
-            "batch_results": results,
-            "errors": len(self.errors)
-        }
+        return {"test": "batch_stress", "batch_results": results, "errors": len(self.errors)}
 
     def mixed_workload_test(self, duration_seconds: int = 5) -> dict:
         """Test mixed workload (searches and retrievals)."""
         print(f"Running mixed workload test ({duration_seconds}s)...")
 
-        queries = [
-            "read files",
-            "write data",
-            "network operations"
-        ]
+        queries = ["read files", "write data", "network operations"]
 
         tool_ids = [tool.tool_id for tool in self.tools] if self.tools else []
 
@@ -246,19 +247,18 @@ class LoadTester:
                     search_times.append(elapsed * 1000)
                 except Exception as e:
                     with self.lock:
-                        self.errors.append(f"Search: {str(e)}")
-            else:
-                # Retrieval
-                if tool_ids:
-                    tool_id = tool_ids[operations % len(tool_ids)]
-                    try:
-                        start = time.perf_counter()
-                        tool = self.registry.get(tool_id)
-                        elapsed = time.perf_counter() - start
-                        retrieval_times.append(elapsed * 1000)
-                    except Exception as e:
-                        with self.lock:
-                            self.errors.append(f"Retrieval: {str(e)}")
+                        self.errors.append(f"Search: {e!s}")
+            # Retrieval
+            elif tool_ids:
+                tool_id = tool_ids[operations % len(tool_ids)]
+                try:
+                    start = time.perf_counter()
+                    tool = self.registry.get(tool_id)
+                    elapsed = time.perf_counter() - start
+                    retrieval_times.append(elapsed * 1000)
+                except Exception as e:
+                    with self.lock:
+                        self.errors.append(f"Retrieval: {e!s}")
 
             operations += 1
 
@@ -273,7 +273,7 @@ class LoadTester:
             "throughput_ops": operations / total_time,
             "search_mean_ms": statistics.mean(search_times) if search_times else 0,
             "retrieval_mean_ms": statistics.mean(retrieval_times) if retrieval_times else 0,
-            "errors": len(self.errors)
+            "errors": len(self.errors),
         }
 
 
@@ -286,10 +286,7 @@ def run_load_tests():
 
     tester = LoadTester()
 
-    results = {
-        "timestamp": datetime.now().isoformat(),
-        "tests": []
-    }
+    results = {"timestamp": datetime.now().isoformat(), "tests": []}
 
     # Concurrent search test
     try:
@@ -360,7 +357,7 @@ if __name__ == "__main__":
 
         # Save to JSON
         output_path = project_root / "benchmarks" / "load_test_results.json"
-        with open(output_path, 'w') as f:
+        with open(output_path, "w") as f:
             json.dump(results, f, indent=2)
 
         print()
@@ -369,17 +366,18 @@ if __name__ == "__main__":
     except Exception as e:
         print(f"Error running load tests: {e}")
         import traceback
+
         traceback.print_exc()
 
         # Save error to JSON
         error_output = {
             "timestamp": datetime.now().isoformat(),
             "error": str(e),
-            "traceback": traceback.format_exc()
+            "traceback": traceback.format_exc(),
         }
 
         output_path = project_root / "benchmarks" / "load_test_results.json"
-        with open(output_path, 'w') as f:
+        with open(output_path, "w") as f:
             json.dump(error_output, f, indent=2)
 
         sys.exit(1)

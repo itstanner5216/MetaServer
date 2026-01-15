@@ -7,8 +7,7 @@ Tests:
 - Cache functionality
 - Edge cases (empty descriptions, special characters)
 """
-import pytest
-from datetime import datetime
+
 from src.meta_mcp.registry.models import ToolRecord
 from src.meta_mcp.retrieval.embedder import ToolEmbedder
 
@@ -72,7 +71,7 @@ class TestToolEmbedder:
                 description_1line="Read files",
                 description_full="Read files from disk",
                 tags=["file", "read"],
-                risk_level="safe"
+                risk_level="safe",
             ),
             ToolRecord(
                 tool_id="write_file",
@@ -80,8 +79,8 @@ class TestToolEmbedder:
                 description_1line="Write files",
                 description_full="Write files to disk",
                 tags=["file", "write"],
-                risk_level="sensitive"
-            )
+                risk_level="sensitive",
+            ),
         ]
 
         embedder._build_vocabulary(tools)
@@ -111,7 +110,7 @@ class TestToolEmbedder:
                 description_1line="Test tool",
                 description_full="A test tool for testing",
                 tags=["test"],
-                risk_level="safe"
+                risk_level="safe",
             )
         ]
 
@@ -135,7 +134,7 @@ class TestToolEmbedder:
                 description_1line="Test tool with long description",
                 description_full="A very long test tool for testing normalization",
                 tags=["test", "long", "description"],
-                risk_level="safe"
+                risk_level="safe",
             )
         ]
 
@@ -159,7 +158,7 @@ class TestToolEmbedder:
                 description_1line="Read files from disk",
                 description_full="Read files from disk storage",
                 tags=["file", "read", "disk"],
-                risk_level="safe"
+                risk_level="safe",
             ),
             ToolRecord(
                 tool_id="write_file",
@@ -167,7 +166,7 @@ class TestToolEmbedder:
                 description_1line="Write files to disk",
                 description_full="Write files to disk storage",
                 tags=["file", "write", "disk"],
-                risk_level="sensitive"
+                risk_level="sensitive",
             ),
             ToolRecord(
                 tool_id="send_email",
@@ -175,8 +174,8 @@ class TestToolEmbedder:
                 description_1line="Send email messages",
                 description_full="Send email messages to recipients",
                 tags=["email", "network", "send"],
-                risk_level="sensitive"
-            )
+                risk_level="sensitive",
+            ),
         ]
 
         embedder.build_index(tools)
@@ -206,7 +205,7 @@ class TestToolEmbedder:
                 description_1line="Test tool",
                 description_full="A test tool",
                 tags=["test"],
-                risk_level="safe"
+                risk_level="safe",
             )
         ]
 
@@ -235,7 +234,7 @@ class TestToolEmbedder:
                 description_1line="Read files",
                 description_full="Read files from disk",
                 tags=["file", "read"],
-                risk_level="safe"
+                risk_level="safe",
             )
         ]
 
@@ -259,7 +258,7 @@ class TestToolEmbedder:
                 description_1line="Test",
                 description_full="Test",
                 tags=["test"],
-                risk_level="safe"
+                risk_level="safe",
             )
         ]
 
@@ -284,7 +283,7 @@ class TestToolEmbedder:
             description_1line="X",
             description_full="X",
             tags=["x"],
-            risk_level="safe"
+            risk_level="safe",
         )
 
         embedder.build_index([tool])
@@ -305,7 +304,7 @@ class TestToolEmbedder:
                 description_1line="file operation",
                 description_full="file operation tool",
                 tags=["file"],
-                risk_level="safe"
+                risk_level="safe",
             ),
             ToolRecord(
                 tool_id="tool2",
@@ -313,8 +312,8 @@ class TestToolEmbedder:
                 description_1line="network operation",
                 description_full="network operation tool",
                 tags=["network"],
-                risk_level="safe"
-            )
+                risk_level="safe",
+            ),
         ]
 
         embedder.build_index(tools)
@@ -331,14 +330,16 @@ class TestToolEmbedder:
         # Create tools with diverse vocabulary
         tools = []
         for i in range(20):
-            tools.append(ToolRecord(
-                tool_id=f"tool_{i}",
-                server_id="core",
-                description_1line=f"Tool number {i} for testing",
-                description_full=f"Extended description for tool {i} with unique words_{i}",
-                tags=[f"tag_{i}", "common"],
-                risk_level="safe"
-            ))
+            tools.append(
+                ToolRecord(
+                    tool_id=f"tool_{i}",
+                    server_id="core",
+                    description_1line=f"Tool number {i} for testing",
+                    description_full=f"Extended description for tool {i} with unique words_{i}",
+                    tags=[f"tag_{i}", "common"],
+                    risk_level="safe",
+                )
+            )
 
         embedder.build_index(tools)
 

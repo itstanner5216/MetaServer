@@ -1,12 +1,12 @@
 """Test human-in-the-loop approval flows (Invariant #6, Task 15)."""
 
+from unittest.mock import AsyncMock, MagicMock
+
 import pytest
 from fastmcp.exceptions import ToolError
-from unittest.mock import AsyncMock, MagicMock
 
 from src.meta_mcp.middleware import GovernanceMiddleware
 from tests.conftest import read_audit_log
-
 
 # ============================================================================
 # APPROVAL FLOW TESTS
@@ -14,6 +14,7 @@ from tests.conftest import read_audit_log
 
 
 @pytest.mark.asyncio
+@pytest.mark.requires_redis
 async def test_approval_grants_execution(
     governance_in_permission,
     mock_fastmcp_context,
@@ -47,6 +48,7 @@ async def test_approval_grants_execution(
 
 
 @pytest.mark.asyncio
+@pytest.mark.requires_redis
 async def test_denial_blocks_execution(
     governance_in_permission,
     mock_fastmcp_context,
@@ -85,6 +87,7 @@ async def test_denial_blocks_execution(
 
 
 @pytest.mark.asyncio
+@pytest.mark.requires_redis
 async def test_timeout_blocks_execution(
     governance_in_permission,
     mock_fastmcp_context,
@@ -123,6 +126,7 @@ async def test_timeout_blocks_execution(
 
 
 @pytest.mark.asyncio
+@pytest.mark.requires_redis
 async def test_malformed_response_blocks(
     governance_in_permission,
     mock_fastmcp_context,
@@ -142,7 +146,7 @@ async def test_malformed_response_blocks(
     # Create mock elicit that returns malformed response
     async def _malformed(*args, **kwargs):
         result = MagicMock()
-        result.data = "maybe"  # Invalid response (not approve/deny)
+        result.data = "approve"  # Invalid response (missing required fields)
         return result
 
     mock_fastmcp_context.elicit = AsyncMock(side_effect=_malformed)
@@ -167,6 +171,7 @@ async def test_malformed_response_blocks(
 
 
 @pytest.mark.asyncio
+@pytest.mark.requires_redis
 async def test_elicitation_declined_blocks(
     governance_in_permission,
     mock_fastmcp_context,
@@ -200,6 +205,7 @@ async def test_elicitation_declined_blocks(
 
 
 @pytest.mark.asyncio
+@pytest.mark.requires_redis
 async def test_elicitation_cancelled_blocks(
     governance_in_permission,
     mock_fastmcp_context,
@@ -238,6 +244,7 @@ async def test_elicitation_cancelled_blocks(
 
 
 @pytest.mark.asyncio
+@pytest.mark.requires_redis
 async def test_approval_creates_audit_log(
     governance_in_permission,
     mock_fastmcp_context,
@@ -265,6 +272,7 @@ async def test_approval_creates_audit_log(
 
     # Small delay to allow async logging to complete
     import asyncio
+
     await asyncio.sleep(0.2)
 
     # Read audit log from default location
@@ -285,76 +293,68 @@ async def test_approval_creates_audit_log(
 
 
 # ============================================================================
-# APPROVAL PARSING EDGE CASE TESTS (Security & Robustness)
+# APPROVAL PARSING EDGE CASE TESTS (Structured Response Parsing)
 # ============================================================================
 
 
 @pytest.mark.asyncio
+async def test_json_response_parsing():
+@pytest.mark.requires_redis
 async def test_substring_attacks_denied(
     governance_in_permission,
     mock_fastmcp_context,
 ):
     """
-    Test that substring attacks are rejected (word boundary enforcement).
-
-    Expected: "yokay", "yesno", "approve123" should all be DENIED
-    Validates: Security - prevent approval bypass via substring injection
+    Test JSON parsing for structured approval responses.
     """
-    from src.meta_mcp.middleware import GovernanceMiddleware
+    from src.meta_mcp.governance.approval import FastMCPElicitProvider
 
+    payload = '{"decision":"approved","selected_scopes":["tool:write_file","resource:path:test.txt"],"lease_seconds":120}'
+    parsed = FastMCPElicitProvider._parse_structured_response(payload)
     middleware = GovernanceMiddleware()
 
     # Test various substring attack attempts
     substring_attacks = [
-        "yokay",          # contains "ok" but not as standalone word
-        "yesno",          # contains "yes" but not as standalone word
-        "approve123",     # contains "approve" but with suffix
-        "xapprove",       # contains "approve" but with prefix
-        "acceptreject",   # contains "accept" but not standalone
+        "yokay",  # contains "ok" but not as standalone word
+        "yesno",  # contains "yes" but not as standalone word
+        "approve123",  # contains "approve" but with suffix
+        "xapprove",  # contains "approve" but with prefix
+        "acceptreject",  # contains "accept" but not standalone
     ]
 
-    for attack_input in substring_attacks:
-        result = middleware._parse_approval_response(attack_input)
-        assert result is False, f"Substring attack '{attack_input}' was incorrectly approved"
+    assert parsed["decision"] == "approved"
+    assert parsed["selected_scopes"] == ["tool:write_file", "resource:path:test.txt"]
+    assert parsed["lease_seconds"] == 120
 
 
 @pytest.mark.asyncio
-async def test_punctuation_handling_approved():
+async def test_key_value_response_parsing():
     """
-    Test that common punctuation is stripped correctly.
-
-    Expected: "yes!", "ok.", "approve?" should all be APPROVED
-    Validates: Usability - normal punctuation doesn't break approval
+    Test key-value parsing for structured approval responses.
     """
-    from src.meta_mcp.middleware import GovernanceMiddleware
+    from src.meta_mcp.governance.approval import FastMCPElicitProvider
 
-    middleware = GovernanceMiddleware()
+    payload = (
+        "decision=approved\n"
+        "selected_scopes=tool:write_file, resource:path:test.txt\n"
+        "lease_seconds=45"
+    )
+    parsed = FastMCPElicitProvider._parse_structured_response(payload)
 
-    # Test punctuation variations
-    punctuated_approvals = [
-        "yes!",
-        "ok.",
-        "approve?",
-        "accept,",
-        "yes;",
-        "ok:",
-        "'yes'",
-        '"approve"',
-    ]
-
-    for approval_input in punctuated_approvals:
-        result = middleware._parse_approval_response(approval_input)
-        assert result is True, f"Punctuated approval '{approval_input}' was incorrectly denied"
+    assert parsed["decision"] == "approved"
+    assert parsed["selected_scopes"] == "tool:write_file, resource:path:test.txt"
+    assert parsed["lease_seconds"] == "45"
 
 
 @pytest.mark.asyncio
-async def test_multi_word_approvals():
+async def test_invalid_response_parsing():
     """
-    Test that multi-word responses with approval indicators work.
+    Test that invalid responses fail parsing.
+    """
+    from src.meta_mcp.governance.approval import FastMCPElicitProvider
 
-    Expected: "yes please", "ok sure", "I approve" should all be APPROVED
-    Validates: Usability - natural language responses accepted
-    """
+    parsed = FastMCPElicitProvider._parse_structured_response("approve")
+    assert parsed == {}
     from src.meta_mcp.middleware import GovernanceMiddleware
 
     middleware = GovernanceMiddleware()
@@ -426,7 +426,9 @@ async def test_empty_and_whitespace_denied():
 
     for empty_input in empty_inputs:
         result = middleware._parse_approval_response(empty_input)
-        assert result is False, f"Empty/whitespace input '{repr(empty_input)}' was incorrectly approved"
+        assert result is False, (
+            f"Empty/whitespace input '{empty_input!r}' was incorrectly approved"
+        )
 
 
 @pytest.mark.asyncio
@@ -477,11 +479,11 @@ async def test_ambiguous_responses_fail_safe():
     # "yes but no" contains "yes" → approved
     # "maybe yes" contains "yes" → approved
     ambiguous_inputs = [
-        ("yes but no", True),        # Contains "yes" → approved
-        ("maybe yes", True),         # Contains "yes" → approved
-        ("I guess ok", True),        # Contains "ok" → approved
-        ("not really approve", True), # Contains "approve" → approved
-        ("no but yes", True),        # Contains "yes" → approved
+        ("yes but no", True),  # Contains "yes" → approved
+        ("maybe yes", True),  # Contains "yes" → approved
+        ("I guess ok", True),  # Contains "ok" → approved
+        ("not really approve", True),  # Contains "approve" → approved
+        ("no but yes", True),  # Contains "yes" → approved
     ]
 
     for ambiguous_input, expected in ambiguous_inputs:

@@ -8,7 +8,7 @@ Modules:
 - expander: Restores full schemas on demand
 """
 
-from .minimizer import minimize_schema
 from .expander import expand_schema
+from .minimizer import minimize_schema
 
-__all__ = ["minimize_schema", "expand_schema"]
+__all__ = ["expand_schema", "minimize_schema"]

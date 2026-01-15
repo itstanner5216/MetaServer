@@ -1,19 +1,20 @@
 """Structured JSON audit trail for governance decisions."""
 
 import json
+import logging
 import os
-import sys
 from datetime import datetime, timezone
 from enum import Enum
+from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from typing import Any, Dict, Optional
 
 from loguru import logger
 
+from .config import Config
+from typing import Any
 
 # Constants
-AUDIT_LOG_PATH = os.getenv("AUDIT_LOG_PATH", "./audit.jsonl")
-AUDIT_RETENTION_DAYS = 30
 MAX_CONTENT_LENGTH = 1000  # Truncate large content to prevent log bloat
 
 
@@ -45,18 +46,55 @@ class AuditLogger:
     - Comprehensive event tracking
     """
 
-    def __init__(self, log_path: str = None):
+    def __init__(
+        self,
+        log_path: str = None,
+        max_bytes: Optional[int] = None,
+        backup_count: Optional[int] = None,
+        fallback_logger: Optional[Any] = None,
+    ):
         """
         Initialize audit logger with JSON Lines configuration.
 
         Args:
             log_path: Path to audit log file (defaults to AUDIT_LOG_PATH env var or ./audit.jsonl)
+            max_bytes: Maximum file size in bytes before rotation
+            backup_count: Number of rotated audit logs to retain
+            fallback_logger: Optional logger to use if audit file is unavailable
         """
         if log_path is None:
-            log_path = os.getenv("AUDIT_LOG_PATH", "./audit.jsonl")
+            log_path = Config.AUDIT_LOG_PATH
         self.log_path = Path(log_path)
-        # Ensure parent directory exists
-        self.log_path.parent.mkdir(parents=True, exist_ok=True)
+        self.max_bytes = Config.AUDIT_LOG_MAX_BYTES if max_bytes is None else max_bytes
+        self.backup_count = Config.AUDIT_LOG_BACKUP_COUNT if backup_count is None else backup_count
+        self.fallback_logger = fallback_logger or logger
+        self._logger = logging.getLogger(f"audit_logger.{id(self)}")
+        self._logger.setLevel(logging.INFO)
+        self._logger.propagate = False
+        self._handler: Optional[RotatingFileHandler] = None
+        self._configure_handler()
+
+    def _configure_handler(self) -> None:
+        for handler in list(self._logger.handlers):
+            self._logger.removeHandler(handler)
+            handler.close()
+        try:
+            self.log_path.parent.mkdir(parents=True, exist_ok=True)
+            handler = RotatingFileHandler(
+                self.log_path,
+                maxBytes=self.max_bytes,
+                backupCount=self.backup_count,
+                encoding="utf-8",
+            )
+            handler.setFormatter(logging.Formatter("%(message)s"))
+            self._logger.addHandler(handler)
+            self._handler = handler
+        except Exception as exc:
+            self._handler = None
+            self.fallback_logger.opt(exception=exc).warning(
+                "Audit log unavailable at {}. Falling back to stderr.",
+                self.log_path,
+            )
 
     @staticmethod
     def _truncate_content(value: Any, max_length: int = MAX_CONTENT_LENGTH) -> Any:
@@ -72,9 +110,9 @@ class AuditLogger:
         """
         if isinstance(value, str) and len(value) > max_length:
             return value[:max_length] + f"... [truncated, {len(value)} total chars]"
-        elif isinstance(value, dict):
+        if isinstance(value, dict):
             return {k: AuditLogger._truncate_content(v, max_length) for k, v in value.items()}
-        elif isinstance(value, list):
+        if isinstance(value, list):
             return [AuditLogger._truncate_content(item, max_length) for item in value]
         return value
 
@@ -96,14 +134,28 @@ class AuditLogger:
         # Serialize to JSON and write directly to file
         json_line = json.dumps(audit_record, ensure_ascii=False)
 
-        # Write directly to audit file (append mode)
-        with open(self.log_path, "a", encoding="utf-8") as f:
-            f.write(json_line + "\n")
+        if self._handler is None:
+            self._configure_handler()
+
+        if self._handler is None:
+            self.fallback_logger.warning(
+                "Audit log unavailable. Emitting audit record to fallback logger."
+            )
+            self.fallback_logger.info(json_line)
+            return
+
+        try:
+            self._logger.info(json_line)
+        except Exception as exc:
+            self.fallback_logger.opt(exception=exc).warning(
+                "Audit log write failed. Emitting audit record to fallback logger."
+            )
+            self.fallback_logger.info(json_line)
 
     def log_tool_call(
         self,
         tool_name: str,
-        arguments: Dict[str, Any],
+        arguments: dict[str, Any],
         session_id: str,
         mode: str,
     ):
@@ -127,15 +179,15 @@ class AuditLogger:
     def log_approval(
         self,
         tool_name: str,
-        arguments: Dict[str, Any],
+        arguments: dict[str, Any],
         session_id: str,
         approved: bool,
-        elevation_ttl: Optional[int] = None,
-        request_id: Optional[str] = None,
-        selected_scopes: Optional[list] = None,
-        lease_seconds: Optional[int] = None,
-        error: Optional[str] = None,
-        reason: Optional[str] = None,
+        elevation_ttl: int | None = None,
+        request_id: str | None = None,
+        selected_scopes: list | None = None,
+        lease_seconds: int | None = None,
+        error: str | None = None,
+        reason: str | None = None,
     ):
         """
         Log approval decision (granted or denied).
@@ -185,10 +237,10 @@ class AuditLogger:
     def log_approval_timeout(
         self,
         tool_name: str,
-        arguments: Dict[str, Any],
+        arguments: dict[str, Any],
         session_id: str,
         timeout_seconds: int,
-        request_id: Optional[str] = None,
+        request_id: str | None = None,
     ):
         """
         Log approval timeout.
@@ -282,7 +334,7 @@ class AuditLogger:
     def log_blocked(
         self,
         tool_name: str,
-        arguments: Dict[str, Any],
+        arguments: dict[str, Any],
         session_id: str,
         reason: str,
     ):
@@ -306,7 +358,7 @@ class AuditLogger:
     def log_bypass(
         self,
         tool_name: str,
-        arguments: Dict[str, Any],
+        arguments: dict[str, Any],
         session_id: str,
     ):
         """

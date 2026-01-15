@@ -23,7 +23,6 @@ Migration Path:
 """
 
 from dataclasses import dataclass
-from typing import List
 
 
 @dataclass
@@ -93,7 +92,7 @@ class ToolRegistry:
             sensitive=sensitive,
         )
 
-    def search(self, query: str) -> List[ToolSummary]:
+    def search(self, query: str) -> list[ToolSummary]:
         """
         Search for tools by name or description.
 
@@ -124,7 +123,7 @@ class ToolRegistry:
         # Return name matches first, then description matches
         return name_matches + description_matches
 
-    def get_bootstrap_tools(self) -> List[str]:
+    def get_bootstrap_tools(self) -> list[str]:
         """
         Get minimal bootstrap tool set for progressive discovery.
 
@@ -144,7 +143,7 @@ class ToolRegistry:
         """
         return ["search_tools", "get_tool_schema"]
 
-    def get_all_summaries(self) -> List[ToolSummary]:
+    def get_all_summaries(self) -> list[ToolSummary]:
         """
         Get all registered tool summaries.
 
@@ -319,7 +318,7 @@ def format_search_results(results) -> str:
 
     for tool in results:
         # Handle both ToolSummary (old) and ToolCandidate (new)
-        if hasattr(tool, 'sensitive'):
+        if hasattr(tool, "sensitive"):
             # Old ToolSummary
             sensitivity = "[SENSITIVE]" if tool.sensitive else "[SAFE]"
             tool_name = tool.name

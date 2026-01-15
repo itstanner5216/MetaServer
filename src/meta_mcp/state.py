@@ -1,18 +1,15 @@
 """Redis-backed tri-state governance with scoped elevation cache."""
 
 import hashlib
-import os
 from enum import Enum
-from typing import Optional
 
 from loguru import logger
 from redis import asyncio as aioredis
 
 from .config import Config
-
+from .redis_client import close_redis_client, get_redis_client
 
 # Constants
-REDIS_URL = Config.REDIS_URL
 GOVERNANCE_MODE_KEY = "governance:mode"
 ELEVATION_PREFIX = "elevation:"
 DEFAULT_ELEVATION_TTL = Config.DEFAULT_ELEVATION_TTL
@@ -40,28 +37,39 @@ class GovernanceState:
     def __init__(self):
         """Initialize governance state with lazy Redis connection."""
         self._redis_client: Optional[aioredis.Redis] = None
-        self._redis_pool: Optional[aioredis.ConnectionPool] = None
-        self._redis_url = REDIS_URL
+
+    @staticmethod
+    def _parse_mode(mode_value: Optional[str]) -> Optional[ExecutionMode]:
+        """Parse execution mode string into ExecutionMode enum."""
+        if not mode_value:
+            return None
+        normalized = mode_value.strip().lower()
+        try:
+            return ExecutionMode(normalized)
+        except ValueError:
+            return None
+
+    @classmethod
+    def _default_mode(cls) -> ExecutionMode:
+        """Resolve default execution mode from configuration."""
+        config_value = Config.DEFAULT_EXECUTION_MODE
+        parsed_mode = cls._parse_mode(config_value)
+        if parsed_mode is None:
+            logger.error(
+                f"Invalid default governance mode '{config_value}'; using fail-safe default: {ExecutionMode.PERMISSION}"
+            )
+            return ExecutionMode.PERMISSION
+        return parsed_mode
 
     async def _get_redis(self) -> aioredis.Redis:
         """
-        Get or create Redis client with connection pool (lazy initialization).
+        Get or create Redis client with shared connection pool.
 
         Returns:
             Redis client instance with connection pooling
         """
         if self._redis_client is None:
-            # Create connection pool if not exists
-            if self._redis_pool is None:
-                self._redis_pool = aioredis.ConnectionPool.from_url(
-                    self._redis_url,
-                    encoding="utf-8",
-                    decode_responses=True,
-                    max_connections=100,
-                    socket_connect_timeout=2,
-                    socket_timeout=2,
-                )
-            self._redis_client = aioredis.Redis(connection_pool=self._redis_pool)
+            self._redis_client = await get_redis_client()
         return self._redis_client
 
     async def get_mode(self) -> ExecutionMode:
@@ -80,20 +88,33 @@ class GovernanceState:
             mode_str = await redis.get(GOVERNANCE_MODE_KEY)
 
             if mode_str is None:
-                # No mode set, return fail-safe default
+                default_mode = self._default_mode()
                 logger.warning(
-                    f"No governance mode set in Redis, using fail-safe default: {ExecutionMode.PERMISSION}"
+                    f"No governance mode set in Redis, initializing to config default: {default_mode.value}"
                 )
-                return ExecutionMode.PERMISSION
+                try:
+                    await redis.set(GOVERNANCE_MODE_KEY, default_mode.value)
+                except Exception as e:
+                    logger.error(
+                        f"Failed to initialize governance mode in Redis: {e}"
+                    )
+                return default_mode
 
             # Validate and return mode
-            try:
-                return ExecutionMode(mode_str)
-            except ValueError:
+            parsed_mode = self._parse_mode(mode_str)
+            if parsed_mode is None:
+                default_mode = self._default_mode()
                 logger.error(
-                    f"Invalid governance mode in Redis: {mode_str}, using fail-safe default: {ExecutionMode.PERMISSION}"
+                    f"Invalid governance mode in Redis: {mode_str}, resetting to config default: {default_mode.value}"
                 )
-                return ExecutionMode.PERMISSION
+                try:
+                    await redis.set(GOVERNANCE_MODE_KEY, default_mode.value)
+                except Exception as e:
+                    logger.error(
+                        f"Failed to reset governance mode in Redis: {e}"
+                    )
+                return default_mode
+            return parsed_mode
 
         except (aioredis.ConnectionError, aioredis.TimeoutError) as e:
             logger.error(
@@ -129,9 +150,7 @@ class GovernanceState:
             return False
 
     @staticmethod
-    def compute_elevation_hash(
-        tool_name: str, context_key: str, session_id: str
-    ) -> str:
+    def compute_elevation_hash(tool_name: str, context_key: str, session_id: str) -> str:
         """
         Compute SHA256 hash for elevation key.
 
@@ -150,9 +169,7 @@ class GovernanceState:
         hash_digest = hashlib.sha256(composite.encode("utf-8")).hexdigest()
         return f"{ELEVATION_PREFIX}{hash_digest}"
 
-    async def grant_elevation(
-        self, hash_key: str, ttl: int = DEFAULT_ELEVATION_TTL
-    ) -> bool:
+    async def grant_elevation(self, hash_key: str, ttl: int = DEFAULT_ELEVATION_TTL) -> bool:
         """
         Grant elevation for a specific hash key with mandatory TTL.
 
@@ -225,12 +242,8 @@ class GovernanceState:
 
     async def close(self):
         """Close Redis connection and pool."""
-        if self._redis_client is not None:
-            await self._redis_client.close()
-            self._redis_client = None
-        if self._redis_pool is not None:
-            await self._redis_pool.disconnect()
-            self._redis_pool = None
+        await close_redis_client()
+        self._redis_client = None
 
 
 # Module-level singleton

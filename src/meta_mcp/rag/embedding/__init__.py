@@ -1,5 +1,5 @@
 """Embedding services for semantic search."""
 
-from .embedder import GeminiEmbedderAdapter, EmbeddingResult, RateLimiter
+from .embedder import EmbeddingResult, GeminiEmbedderAdapter, RateLimiter
 
-__all__ = ["GeminiEmbedderAdapter", "EmbeddingResult", "RateLimiter"]
+__all__ = ["EmbeddingResult", "GeminiEmbedderAdapter", "RateLimiter"]

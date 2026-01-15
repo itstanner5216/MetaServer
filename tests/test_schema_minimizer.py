@@ -1,9 +1,10 @@
 """Tests for schema minimization (Phase 5)."""
 
 import pytest
+
 from src.meta_mcp.schemas.minimizer import (
-    minimize_schema,
     estimate_token_count,
+    minimize_schema,
     validate_minimal_schema,
 )
 
@@ -254,9 +255,7 @@ def test_validate_minimal_schema_exceeds_token_budget():
     # Create a schema that's too large
     minimal = {
         "type": "object",
-        "properties": {
-            f"property_{i}": {"type": "string"} for i in range(100)
-        },
+        "properties": {f"property_{i}": {"type": "string"} for i in range(100)},
     }
 
     with pytest.raises(ValueError, match="exceeds token budget"):

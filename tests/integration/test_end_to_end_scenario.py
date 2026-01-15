@@ -12,22 +12,25 @@ verifying all phases work together correctly.
 """
 
 import asyncio
+
 import pytest
-from unittest.mock import AsyncMock
+
+from src.meta_mcp.config import Config
 from src.meta_mcp.discovery import tool_registry
-from src.meta_mcp.registry.registry import ToolRegistry
-from src.meta_mcp.registry.models import ToolRecord
-from src.meta_mcp.leases.manager import lease_manager
 from src.meta_mcp.governance.policy import evaluate_policy
 from src.meta_mcp.governance.tokens import generate_token, verify_token
-from src.meta_mcp.state import ExecutionMode, governance_state
-from src.meta_mcp.toon.encoder import encode_output
+from src.meta_mcp.leases.manager import lease_manager
 from src.meta_mcp.macros.batch_read import batch_read_tools
 from src.meta_mcp.macros.batch_search import batch_search_tools
-from src.meta_mcp.config import Config
+from src.meta_mcp.registry.models import ToolRecord
+from src.meta_mcp.registry.registry import ToolRegistry
+from src.meta_mcp.state import ExecutionMode, governance_state
+from src.meta_mcp.toon.encoder import encode_output
 
 
 @pytest.mark.asyncio
+@pytest.mark.integration
+@pytest.mark.requires_redis
 async def test_complete_safe_tool_workflow(redis_client):
     """
     End-to-end workflow for safe tool (no approval needed).
@@ -50,11 +53,7 @@ async def test_complete_safe_tool_workflow(redis_client):
     assert read_file.sensitive is False  # Safe tool
 
     # Step 3: Policy check (should allow)
-    decision = evaluate_policy(
-        mode=ExecutionMode.PERMISSION,
-        tool_risk="safe",
-        tool_id="read_file"
-    )
+    decision = evaluate_policy(mode=ExecutionMode.PERMISSION, tool_risk="safe", tool_id="read_file")
     assert decision.action == "allow"
     assert not decision.requires_approval
 
@@ -66,6 +65,8 @@ async def test_complete_safe_tool_workflow(redis_client):
 
 
 @pytest.mark.asyncio
+@pytest.mark.integration
+@pytest.mark.requires_redis
 async def test_complete_sensitive_tool_workflow(redis_client):
     """
     End-to-end workflow for sensitive tool (requires approval).
@@ -92,9 +93,7 @@ async def test_complete_sensitive_tool_workflow(redis_client):
 
     # Step 3: Policy check (requires approval)
     decision = evaluate_policy(
-        mode=ExecutionMode.PERMISSION,
-        tool_risk="sensitive",
-        tool_id="write_file"
+        mode=ExecutionMode.PERMISSION, tool_risk="sensitive", tool_id="write_file"
     )
     assert decision.action == "require_approval"
     assert decision.requires_approval
@@ -104,7 +103,7 @@ async def test_complete_sensitive_tool_workflow(redis_client):
         client_id="sensitive_workflow_test",
         tool_id="write_file",
         ttl_seconds=300,
-        secret=Config.HMAC_SECRET
+        secret=Config.HMAC_SECRET,
     )
     assert token is not None
 
@@ -115,7 +114,7 @@ async def test_complete_sensitive_tool_workflow(redis_client):
         ttl_seconds=300,
         calls_remaining=3,
         mode_at_issue="PERMISSION",
-        capability_token=token
+        capability_token=token,
     )
     assert lease is not None
     assert lease.capability_token == token
@@ -125,7 +124,7 @@ async def test_complete_sensitive_tool_workflow(redis_client):
         token=lease.capability_token,
         client_id="sensitive_workflow_test",
         tool_id="write_file",
-        secret=Config.HMAC_SECRET
+        secret=Config.HMAC_SECRET,
     )
     assert valid is True
 
@@ -138,6 +137,8 @@ async def test_complete_sensitive_tool_workflow(redis_client):
 
 
 @pytest.mark.asyncio
+@pytest.mark.integration
+@pytest.mark.requires_redis
 async def test_mode_transition_read_only_to_permission(redis_client):
     """
     Test mode transition from READ_ONLY to PERMISSION.
@@ -154,9 +155,7 @@ async def test_mode_transition_read_only_to_permission(redis_client):
 
     # Step 2: Check sensitive tool (blocked)
     decision = evaluate_policy(
-        mode=ExecutionMode.READ_ONLY,
-        tool_risk="sensitive",
-        tool_id="write_file"
+        mode=ExecutionMode.READ_ONLY, tool_risk="sensitive", tool_id="write_file"
     )
     assert decision.action == "block"
 
@@ -166,7 +165,7 @@ async def test_mode_transition_read_only_to_permission(redis_client):
         tool_id="read_file",
         ttl_seconds=300,
         calls_remaining=5,
-        mode_at_issue="READ_ONLY"
+        mode_at_issue="READ_ONLY",
     )
     assert safe_lease is not None
 
@@ -175,9 +174,7 @@ async def test_mode_transition_read_only_to_permission(redis_client):
 
     # Step 4: Check same tool (now requires approval)
     decision = evaluate_policy(
-        mode=ExecutionMode.PERMISSION,
-        tool_risk="sensitive",
-        tool_id="write_file"
+        mode=ExecutionMode.PERMISSION, tool_risk="sensitive", tool_id="write_file"
     )
     assert decision.action == "require_approval"
 
@@ -188,6 +185,8 @@ async def test_mode_transition_read_only_to_permission(redis_client):
 
 
 @pytest.mark.asyncio
+@pytest.mark.integration
+@pytest.mark.requires_redis
 async def test_mode_transition_permission_to_bypass(redis_client):
     """
     Test mode transition from PERMISSION to BYPASS.
@@ -203,9 +202,7 @@ async def test_mode_transition_permission_to_bypass(redis_client):
 
     # Step 2: Sensitive tool requires approval
     decision = evaluate_policy(
-        mode=ExecutionMode.PERMISSION,
-        tool_risk="dangerous",
-        tool_id="execute_command"
+        mode=ExecutionMode.PERMISSION, tool_risk="dangerous", tool_id="execute_command"
     )
     assert decision.action == "require_approval"
 
@@ -214,15 +211,15 @@ async def test_mode_transition_permission_to_bypass(redis_client):
 
     # Step 4: Same tool now allowed
     decision = evaluate_policy(
-        mode=ExecutionMode.BYPASS,
-        tool_risk="dangerous",
-        tool_id="execute_command"
+        mode=ExecutionMode.BYPASS, tool_risk="dangerous", tool_id="execute_command"
     )
     assert decision.action == "allow"
     assert not decision.requires_approval
 
 
 @pytest.mark.asyncio
+@pytest.mark.integration
+@pytest.mark.requires_redis
 async def test_lease_lifecycle_with_notifications(redis_client):
     """
     Test complete lease lifecycle with notifications.
@@ -249,7 +246,7 @@ async def test_lease_lifecycle_with_notifications(redis_client):
             tool_id="write_file",
             ttl_seconds=300,
             calls_remaining=2,
-            mode_at_issue="PERMISSION"
+            mode_at_issue="PERMISSION",
         )
         assert lease is not None
 
@@ -278,6 +275,8 @@ async def test_lease_lifecycle_with_notifications(redis_client):
 
 
 @pytest.mark.asyncio
+@pytest.mark.integration
+@pytest.mark.requires_redis
 async def test_progressive_discovery_with_toon_encoding(redis_client):
     """
     Test progressive discovery with TOON encoding for large results.
@@ -294,9 +293,7 @@ async def test_progressive_discovery_with_toon_encoding(redis_client):
     assert len(results) > 0
 
     # Step 2: Simulate large result set
-    large_results = {
-        "tools": [{"name": f"tool_{i}", "desc": "Tool"} for i in range(50)]
-    }
+    large_results = {"tools": [{"name": f"tool_{i}", "desc": "Tool"} for i in range(50)]}
     encoded = encode_output(large_results, threshold=10)
 
     # Verify TOON compression
@@ -313,6 +310,8 @@ async def test_progressive_discovery_with_toon_encoding(redis_client):
 
 
 @pytest.mark.asyncio
+@pytest.mark.integration
+@pytest.mark.requires_redis
 async def test_batch_operations_with_governance(redis_client):
     """
     Test batch operations respect governance policies.
@@ -334,37 +333,30 @@ async def test_batch_operations_with_governance(redis_client):
     ]
 
     for tool_id, risk in tools:
-        registry.add(ToolRecord(
-            tool_id=tool_id,
-            server_id="test_server",
-            description_1line=f"{risk.capitalize()} tool",
-            description_full=f"{risk.capitalize()} tool",
-            tags=["test"],
-            risk_level=risk
-        ))
+        registry.add(
+            ToolRecord(
+                tool_id=tool_id,
+                server_id="test_server",
+                description_1line=f"{risk.capitalize()} tool",
+                description_full=f"{risk.capitalize()} tool",
+                tags=["test"],
+                risk_level=risk,
+            )
+        )
 
     # Step 2: Batch search
-    search_results = batch_search_tools(
-        registry=registry,
-        queries=["tool"]
-    )
+    search_results = batch_search_tools(registry=registry, queries=["tool"])
     assert len(search_results["tool"]) == 4
 
     # Step 3: Batch search with risk exclusion
     filtered_search = batch_search_tools(
-        registry=registry,
-        queries=["tool"],
-        exclude_risk_levels=["dangerous"]
+        registry=registry, queries=["tool"], exclude_risk_levels=["dangerous"]
     )
     assert all(c.risk_level != "dangerous" for c in filtered_search["tool"])
 
     # Step 4: Batch read with risk filtering
     all_ids = [tid for tid, _ in tools]
-    safe_only = batch_read_tools(
-        registry=registry,
-        tool_ids=all_ids,
-        max_risk_level="safe"
-    )
+    safe_only = batch_read_tools(registry=registry, tool_ids=all_ids, max_risk_level="safe")
 
     assert safe_only["safe_tool_1"] is not None
     assert safe_only["safe_tool_2"] is not None
@@ -373,6 +365,8 @@ async def test_batch_operations_with_governance(redis_client):
 
 
 @pytest.mark.asyncio
+@pytest.mark.integration
+@pytest.mark.requires_redis
 async def test_multi_client_isolation(redis_client):
     """
     Test that multiple clients are properly isolated.
@@ -390,7 +384,7 @@ async def test_multi_client_isolation(redis_client):
         tool_id="write_file",
         ttl_seconds=300,
         calls_remaining=3,
-        mode_at_issue="PERMISSION"
+        mode_at_issue="PERMISSION",
     )
     assert lease_a is not None
 
@@ -404,7 +398,7 @@ async def test_multi_client_isolation(redis_client):
         tool_id="write_file",
         ttl_seconds=300,
         calls_remaining=5,
-        mode_at_issue="PERMISSION"
+        mode_at_issue="PERMISSION",
     )
     assert lease_b is not None
 
@@ -429,6 +423,8 @@ async def test_multi_client_isolation(redis_client):
 
 
 @pytest.mark.asyncio
+@pytest.mark.integration
+@pytest.mark.requires_redis
 async def test_token_forgery_prevention(redis_client):
     """
     Test that forged tokens are rejected.
@@ -443,10 +439,7 @@ async def test_token_forgery_prevention(redis_client):
     """
     # Step 1: Generate valid token
     valid_token = generate_token(
-        client_id="forgery_test",
-        tool_id="write_file",
-        ttl_seconds=300,
-        secret=Config.HMAC_SECRET
+        client_id="forgery_test", tool_id="write_file", ttl_seconds=300, secret=Config.HMAC_SECRET
     )
 
     # Step 2: Forge token (modify payload)
@@ -458,22 +451,21 @@ async def test_token_forgery_prevention(redis_client):
         token=forged_token,
         client_id="forgery_test",
         tool_id="write_file",
-        secret=Config.HMAC_SECRET
+        secret=Config.HMAC_SECRET,
     )
     assert valid is False
 
     # Also test signature tampering
     forged_sig = parts[0] + "." + parts[1] + "X"  # Corrupt signature
     valid = verify_token(
-        token=forged_sig,
-        client_id="forgery_test",
-        tool_id="write_file",
-        secret=Config.HMAC_SECRET
+        token=forged_sig, client_id="forgery_test", tool_id="write_file", secret=Config.HMAC_SECRET
     )
     assert valid is False
 
 
 @pytest.mark.asyncio
+@pytest.mark.integration
+@pytest.mark.requires_redis
 async def test_complete_user_journey(redis_client):
     """
     Simulate complete user journey from start to finish.
@@ -501,17 +493,13 @@ async def test_complete_user_journey(redis_client):
 
     # Step 3: Safe tools accessible
     safe_decision = evaluate_policy(
-        mode=ExecutionMode.READ_ONLY,
-        tool_risk="safe",
-        tool_id="read_file"
+        mode=ExecutionMode.READ_ONLY, tool_risk="safe", tool_id="read_file"
     )
     assert safe_decision.action == "allow"
 
     # Step 4: Sensitive tool blocked
     sensitive_decision = evaluate_policy(
-        mode=ExecutionMode.READ_ONLY,
-        tool_risk="sensitive",
-        tool_id="write_file"
+        mode=ExecutionMode.READ_ONLY, tool_risk="sensitive", tool_id="write_file"
     )
     assert sensitive_decision.action == "block"
 
@@ -520,9 +508,7 @@ async def test_complete_user_journey(redis_client):
 
     # Step 6: Request sensitive tool
     sensitive_decision = evaluate_policy(
-        mode=ExecutionMode.PERMISSION,
-        tool_risk="sensitive",
-        tool_id="write_file"
+        mode=ExecutionMode.PERMISSION, tool_risk="sensitive", tool_id="write_file"
     )
     assert sensitive_decision.action == "require_approval"
 
@@ -531,7 +517,7 @@ async def test_complete_user_journey(redis_client):
         client_id="user_journey_test",
         tool_id="write_file",
         ttl_seconds=300,
-        secret=Config.HMAC_SECRET
+        secret=Config.HMAC_SECRET,
     )
 
     # Step 9: Grant lease
@@ -541,7 +527,7 @@ async def test_complete_user_journey(redis_client):
         ttl_seconds=300,
         calls_remaining=3,
         mode_at_issue="PERMISSION",
-        capability_token=token
+        capability_token=token,
     )
     assert lease is not None
 
@@ -559,6 +545,8 @@ async def test_complete_user_journey(redis_client):
 
 
 @pytest.mark.asyncio
+@pytest.mark.integration
+@pytest.mark.requires_redis
 async def test_security_invariants_maintained(redis_client):
     """
     Verify critical security invariants across all phases.
@@ -602,14 +590,26 @@ async def test_security_invariants_maintained(redis_client):
 
     # Invariant 6: Risk filtering
     registry = ToolRegistry()
-    registry.add(ToolRecord(
-        tool_id="safe", server_id="test_server", description_1line="Safe",
-        description_full="Safe", tags=["test"], risk_level="safe"
-    ))
-    registry.add(ToolRecord(
-        tool_id="dangerous", server_id="test_server", description_1line="Dangerous",
-        description_full="Dangerous", tags=["test"], risk_level="dangerous"
-    ))
+    registry.add(
+        ToolRecord(
+            tool_id="safe",
+            server_id="test_server",
+            description_1line="Safe",
+            description_full="Safe",
+            tags=["test"],
+            risk_level="safe",
+        )
+    )
+    registry.add(
+        ToolRecord(
+            tool_id="dangerous",
+            server_id="test_server",
+            description_1line="Dangerous",
+            description_full="Dangerous",
+            tags=["test"],
+            risk_level="dangerous",
+        )
+    )
 
     results = batch_read_tools(registry, ["safe", "dangerous"], max_risk_level="safe")
     assert results["safe"] is not None

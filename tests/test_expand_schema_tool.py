@@ -1,11 +1,14 @@
 """Integration tests for expand_tool_schema tool (Phase 5)."""
 
-import pytest
 import json
+
+import pytest
 from fastmcp.exceptions import ToolError
 
 
 @pytest.mark.asyncio
+@pytest.mark.integration
+@pytest.mark.requires_redis
 async def test_expand_parameter_exists():
     """Test that get_tool_schema tool accepts expand parameter."""
     from src.meta_mcp.supervisor import mcp
@@ -24,10 +27,12 @@ async def test_expand_parameter_exists():
 
 
 @pytest.mark.asyncio
+@pytest.mark.integration
+@pytest.mark.requires_redis
 async def test_expand_parameter_returns_full_schema():
     """Test get_tool_schema with expand=True returns full schema for a tool."""
-    from src.meta_mcp.supervisor import mcp, get_tool_schema
     from src.meta_mcp.config import Config
+    from src.meta_mcp.supervisor import get_tool_schema
 
     # Temporarily enable progressive schemas
     original_flag = Config.ENABLE_PROGRESSIVE_SCHEMAS
@@ -55,6 +60,8 @@ async def test_expand_parameter_returns_full_schema():
 
 
 @pytest.mark.asyncio
+@pytest.mark.integration
+@pytest.mark.requires_redis
 async def test_expand_parameter_unregistered_tool():
     """Test get_tool_schema with expand=True raises error for unregistered tool."""
     from src.meta_mcp.supervisor import get_tool_schema
@@ -64,6 +71,8 @@ async def test_expand_parameter_unregistered_tool():
 
 
 @pytest.mark.asyncio
+@pytest.mark.integration
+@pytest.mark.requires_redis
 async def test_expand_parameter_without_prior_access():
     """Test get_tool_schema with expand=True works even without prior minimal schema call."""
     from src.meta_mcp.supervisor import get_tool_schema
@@ -85,10 +94,12 @@ async def test_expand_parameter_without_prior_access():
 
 
 @pytest.mark.asyncio
+@pytest.mark.integration
+@pytest.mark.requires_redis
 async def test_expand_parameter_bypasses_governance():
     """Test that get_tool_schema with expand=True bypasses governance (schema already approved)."""
-    from src.meta_mcp.supervisor import get_tool_schema
     from src.meta_mcp.config import Config
+    from src.meta_mcp.supervisor import get_tool_schema
 
     # This test verifies the design requirement that expansion bypasses governance
     # because the schema was already approved when get_tool_schema was called
@@ -112,6 +123,8 @@ async def test_expand_parameter_bypasses_governance():
 
 
 @pytest.mark.asyncio
+@pytest.mark.integration
+@pytest.mark.requires_redis
 async def test_expand_parameter_format():
     """Test get_tool_schema with expand=True returns correct JSON format."""
     from src.meta_mcp.supervisor import get_tool_schema
@@ -131,11 +144,13 @@ async def test_expand_parameter_format():
 
 
 @pytest.mark.asyncio
+@pytest.mark.integration
+@pytest.mark.requires_redis
 async def test_progressive_schema_workflow():
     """Integration test: Full progressive schema workflow."""
-    from src.meta_mcp.supervisor import get_tool_schema
     from src.meta_mcp.config import Config
     from src.meta_mcp.schemas.minimizer import estimate_token_count
+    from src.meta_mcp.supervisor import get_tool_schema
 
     original_flag = Config.ENABLE_PROGRESSIVE_SCHEMAS
     Config.ENABLE_PROGRESSIVE_SCHEMAS = True
@@ -171,10 +186,12 @@ async def test_progressive_schema_workflow():
 
 
 @pytest.mark.asyncio
+@pytest.mark.integration
+@pytest.mark.requires_redis
 async def test_expand_parameter_fallback_to_live_tool():
     """Test get_tool_schema with expand=True falls back to live tool if registry schema unavailable."""
-    from src.meta_mcp.supervisor import get_tool_schema
     from src.meta_mcp.registry import tool_registry
+    from src.meta_mcp.supervisor import get_tool_schema
 
     # Get a tool and clear its schemas in registry
     await get_tool_schema.fn(tool_name="read_file", expand=False)
@@ -195,10 +212,12 @@ async def test_expand_parameter_fallback_to_live_tool():
 
 
 @pytest.mark.asyncio
+@pytest.mark.integration
+@pytest.mark.requires_redis
 async def test_expand_parameter_preserves_structure():
     """Test that get_tool_schema with expand=True preserves schema structure."""
-    from src.meta_mcp.supervisor import get_tool_schema
     from src.meta_mcp.config import Config
+    from src.meta_mcp.supervisor import get_tool_schema
 
     original_flag = Config.ENABLE_PROGRESSIVE_SCHEMAS
     Config.ENABLE_PROGRESSIVE_SCHEMAS = True

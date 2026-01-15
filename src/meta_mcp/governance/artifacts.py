@@ -9,7 +9,7 @@ import json
 import os
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from loguru import logger
 
@@ -17,7 +17,6 @@ from loguru import logger
 class ArtifactGenerationError(Exception):
     """Raised when artifact generation fails."""
 
-    pass
 
 
 class ApprovalArtifactGenerator:
@@ -149,9 +148,9 @@ class ApprovalArtifactGenerator:
         request_id: str,
         tool_name: str,
         message: str,
-        required_scopes: List[str],
-        arguments: Dict[str, Any],
-        context_metadata: Dict[str, Any],
+        required_scopes: list[str],
+        arguments: dict[str, Any],
+        context_metadata: dict[str, Any],
     ) -> str:
         """Generate HTML artifact for approval request.
 
@@ -209,9 +208,9 @@ class ApprovalArtifactGenerator:
         request_id: str,
         tool_name: str,
         message: str,
-        required_scopes: List[str],
-        arguments: Dict[str, Any],
-        context_metadata: Dict[str, Any],
+        required_scopes: list[str],
+        arguments: dict[str, Any],
+        context_metadata: dict[str, Any],
     ) -> str:
         """Generate JSON artifact for approval request.
 
@@ -272,9 +271,9 @@ class ApprovalArtifactGenerator:
         request_id: str,
         tool_name: str,
         message: str,
-        required_scopes: List[str],
-        arguments: Dict[str, Any],
-        context_metadata: Dict[str, Any],
+        required_scopes: list[str],
+        arguments: dict[str, Any],
+        context_metadata: dict[str, Any],
     ) -> str:
         """Generate HTML content for approval artifact.
 
@@ -311,7 +310,11 @@ class ApprovalArtifactGenerator:
             <td><code>{safe_value}</code></td>
           </tr>"""
             )
-        args_html = "\n".join(args_rows) if args_rows else "<tr><td colspan='2'><em>No arguments</em></td></tr>"
+        args_html = (
+            "\n".join(args_rows)
+            if args_rows
+            else "<tr><td colspan='2'><em>No arguments</em></td></tr>"
+        )
 
         # Generate metadata
         session_id = html.escape(str(context_metadata.get("session_id", "unknown")))
@@ -436,10 +439,10 @@ class ApprovalArtifactGenerator:
 
 
 # Singleton instance
-_artifact_generator: Optional[ApprovalArtifactGenerator] = None
+_artifact_generator: ApprovalArtifactGenerator | None = None
 
 
-def get_artifact_generator(artifacts_root: Optional[str] = None) -> ApprovalArtifactGenerator:
+def get_artifact_generator(artifacts_root: str | None = None) -> ApprovalArtifactGenerator:
     """Get or create singleton artifact generator.
 
     Args:

@@ -22,20 +22,20 @@ from .policy import PolicyDecision, evaluate_policy
 from .tokens import decode_token, generate_token, verify_token
 
 __all__ = [
-    "generate_token",
-    "verify_token",
-    "decode_token",
-    "evaluate_policy",
-    "PolicyDecision",
+    "ApprovalArtifactGenerator",
     "ApprovalDecision",
     "ApprovalProvider",
     "ApprovalRequest",
     "ApprovalResponse",
+    "ArtifactGenerationError",
     "DBusGUIProvider",
     "FastMCPElicitProvider",
+    "PolicyDecision",
     "SystemdFallbackProvider",
+    "decode_token",
+    "evaluate_policy",
+    "generate_token",
     "get_approval_provider",
-    "ApprovalArtifactGenerator",
-    "ArtifactGenerationError",
     "get_artifact_generator",
+    "verify_token",
 ]

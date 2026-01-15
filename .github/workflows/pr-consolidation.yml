@@ -1,0 +1,617 @@
+name: 🧹 PR Consolidation & Cleanup
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Dry run mode (preview only, no changes made)'
+        required: true
+        type: boolean
+        default: true
+      min_similarity_threshold:
+        description: 'Minimum keyword similarity to group PRs (0-100%)'
+        required: false
+        type: number
+        default: 40
+      re_run_reviews:
+        description: 'Re-run AI review pipeline after cleanup'
+        required: true
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+
+jobs:
+  analyze-prs:
+    runs-on: ubuntu-latest
+    outputs:
+      consolidation_plan: ${{ steps.analyze.outputs.plan }}
+      keeper_numbers: ${{ steps.analyze.outputs.keeper_numbers }}
+      has_duplicates: ${{ steps.analyze.outputs.has_duplicates }}
+    steps:
+      - name: 📊 Analyze and Group PRs
+        id: analyze
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const threshold = parseFloat('${{ inputs.min_similarity_threshold }}') / 100;
+            
+            // Fetch ALL open PRs (handle pagination)
+            core.info('Fetching all open PRs...');
+            let allPRs = [];
+            let page = 1;
+            let hasMore = true;
+            
+            while (hasMore) {
+              const { data: prs } = await github.rest.pulls.list({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                state: 'open',
+                per_page: 100,
+                page: page
+              });
+              
+              allPRs = allPRs.concat(prs);
+              core.info(`Fetched page ${page}: ${prs.length} PRs`);
+              
+              if (prs.length < 100) {
+                hasMore = false;
+              } else {
+                page++;
+              }
+            }
+            
+            core.info(`Total PRs fetched: ${allPRs.length}`);
+            
+            // Fetch detailed info for each PR
+            const detailedPRs = await Promise.all(allPRs.map(async (pr) => {
+              try {
+                // Get comment count
+                const { data: comments } = await github.rest.issues.listComments({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: pr.number,
+                  per_page: 1
+                });
+                
+                // Check for keep-open label
+                const hasKeepOpen = pr.labels.some(label => label.name === 'keep-open');
+                
+                // Check if PR is too recent (created in last 6 hours)
+                const ageHours = (Date.now() - new Date(pr.created_at)) / (1000 * 60 * 60);
+                const isTooRecent = ageHours < 6;
+                
+                return {
+                  number: pr.number,
+                  title: pr.title,
+                  body: pr.body || '',
+                  created_at: pr.created_at,
+                  updated_at: pr.updated_at,
+                  draft: pr.draft,
+                  base: { ref: pr.base.ref },
+                  head: { ref: pr.head.ref },
+                  author: pr.user.login,
+                  assignees: pr.assignees.map(a => a.login),
+                  labels: pr.labels.map(l => l.name),
+                  comments: comments.length,
+                  hasKeepOpen,
+                  isTooRecent
+                };
+              } catch (error) {
+                core.warning(`Error fetching details for PR #${pr.number}: ${error.message}`);
+                return null;
+              }
+            }));
+            
+            // Filter out nulls and PRs with keep-open label or too recent
+            const validPRs = detailedPRs.filter(pr => pr && !pr.hasKeepOpen && !pr.isTooRecent);
+            core.info(`Valid PRs for grouping: ${validPRs.length}`);
+            
+            // Extract keywords function
+            function extractKeywords(text, keywordList) {
+              const lowerText = text.toLowerCase();
+              return keywordList.filter(kw => lowerText.includes(kw));
+            }
+            
+            // Calculate similarity function
+            function calculateSimilarity(keywords1, keywords2) {
+              if (keywords1.length === 0 && keywords2.length === 0) return 0;
+              const set1 = new Set(keywords1);
+              const set2 = new Set(keywords2);
+              const intersection = new Set([...set1].filter(x => set2.has(x)));
+              const union = new Set([...set1, ...set2]);
+              return union.size > 0 ? intersection.size / union.size : 0;
+            }
+            
+            // Infer theme function
+            function inferTheme(pr) {
+              const text = (pr.title + ' ' + pr.body).toLowerCase();
+              if (text.includes('governance') && text.includes('hook')) return 'Governance Hook Mutation Fixes';
+              if (text.includes('lease')) return 'Lease Management Improvements';
+              if (text.includes('import') || text.includes('path')) return 'Import Path Fixes';
+              if (text.includes('test')) return 'Test Infrastructure';
+              if (text.includes('redis')) return 'Redis Integration';
+              if (text.includes('config')) return 'Configuration Updates';
+              if (text.includes('refactor')) return 'Code Refactoring';
+              if (text.includes('mutation')) return 'Tool Call Mutation Handling';
+              return 'General Improvements';
+            }
+            
+            // Group PRs by similarity
+            const keywords = ['governance', 'lease', 'hook', 'mutation', 'config', 'import', 'test', 'redis', 'refactor', 'tool', 'call', 'path', 'fix', 'update'];
+            const groups = [];
+            
+            for (const pr of validPRs) {
+              const prKeywords = extractKeywords(pr.title + ' ' + pr.body, keywords);
+              
+              let foundGroup = false;
+              for (const group of groups) {
+                const groupKeywords = extractKeywords(group.representative.title + ' ' + group.representative.body, keywords);
+                const similarity = calculateSimilarity(prKeywords, groupKeywords);
+                
+                if (similarity >= threshold && pr.base.ref === group.representative.base.ref) {
+                  group.members.push(pr);
+                  foundGroup = true;
+                  break;
+                }
+              }
+              
+              if (!foundGroup) {
+                groups.push({
+                  representative: pr,
+                  members: [pr],
+                  theme: inferTheme(pr)
+                });
+              }
+            }
+            
+            // Score PR function
+            function scorePR(pr) {
+              let score = 0;
+              
+              // Recency (0-10 points based on age)
+              const ageHours = (Date.now() - new Date(pr.created_at)) / (1000 * 60 * 60);
+              score += Math.max(0, 10 - (ageHours / 24)); // Newer = higher
+              
+              // Not draft (+10)
+              if (!pr.draft) score += 10;
+              
+              // Targets main branch (+15)
+              if (pr.base.ref === 'main') score += 15;
+              
+              // Has assignees (+5)
+              if (pr.assignees.length > 0) score += 5;
+              
+              // Simpler title = more focused (+5 if title < 80 chars)
+              if (pr.title.length < 80) score += 5;
+              
+              // Has labels (+2 per label, max 6)
+              score += Math.min(6, pr.labels.length * 2);
+              
+              // Fewer comments = cleaner discussion (+3 if < 5 comments)
+              if (pr.comments < 5) score += 3;
+              
+              return Math.round(score * 10) / 10;
+            }
+            
+            // Select keeper and identify duplicates for each group
+            const consolidationPlan = {
+              groups: [],
+              summary: {
+                total_prs: allPRs.length,
+                groups_found: 0,
+                prs_to_keep: 0,
+                prs_to_close: 0
+              }
+            };
+            
+            const keeperNumbers = [];
+            
+            for (const group of groups) {
+              // Score all members
+              const scoredMembers = group.members.map(pr => ({
+                ...pr,
+                score: scorePR(pr)
+              })).sort((a, b) => b.score - a.score);
+              
+              const keeper = scoredMembers[0];
+              const duplicates = scoredMembers.slice(1);
+              
+              if (duplicates.length > 0) {
+                consolidationPlan.groups.push({
+                  theme: group.theme,
+                  base_branch: keeper.base.ref,
+                  keeper: {
+                    number: keeper.number,
+                    title: keeper.title,
+                    score: keeper.score
+                  },
+                  duplicates: duplicates.map(dup => ({
+                    number: dup.number,
+                    title: dup.title,
+                    score: dup.score
+                  }))
+                });
+                
+                consolidationPlan.summary.groups_found++;
+                consolidationPlan.summary.prs_to_close += duplicates.length;
+              }
+              
+              keeperNumbers.push(keeper.number);
+            }
+            
+            consolidationPlan.summary.prs_to_keep = keeperNumbers.length;
+            
+            core.setOutput('plan', JSON.stringify(consolidationPlan));
+            core.setOutput('keeper_numbers', JSON.stringify(keeperNumbers));
+            core.setOutput('has_duplicates', consolidationPlan.summary.prs_to_close > 0 ? 'true' : 'false');
+            
+            core.info(`Analysis complete: ${consolidationPlan.summary.groups_found} groups with duplicates found`);
+      
+      - name: 📝 Generate Summary
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const plan = JSON.parse('${{ steps.analyze.outputs.plan }}');
+            const dryRun = '${{ inputs.dry_run }}' === 'true';
+            
+            let summary = '# 🧹 PR Consolidation Analysis\n\n';
+            summary += `**Mode:** ${dryRun ? 'DRY RUN ⚠️ (No changes will be made)' : 'LIVE RUN ✅'}\n`;
+            summary += `**Timestamp:** ${new Date().toISOString()}\n\n`;
+            
+            summary += '## Summary\n\n';
+            summary += `- Total PRs analyzed: ${plan.summary.total_prs}\n`;
+            summary += `- Duplicate groups found: ${plan.summary.groups_found}\n`;
+            summary += `- PRs to keep: ${plan.summary.prs_to_keep}\n`;
+            summary += `- PRs to close: ${plan.summary.prs_to_close}\n\n`;
+            
+            if (plan.groups.length > 0) {
+              summary += '## Groups\n\n';
+              
+              for (let i = 0; i < plan.groups.length; i++) {
+                const group = plan.groups[i];
+                summary += `### Group ${i + 1}: ${group.theme}\n`;
+                summary += `**Base Branch:** \`${group.base_branch}\`\n\n`;
+                summary += `✅ **KEEP:** #${group.keeper.number} - ${group.keeper.title} (score: ${group.keeper.score})\n\n`;
+                
+                if (group.duplicates.length > 0) {
+                  summary += '❌ **CLOSE:**\n';
+                  for (const dup of group.duplicates) {
+                    summary += `- #${dup.number} - ${dup.title} (score: ${dup.score})\n`;
+                  }
+                  summary += '\n';
+                }
+              }
+            } else {
+              summary += '✨ **No duplicate PRs found!** All PRs are unique.\n\n';
+            }
+            
+            summary += '## Next Steps\n\n';
+            if (dryRun) {
+              summary += '1. Review this plan carefully\n';
+              summary += '2. Download the `consolidation-plan.json` artifact for full details\n';
+              summary += '3. If satisfied, re-run this workflow with `dry_run: false`\n';
+            } else {
+              summary += '1. Duplicate PRs will be closed with explanatory comments\n';
+              summary += '2. Stale AI review comments will be cleaned up\n';
+              summary += '3. AI review pipeline will re-run on keeper PRs (if enabled)\n';
+            }
+            
+            core.summary.addRaw(summary);
+            await core.summary.write();
+      
+      - name: 💾 Save Consolidation Plan
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const plan = JSON.parse('${{ steps.analyze.outputs.plan }}');
+            
+            fs.mkdirSync('artifacts', { recursive: true });
+            fs.writeFileSync(
+              'artifacts/consolidation-plan.json',
+              JSON.stringify(plan, null, 2)
+            );
+            
+            core.info('Consolidation plan saved to artifacts');
+      
+      - name: 📤 Upload Consolidation Plan
+        uses: actions/upload-artifact@v4
+        with:
+          name: consolidation-plan-${{ github.run_id }}
+          path: artifacts/consolidation-plan.json
+          retention-days: 90
+
+  close-duplicates:
+    needs: analyze-prs
+    if: needs.analyze-prs.outputs.has_duplicates == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: ⚠️ Confirmation Check
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const plan = JSON.parse('${{ needs.analyze-prs.outputs.consolidation_plan }}');
+            const dryRun = '${{ inputs.dry_run }}' === 'true';
+            
+            if (!dryRun && plan.summary.prs_to_close > 50) {
+              core.setFailed(`Cannot close ${plan.summary.prs_to_close} PRs in a single run. This exceeds the safety limit of 50 PRs.`);
+              core.error('Please review the consolidation plan and consider running with a higher similarity threshold.');
+              return;
+            }
+            
+            core.info(`Ready to process ${plan.summary.prs_to_close} duplicate PRs`);
+      
+      - name: 🗑️ Close Duplicate PRs
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const plan = JSON.parse('${{ needs.analyze-prs.outputs.consolidation_plan }}');
+            const dryRun = '${{ inputs.dry_run }}' === 'true';
+            
+            let closedCount = 0;
+            
+            for (const group of plan.groups) {
+              for (const duplicate of group.duplicates) {
+                if (dryRun) {
+                  core.info(`[DRY RUN] Would close PR #${duplicate.number}`);
+                } else {
+                  try {
+                    // Add explanatory comment
+                    const comment = [
+                      '## 🧹 Automated PR Consolidation',
+                      '',
+                      'This PR is being closed as a **duplicate** to keep the repository organized.',
+                      '',
+                      `**Kept PR:** #${group.keeper.number} - ${group.keeper.title}`,
+                      `**Reason:** The kept PR has a higher quality score (${group.keeper.score} vs ${duplicate.score}) based on recency, completeness, and targeting.`,
+                      '',
+                      `**Group Theme:** ${group.theme}`,
+                      '',
+                      'If you believe this closure was incorrect, please:',
+                      '1. Review the consolidation workflow run: ' + context.serverUrl + '/' + context.repo.owner + '/' + context.repo.repo + '/actions/runs/' + context.runId,
+                      '2. Reopen this PR and add the `keep-open` label',
+                      '3. Tag @itstanner5216 for manual review',
+                      '',
+                      '---',
+                      '*Automated by PR Consolidation Workflow*'
+                    ].join('\n');
+                    
+                    await github.rest.issues.createComment({
+                      owner: context.repo.owner,
+                      repo: context.repo.repo,
+                      issue_number: duplicate.number,
+                      body: comment
+                    });
+                    
+                    // Close the PR
+                    await github.rest.pulls.update({
+                      owner: context.repo.owner,
+                      repo: context.repo.repo,
+                      pull_number: duplicate.number,
+                      state: 'closed'
+                    });
+                    
+                    closedCount++;
+                    core.info(`Closed PR #${duplicate.number}`);
+                    
+                    // Rate limiting - sleep 2 seconds between closures
+                    await new Promise(resolve => setTimeout(resolve, 2000));
+                  } catch (error) {
+                    core.warning(`Failed to close PR #${duplicate.number}: ${error.message}`);
+                  }
+                }
+              }
+            }
+            
+            if (!dryRun) {
+              core.info(`Successfully closed ${closedCount} duplicate PRs`);
+            }
+
+  cleanup-comments:
+    needs: [analyze-prs, close-duplicates]
+    if: always() && needs.analyze-prs.outputs.keeper_numbers != '[]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: 🧹 Clean Up Stale AI Comments
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const keeperNumbers = JSON.parse('${{ needs.analyze-prs.outputs.keeper_numbers }}');
+            const dryRun = '${{ inputs.dry_run }}' === 'true';
+            
+            const staleCommentPatterns = [
+              'AI-Powered PR Review Pipeline',
+              '🔍 Validation Agent',
+              '🔧 Remediation Agent',
+              '🏛️ Architectural Guardian',
+              '✅ Functional Verifier'
+            ];
+            
+            let totalDeleted = 0;
+            
+            for (const prNumber of keeperNumbers) {
+              try {
+                // Fetch all comments for this PR
+                let allComments = [];
+                let page = 1;
+                let hasMore = true;
+                
+                while (hasMore) {
+                  const { data: comments } = await github.rest.issues.listComments({
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                    issue_number: prNumber,
+                    per_page: 100,
+                    page: page
+                  });
+                  
+                  allComments = allComments.concat(comments);
+                  
+                  if (comments.length < 100) {
+                    hasMore = false;
+                  } else {
+                    page++;
+                  }
+                }
+                
+                // Filter stale AI comments
+                const staleComments = allComments.filter(comment => {
+                  return staleCommentPatterns.some(pattern => comment.body.includes(pattern));
+                });
+                
+                if (staleComments.length > 0) {
+                  if (dryRun) {
+                    core.info(`[DRY RUN] Would delete ${staleComments.length} comments from PR #${prNumber}`);
+                  } else {
+                    for (const comment of staleComments) {
+                      try {
+                        await github.rest.issues.deleteComment({
+                          owner: context.repo.owner,
+                          repo: context.repo.repo,
+                          comment_id: comment.id
+                        });
+                        totalDeleted++;
+                        
+                        // Rate limiting
+                        await new Promise(resolve => setTimeout(resolve, 500));
+                      } catch (error) {
+                        core.warning(`Failed to delete comment ${comment.id}: ${error.message}`);
+                      }
+                    }
+                    core.info(`Deleted ${staleComments.length} stale comments from PR #${prNumber}`);
+                  }
+                }
+              } catch (error) {
+                core.warning(`Failed to process comments for PR #${prNumber}: ${error.message}`);
+              }
+            }
+            
+            if (!dryRun) {
+              core.info(`Total stale comments deleted: ${totalDeleted}`);
+            }
+
+  re-run-reviews:
+    needs: [analyze-prs, cleanup-comments]
+    if: |
+      always() &&
+      needs.analyze-prs.outputs.keeper_numbers != '[]' &&
+      inputs.dry_run == false &&
+      inputs.re_run_reviews == true
+    runs-on: ubuntu-latest
+    steps:
+      - name: 🔄 Trigger AI Review Pipeline
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const keeperNumbers = JSON.parse('${{ needs.analyze-prs.outputs.keeper_numbers }}');
+            
+            try {
+              await github.rest.actions.createWorkflowDispatch({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                workflow_id: 'ai-pr-review-pipeline.yml',
+                ref: 'main',
+                inputs: {
+                  pr_numbers: keeperNumbers.join(','),
+                  agent_mode: 'review_and_fix'
+                }
+              });
+              
+              core.info(`Triggered AI review pipeline for ${keeperNumbers.length} PRs`);
+              core.info(`PR numbers: ${keeperNumbers.join(', ')}`);
+            } catch (error) {
+              core.warning(`Failed to trigger AI review pipeline: ${error.message}`);
+            }
+
+  generate-summary:
+    needs: [analyze-prs, close-duplicates, cleanup-comments, re-run-reviews]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: 📊 Generate Final Summary
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const plan = JSON.parse('${{ needs.analyze-prs.outputs.consolidation_plan }}');
+            const keeperNumbers = JSON.parse('${{ needs.analyze-prs.outputs.keeper_numbers }}');
+            const dryRun = '${{ inputs.dry_run }}' === 'true';
+            const reRunReviews = '${{ inputs.re_run_reviews }}' === 'true';
+            
+            const closeStatus = '${{ needs.close-duplicates.result }}';
+            const cleanupStatus = '${{ needs.cleanup-comments.result }}';
+            const reviewStatus = '${{ needs.re-run-reviews.result }}';
+            
+            let summary = '# 🎉 PR Consolidation Complete\n\n';
+            summary += `**Mode:** ${dryRun ? 'DRY RUN ⚠️' : 'LIVE RUN ✅'}\n`;
+            summary += `**Timestamp:** ${new Date().toISOString()}\n\n`;
+            
+            summary += '## Results\n\n';
+            if (!dryRun) {
+              summary += `✅ **Closed:** ${plan.summary.prs_to_close} duplicate PRs\n`;
+              summary += `🧹 **Cleaned:** Stale AI review comments from ${keeperNumbers.length} PRs\n`;
+              if (reRunReviews) {
+                summary += `🔄 **Re-reviewed:** ${keeperNumbers.length} remaining PRs with fresh AI analysis\n`;
+              }
+            } else {
+              summary += `📋 **Would close:** ${plan.summary.prs_to_close} duplicate PRs\n`;
+              summary += `🧹 **Would clean:** Stale comments from ${keeperNumbers.length} PRs\n`;
+              if (reRunReviews) {
+                summary += `🔄 **Would re-review:** ${keeperNumbers.length} remaining PRs\n`;
+              }
+            }
+            summary += '\n';
+            
+            summary += '## Job Status\n\n';
+            summary += '| Job | Status |\n';
+            summary += '|-----|--------|\n';
+            summary += `| Close Duplicates | ${closeStatus} |\n`;
+            summary += `| Cleanup Comments | ${cleanupStatus} |\n`;
+            summary += `| Re-run Reviews | ${reviewStatus} |\n\n`;
+            
+            if (keeperNumbers.length > 0) {
+              summary += `## Remaining PRs (${keeperNumbers.length})\n\n`;
+              summary += '| PR | Title | Base Branch | Score |\n';
+              summary += '|----|-------|-------------|-------|\n';
+              
+              for (const group of plan.groups) {
+                summary += `| #${group.keeper.number} | ${group.keeper.title.slice(0, 50)}${group.keeper.title.length > 50 ? '...' : ''} | ${group.base_branch} | ${group.keeper.score} |\n`;
+              }
+              summary += '\n';
+            }
+            
+            if (plan.summary.prs_to_close > 0) {
+              summary += `## Closed PRs (${plan.summary.prs_to_close})\n\n`;
+              
+              for (let i = 0; i < plan.groups.length; i++) {
+                const group = plan.groups[i];
+                if (group.duplicates.length > 0) {
+                  summary += `### ${group.theme}\n`;
+                  for (const dup of group.duplicates) {
+                    summary += `- #${dup.number} - ${dup.title} (score: ${dup.score})\n`;
+                  }
+                  summary += '\n';
+                }
+              }
+            }
+            
+            summary += '## Next Steps\n\n';
+            if (!dryRun) {
+              summary += '1. ✅ Review the remaining PRs\n';
+              summary += '2. ✅ Check fresh AI review comments for accuracy\n';
+              summary += '3. ✅ Merge PRs that are ready\n';
+              summary += '4. 📊 Consider setting up branch protection rules to prevent future PR sprawl\n';
+            } else {
+              summary += '1. 📥 Download the `consolidation-plan.json` artifact\n';
+              summary += '2. 🔍 Review the plan carefully\n';
+              summary += '3. ✅ If satisfied, re-run with `dry_run: false`\n';
+            }
+            
+            summary += '\n---\n';
+            summary += '*View full consolidation plan in artifacts*\n';
+            
+            core.summary.addRaw(summary);
+            await core.summary.write();

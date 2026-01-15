@@ -28,7 +28,6 @@ async def test_read_only_mode_allows_safe_tools():
     # assert decision.action == "allow"
     # assert decision.requires_approval is False
 
-    pass
 
 
 @pytest.mark.asyncio
@@ -49,7 +48,6 @@ async def test_read_only_mode_blocks_sensitive_tools():
     # assert decision.action == "block"
     # assert decision.requires_approval is False
 
-    pass
 
 
 @pytest.mark.asyncio
@@ -69,7 +67,6 @@ async def test_read_only_mode_blocks_dangerous_tools():
 
     # assert decision.action == "block"
 
-    pass
 
 
 @pytest.mark.asyncio
@@ -90,7 +87,6 @@ async def test_permission_mode_allows_safe_tools():
     # assert decision.action == "allow"
     # assert decision.requires_approval is False
 
-    pass
 
 
 @pytest.mark.asyncio
@@ -111,7 +107,6 @@ async def test_permission_mode_requires_approval_for_sensitive():
     # assert decision.action == "require_approval"
     # assert decision.requires_approval is True
 
-    pass
 
 
 @pytest.mark.asyncio
@@ -132,7 +127,6 @@ async def test_permission_mode_requires_approval_for_dangerous():
     # assert decision.action == "require_approval"
     # assert decision.requires_approval is True
 
-    pass
 
 
 @pytest.mark.asyncio
@@ -168,7 +162,6 @@ async def test_bypass_mode_allows_all_tools():
     # )
     # assert decision_dangerous.action == "allow"
 
-    pass
 
 
 @pytest.mark.asyncio
@@ -193,7 +186,6 @@ async def test_bootstrap_tools_always_allowed():
     #         assert decision.action == "allow", \
     #                f"Bootstrap tool {tool_id} should be allowed in {mode}"
 
-    pass
 
 
 @pytest.mark.asyncio
@@ -216,7 +208,6 @@ async def test_policy_decision_includes_reason():
     # assert "read-only" in decision.reason.lower() or \
     #        "blocked" in decision.reason.lower()
 
-    pass
 
 
 @pytest.mark.asyncio
@@ -244,7 +235,6 @@ async def test_policy_matrix_completeness():
     #         assert isinstance(decision.requires_approval, bool)
     #         assert decision.reason is not None
 
-    pass
 
 
 @pytest.mark.asyncio
@@ -265,4 +255,3 @@ async def test_unknown_risk_level_fails_safe():
     # Should fail-safe to require approval or block
     # assert decision.action in ["block", "require_approval"]
 
-    pass

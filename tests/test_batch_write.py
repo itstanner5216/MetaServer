@@ -7,7 +7,9 @@ Tests:
 - Error handling
 - Validation of batch updates
 """
+
 import pytest
+
 from src.meta_mcp.registry.models import ToolRecord
 from src.meta_mcp.registry.registry import ToolRegistry
 
@@ -27,7 +29,7 @@ class TestBatchWrite:
                 description_1line="Read files from disk",
                 description_full="Read text and binary files",
                 tags=["file", "read"],
-                risk_level="safe"
+                risk_level="safe",
             ),
             ToolRecord(
                 tool_id="write_file",
@@ -35,8 +37,8 @@ class TestBatchWrite:
                 description_1line="Write files to disk",
                 description_full="Write text and binary files",
                 tags=["file", "write"],
-                risk_level="sensitive"
-            )
+                risk_level="sensitive",
+            ),
         ]
 
         for tool in tools:
@@ -50,7 +52,7 @@ class TestBatchWrite:
 
         updates = {
             "read_file": {"description_1line": "Read files from storage"},
-            "write_file": {"description_1line": "Write files to storage"}
+            "write_file": {"description_1line": "Write files to storage"},
         }
 
         result = batch_update_tools(sample_registry, updates)
@@ -66,7 +68,7 @@ class TestBatchWrite:
 
         updates = {
             "read_file": {"description_1line": "Updated description"},
-            "nonexistent": {"description_1line": "This should fail"}
+            "nonexistent": {"description_1line": "This should fail"},
         }
 
         result = batch_update_tools(sample_registry, updates)
@@ -88,9 +90,7 @@ class TestBatchWrite:
         from src.meta_mcp.macros.batch_write import batch_update_tools
 
         # Try to set invalid risk level
-        updates = {
-            "read_file": {"risk_level": "invalid_level"}
-        }
+        updates = {"read_file": {"risk_level": "invalid_level"}}
 
         result = batch_update_tools(sample_registry, updates)
 
@@ -103,9 +103,7 @@ class TestBatchWrite:
 
         original_tags = sample_registry.get("read_file").tags.copy()
 
-        updates = {
-            "read_file": {"description_1line": "New description"}
-        }
+        updates = {"read_file": {"description_1line": "New description"}}
 
         batch_update_tools(sample_registry, updates)
 
@@ -121,7 +119,7 @@ class TestBatchWrite:
         # Mix of valid and invalid updates
         updates = {
             "read_file": {"description_1line": "Updated"},
-            "write_file": {"risk_level": "invalid"}  # This should fail
+            "write_file": {"risk_level": "invalid"},  # This should fail
         }
 
         result = batch_update_tools(sample_registry, updates, atomic=True)
@@ -134,9 +132,7 @@ class TestBatchWrite:
         """Test batch write returns detailed results."""
         from src.meta_mcp.macros.batch_write import batch_update_tools
 
-        updates = {
-            "read_file": {"description_1line": "Updated description"}
-        }
+        updates = {"read_file": {"description_1line": "Updated description"}}
 
         result = batch_update_tools(sample_registry, updates)
 

@@ -7,6 +7,7 @@ Verifies Redis connectivity and basic operations using async client.
 import asyncio
 import os
 import sys
+
 from redis import asyncio as aioredis
 
 
@@ -26,11 +27,7 @@ async def verify_connection():
 
     try:
         # Create Redis client
-        redis_client = aioredis.from_url(
-            redis_url,
-            encoding="utf-8",
-            decode_responses=True
-        )
+        redis_client = aioredis.from_url(redis_url, encoding="utf-8", decode_responses=True)
 
         # Test 1: PING command
         print("\n[1/4] Testing PING command...")
@@ -47,7 +44,7 @@ async def verify_connection():
         test_value = "verification_value"
         print(f"\n[2/4] Setting test key '{test_key}' with 10-second TTL...")
         await redis_client.setex(test_key, 10, test_value)
-        print(f"✓ Successfully set key with TTL")
+        print("✓ Successfully set key with TTL")
 
         # Test 3: GET and verify
         print(f"\n[3/4] Getting test key '{test_key}'...")
@@ -63,16 +60,16 @@ async def verify_connection():
         print(f"\n[4/4] Deleting test key '{test_key}'...")
         deleted = await redis_client.delete(test_key)
         if deleted:
-            print(f"✓ Successfully deleted test key")
+            print("✓ Successfully deleted test key")
         else:
-            print(f"✗ Failed to delete test key")
+            print("✗ Failed to delete test key")
 
         # Close connection
         await redis_client.close()
 
-        print("\n" + "="*50)
+        print("\n" + "=" * 50)
         print("✓ Redis Connection Status: OPERATIONAL")
-        print("="*50)
+        print("=" * 50)
         return True
 
     except aioredis.ConnectionError as e:
