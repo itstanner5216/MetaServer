@@ -111,7 +111,7 @@ pip install -e ".[gui-approval]"
 - GNOME Shell (tested on version 40+)
 - Wayland session
 - DBus session bus access
-- GNOME Shell extension (see `GUIPlan/` directory for installation)
+- GNOME Shell extension (installation notes forthcoming)
 
 **Fallback Options:**
 If GUI approval is not available, the system automatically falls back to:
@@ -296,18 +296,9 @@ all required scopes must be selected and rejects any extra scopes.
 ## Documentation
 
 ### Core Documentation
-- `.MCP/DEVELOPER_REFERENCE.md` - Complete developer guide with patterns and gotchas
-- `.MCP/ARCHITECTURE_MAP.md` - Directory structure and component layout
-- `.MCP/GAP_ANALYSIS_REPORT.md` - Implementation status and gaps
-- `.MCP/IMPLEMENTATION_PLAN.md` - Current TODO lists and planning
-
-### GUI Approval System
-- `GUIPlan/APPROVAL_SYSTEM.md` - Complete GUI approval system guide
-  - Approval provider architecture and selection
-  - **Server-side scope enforcement** (ALL required scopes must be approved)
-  - Lease semantics (single-use vs persistent elevations)
-  - Security model and fail-safe defaults
-  - Deployment guide and troubleshooting
+- `AGENT_ARCHITECTURE_DESIGN.md` - Architecture design for the agent runtime and governance integration
+- `tests/SECURITY_TESTS_README.md` - Security test coverage and execution notes
+- `config/client_configs.md` - Client configuration examples
 
 ## Testing
 
