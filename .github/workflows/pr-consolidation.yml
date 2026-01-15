@@ -1,0 +1,380 @@
+name: 🧹 PR Consolidation & Cleanup
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Dry run mode (analyze only, do not close PRs)'
+        required: false
+        type: boolean
+        default: true
+      min_prs_to_keep:
+        description: 'Minimum number of PRs to keep (target)'
+        required: false
+        type: number
+        default: 10
+      max_prs_to_keep:
+        description: 'Maximum number of PRs to keep'
+        required: false
+        type: number
+        default: 15
+
+permissions:
+  pull-requests: write
+  issues: write
+  contents: read
+
+jobs:
+  analyze-prs:
+    name: Analyze Open PRs
+    runs-on: ubuntu-latest
+    outputs:
+      consolidation_plan: ${{ steps.analyze.outputs.plan }}
+      prs_to_keep: ${{ steps.analyze.outputs.keep }}
+      prs_to_close: ${{ steps.analyze.outputs.close }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      
+      - name: Install dependencies
+        run: |
+          pip install pyyaml requests python-Levenshtein
+      
+      - name: Analyze PRs and create consolidation plan
+        id: analyze
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            
+            // Fetch ALL open PRs (paginated)
+            const allPRs = [];
+            let page = 1;
+            while (true) {
+              const { data: prs } = await github.rest.pulls.list({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                state: 'open',
+                per_page: 100,
+                page: page
+              });
+              if (prs.length === 0) break;
+              allPRs.push(...prs);
+              page++;
+            }
+            
+            console.log(`Found ${allPRs.length} open PRs`);
+            
+            // Group PRs by similarity
+            const groups = [];
+            const processed = new Set();
+            
+            // Helper: Calculate similarity score between two PR titles/bodies
+            function similarity(pr1, pr2) {
+              const text1 = `${pr1.title} ${pr1.body || ''}`.toLowerCase();
+              const text2 = `${pr2.title} ${pr2.body || ''}`.toLowerCase();
+              
+              // Check for common keywords
+              const keywords1 = new Set(text1.match(/\b\w{4,}\b/g) || []);
+              const keywords2 = new Set(text2.match(/\b\w{4,}\b/g) || []);
+              const intersection = new Set([...keywords1].filter(k => keywords2.has(k)));
+              const union = new Set([...keywords1, ...keywords2]);
+              
+              if (union.size === 0) return 0;
+              return intersection.size / union.size;
+            }
+            
+            // Helper: Score PR quality
+            function scorePR(pr) {
+              let score = 0;
+              
+              // Prefer non-draft
+              if (!pr.draft) score += 10;
+              
+              // Prefer recent PRs
+              const ageInDays = (Date.now() - new Date(pr.created_at)) / (1000 * 60 * 60 * 24);
+              score += Math.max(0, 10 - ageInDays);
+              
+              // Prefer PRs with fewer changes (simpler)
+              score += Math.max(0, 5 - (pr.changed_files / 10));
+              
+              // Prefer PRs targeting main
+              if (pr.base.ref === 'main') score += 15;
+              
+              // Prefer PRs with assignees/reviews
+              if (pr.assignees && pr.assignees.length > 0) score += 5;
+              
+              // Penalize very old PRs
+              if (ageInDays > 7) score -= 10;
+              
+              return score;
+            }
+            
+            // Group similar PRs
+            for (const pr of allPRs) {
+              if (processed.has(pr.number)) continue;
+              
+              const group = [pr];
+              processed.add(pr.number);
+              
+              for (const otherPR of allPRs) {
+                if (processed.has(otherPR.number)) continue;
+                if (pr.base.ref !== otherPR.base.ref) continue; // Different base branch
+                
+                const sim = similarity(pr, otherPR);
+                if (sim > 0.4) { // 40% similarity threshold
+                  group.push(otherPR);
+                  processed.add(otherPR.number);
+                }
+              }
+              
+              groups.push(group);
+            }
+            
+            console.log(`Grouped ${allPRs.length} PRs into ${groups.length} groups`);
+            
+            // For each group, pick the best PR
+            const toKeep = [];
+            const toClose = [];
+            
+            for (const group of groups) {
+              if (group.length === 1) {
+                toKeep.push(group[0]);
+                continue;
+              }
+              
+              // Sort by quality score
+              group.sort((a, b) => scorePR(b) - scorePR(a));
+              const best = group[0];
+              const duplicates = group.slice(1);
+              
+              toKeep.push(best);
+              toClose.push(...duplicates.map(pr => ({
+                ...pr,
+                closeReason: `Duplicate of #${best.number} (${best.title})`,
+                similarTo: best.number
+              })));
+            }
+            
+            console.log(`Plan: Keep ${toKeep.length}, Close ${toClose.length}`);
+            
+            // Create consolidation plan
+            const plan = {
+              total_prs: allPRs.length,
+              groups: groups.length,
+              to_keep: toKeep.map(pr => ({ number: pr.number, title: pr.title, score: scorePR(pr) })),
+              to_close: toClose.map(pr => ({ number: pr.number, title: pr.title, reason: pr.closeReason, similar_to: pr.similarTo }))
+            };
+            
+            // Save plan
+            fs.writeFileSync('consolidation_plan.json', JSON.stringify(plan, null, 2));
+            
+            // Set outputs
+            core.setOutput('plan', JSON.stringify(plan));
+            core.setOutput('keep', JSON.stringify(toKeep.map(pr => pr.number)));
+            core.setOutput('close', JSON.stringify(toClose.map(pr => ({ number: pr.number, reason: pr.closeReason }))));
+      
+      - name: Upload consolidation plan
+        uses: actions/upload-artifact@v4
+        with:
+          name: consolidation-plan
+          path: consolidation_plan.json
+      
+      - name: Display plan summary
+        run: |
+          echo "📊 Consolidation Plan Summary"
+          cat consolidation_plan.json | python3 -m json.tool
+
+  close-duplicates:
+    name: Close Duplicate PRs
+    needs: analyze-prs
+    if: inputs.dry_run == false
+    runs-on: ubuntu-latest
+    steps:
+      - name: Close duplicate PRs
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const toClose = JSON.parse('${{ needs.analyze-prs.outputs.prs_to_close }}');
+            
+            console.log(`Closing ${toClose.length} duplicate PRs...`);
+            
+            for (const pr of toClose) {
+              console.log(`Closing PR #${pr.number}: ${pr.reason}`);
+              
+              // Add comment explaining closure
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: pr.number,
+                body: [
+                  '## 🧹 PR Consolidation',
+                  '',
+                  `This PR is being closed as a duplicate.`,
+                  '',
+                  `**Reason:** ${pr.reason}`,
+                  '',
+                  'This is part of an automated PR consolidation effort to reduce noise and focus on the best solutions.',
+                  '',
+                  'If you believe this PR should remain open, please comment and we can review.',
+                  '',
+                  '---',
+                  '*Closed by automated PR consolidation workflow*'
+                ].join('\n')
+              });
+              
+              // Close the PR
+              await github.rest.pulls.update({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                pull_number: pr.number,
+                state: 'closed'
+              });
+              
+              // Rate limit: wait 1 second between closures
+              await new Promise(resolve => setTimeout(resolve, 1000));
+            }
+            
+            console.log(`✅ Closed ${toClose.length} PRs`);
+
+  cleanup-comments:
+    name: Delete AI Review Comments
+    needs: [analyze-prs, close-duplicates]
+    if: always() && needs.analyze-prs.result == 'success'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Delete AI review comments from remaining PRs
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const toKeep = JSON.parse('${{ needs.analyze-prs.outputs.prs_to_keep }}');
+            const dryRun = ${{ inputs.dry_run }};
+            
+            console.log(`Cleaning comments from ${toKeep.length} PRs (dry_run: ${dryRun})...`);
+            
+            for (const prNumber of toKeep) {
+              console.log(`Processing PR #${prNumber}`);
+              
+              // Fetch all comments
+              const { data: comments } = await github.rest.issues.listComments({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: prNumber,
+                per_page: 100
+              });
+              
+              // Filter for AI review pipeline comments
+              const aiComments = comments.filter(comment => 
+                comment.body.includes('AI-Powered PR Review Pipeline') ||
+                comment.body.includes('Validation Agent') ||
+                comment.body.includes('Remediation Agent') ||
+                comment.body.includes('Architectural Guardian') ||
+                comment.body.includes('Functional Verifier')
+              );
+              
+              console.log(`  Found ${aiComments.length} AI review comments`);
+              
+              if (!dryRun) {
+                for (const comment of aiComments) {
+                  await github.rest.issues.deleteComment({
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                    comment_id: comment.id
+                  });
+                  console.log(`  Deleted comment ${comment.id}`);
+                }
+              }
+              
+              // Rate limit
+              await new Promise(resolve => setTimeout(resolve, 500));
+            }
+            
+            console.log(`✅ Cleaned ${toKeep.length} PRs`);
+
+  re-run-reviews:
+    name: Re-run AI PR Reviews
+    needs: [analyze-prs, close-duplicates, cleanup-comments]
+    if: always() && needs.analyze-prs.result == 'success' && inputs.dry_run == false
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger AI PR review pipeline
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const toKeep = JSON.parse('${{ needs.analyze-prs.outputs.prs_to_keep }}');
+            
+            console.log(`Triggering AI review pipeline for ${toKeep.length} PRs...`);
+            
+            // Trigger workflow for all remaining PRs
+            await github.rest.actions.createWorkflowDispatch({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              workflow_id: 'ai-pr-review-pipeline.yml',
+              ref: 'main',
+              inputs: {
+                pr_numbers: toKeep.join(','),
+                agent_mode: 'review_and_fix'
+              }
+            });
+            
+            console.log('✅ AI review pipeline triggered');
+
+  summary:
+    name: Generate Summary
+    needs: [analyze-prs, close-duplicates, cleanup-comments, re-run-reviews]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Generate summary
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const plan = JSON.parse('${{ needs.analyze-prs.outputs.plan }}');
+            const dryRun = ${{ inputs.dry_run }};
+            
+            let summary = '# 🧹 PR Consolidation Summary\n\n';
+            summary += `**Mode:** ${dryRun ? '🔍 DRY RUN (no changes made)' : '✅ EXECUTED'}\n\n`;
+            summary += `## Results\n\n`;
+            summary += `- **Total PRs analyzed:** ${plan.total_prs}\n`;
+            summary += `- **Groups identified:** ${plan.groups}\n`;
+            summary += `- **PRs to keep:** ${plan.to_keep.length}\n`;
+            summary += `- **PRs to close:** ${plan.to_close.length}\n\n`;
+            
+            summary += `## PRs Being Kept (${plan.to_keep.length})\n\n`;
+            summary += '| PR | Title | Quality Score |\n';
+            summary += '|----|-------|---------------|\n';
+            for (const pr of plan.to_keep) {
+              summary += `| #${pr.number} | ${pr.title} | ${pr.score.toFixed(1)} |\n`;
+            }
+            
+            summary += `\n## PRs Being Closed (${plan.to_close.length})\n\n`;
+            if (plan.to_close.length > 0) {
+              summary += '| PR | Title | Reason |\n';
+              summary += '|----|-------|--------|\n';
+              for (const pr of plan.to_close.slice(0, 20)) {
+                summary += `| #${pr.number} | ${pr.title} | ${pr.reason} |\n`;
+              }
+              if (plan.to_close.length > 20) {
+                summary += `\n*... and ${plan.to_close.length - 20} more*\n`;
+              }
+            }
+            
+            summary += '\n## Next Steps\n\n';
+            if (dryRun) {
+              summary += '1. Review the consolidation plan above\n';
+              summary += '2. If satisfied, re-run this workflow with `dry_run: false`\n';
+              summary += '3. Monitor the AI review pipeline for fresh reviews\n';
+            } else {
+              summary += '1. ✅ Duplicate PRs have been closed\n';
+              summary += '2. ✅ AI review comments have been deleted\n';
+              summary += '3. ✅ AI review pipeline has been triggered for remaining PRs\n';
+              summary += '4. Monitor PR comments for fresh reviews\n';
+            }
+            
+            core.summary.addRaw(summary);
+            await core.summary.write();
