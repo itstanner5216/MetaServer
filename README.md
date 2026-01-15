@@ -296,7 +296,7 @@ all required scopes must be selected and rejects any extra scopes.
 ## Documentation
 
 ### Core Documentation
-- `AGENT_ARCHITECTURE_DESIGN.md` - Architecture design for the agent runtime and governance integration
+- `docs/architecture/AGENT_ARCHITECTURE_DESIGN.md` - Architecture design for the agent runtime and governance integration
 - `tests/SECURITY_TESTS_README.md` - Security test coverage and execution notes
 - `config/client_configs.md` - Client configuration examples
 
