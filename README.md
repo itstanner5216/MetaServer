@@ -83,6 +83,30 @@ See **[docs/AGENT_SYSTEM.md](docs/AGENT_SYSTEM.md)** for complete documentation 
 - ✅ **Bundle related changes** for easier review
 - ✅ **Maintain code quality** with comprehensive validation
 
+## 🔄 PR Consolidation System
+
+MetaServer includes automation to manage duplicate PRs and keep the PR list clean:
+
+### Features
+
+- **Duplicate Detection** 🔍: Automatically identifies PRs addressing the same issue
+- **Smart Selection** 🎯: Keeps the best PR from each group based on quality metrics
+- **Auto-Cleanup** 🧹: Removes stale AI review comments
+- **Safe by Default** 🛡️: Dry-run mode prevents accidental changes
+- **Full Audit Trail** 📊: Generates comprehensive summaries of actions taken
+
+### Quick Start
+
+Navigate to **Actions** → **🔄 PR Consolidation and Cleanup** → **Run workflow**
+
+**Modes:**
+- `analyze_only` - Shows what would be closed (no changes)
+- `consolidate_prs` - Closes duplicate PRs
+- `cleanup_comments` - Removes old AI review comments
+- `full_process` - Does all of the above + re-runs AI review
+
+See **[docs/PR_CONSOLIDATION.md](docs/PR_CONSOLIDATION.md)** for complete documentation.
+
 ## Installation
 
 ### Base Installation
