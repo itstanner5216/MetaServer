@@ -126,9 +126,10 @@ jobs:
             cat agent_error.log
             
             # Create error result file using Python for proper JSON generation
-            python << PYEOF
+            EXIT_CODE=$exit_code python << 'PYEOF'
           import json
           import sys
+          import os
           
           # Read error log
           try:
@@ -137,13 +138,16 @@ jobs:
           except Exception as e:
               error_log = f"Failed to read error log: {e}"
           
+          # Get exit code from environment
+          exit_code = os.environ.get('EXIT_CODE', 'unknown')
+          
           # Create error result
           error_result = {
               "agent": "${{ matrix.agent }}",
               "pr": int("${{ matrix.pr }}"),
               "verdict": "ERROR",
               "summary": "Agent execution failed - see workflow logs for details",
-              "error": "Exit code: $exit_code",
+              "error": f"Exit code: {exit_code}",
               "error_log": error_log,
               "findings": []
           }
