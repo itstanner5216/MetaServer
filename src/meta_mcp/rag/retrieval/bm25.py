@@ -6,10 +6,9 @@ Implements the BM25 (Best Matching 25) algorithm for lexical search.
 Used alongside semantic search for hybrid ranking.
 """
 
+import logging
 import math
 import re
-import logging
-from typing import List, Dict, Tuple, Optional
 from collections import Counter
 from dataclasses import dataclass, field
 
@@ -43,11 +42,13 @@ class BM25Index:
     b: float = 0.75
 
     # Index storage
-    _documents: Dict[str, List[str]] = field(default_factory=dict)  # chunk_id -> tokenized words
-    _doc_lengths: Dict[str, int] = field(default_factory=dict)  # chunk_id -> word count
+    _documents: dict[str, list[str]] = field(default_factory=dict)  # chunk_id -> tokenized words
+    _doc_lengths: dict[str, int] = field(default_factory=dict)  # chunk_id -> word count
     _avg_doc_length: float = 0.0
-    _doc_freqs: Dict[str, int] = field(default_factory=dict)  # term -> number of docs containing term
-    _idf_cache: Dict[str, float] = field(default_factory=dict)  # term -> IDF score
+    _doc_freqs: dict[str, int] = field(
+        default_factory=dict
+    )  # term -> number of docs containing term
+    _idf_cache: dict[str, float] = field(default_factory=dict)  # term -> IDF score
     _total_docs: int = 0
     _is_built: bool = False
 
@@ -58,7 +59,7 @@ class BM25Index:
         self._doc_freqs = {}
         self._idf_cache = {}
 
-    def _tokenize(self, text: str) -> List[str]:
+    def _tokenize(self, text: str) -> list[str]:
         """
         Tokenize text for BM25 indexing.
 
@@ -76,14 +77,14 @@ class BM25Index:
 
         # Convert to lowercase and split on non-alphanumeric
         text = text.lower()
-        tokens = re.findall(r'[a-z0-9_]+', text)
+        tokens = re.findall(r"[a-z0-9_]+", text)
 
         # Filter out very short tokens (single chars except common ones)
-        tokens = [t for t in tokens if len(t) > 1 or t in {'a', 'i'}]
+        tokens = [t for t in tokens if len(t) > 1 or t in {"a", "i"}]
 
         return tokens
 
-    def build_index(self, chunks: List[Dict]) -> None:
+    def build_index(self, chunks: list[dict]) -> None:
         """
         Build BM25 index from chunk texts.
 
@@ -138,9 +139,7 @@ class BM25Index:
         # Pre-compute IDF scores
         for term, df in self._doc_freqs.items():
             # IDF with smoothing to avoid division by zero
-            self._idf_cache[term] = math.log(
-                (self._total_docs - df + 0.5) / (df + 0.5) + 1
-            )
+            self._idf_cache[term] = math.log((self._total_docs - df + 0.5) / (df + 0.5) + 1)
 
         self._is_built = True
         logger.info(
@@ -149,7 +148,7 @@ class BM25Index:
             f"avg length {self._avg_doc_length:.1f}"
         )
 
-    def search(self, query: str, top_k: int = 30) -> List[Tuple[str, float]]:
+    def search(self, query: str, top_k: int = 30) -> list[tuple[str, float]]:
         """
         Search for chunks matching query using BM25 scoring.
 
@@ -171,7 +170,7 @@ class BM25Index:
         if not query_tokens:
             return []
 
-        scores: Dict[str, float] = {}
+        scores: dict[str, float] = {}
 
         for chunk_id, doc_tokens in self._documents.items():
             score = self._score_document(query_tokens, doc_tokens, chunk_id)
@@ -179,19 +178,12 @@ class BM25Index:
                 scores[chunk_id] = score
 
         # Sort by score descending and return top_k
-        sorted_results = sorted(
-            scores.items(),
-            key=lambda x: x[1],
-            reverse=True
-        )
+        sorted_results = sorted(scores.items(), key=lambda x: x[1], reverse=True)
 
         return sorted_results[:top_k]
 
     def _score_document(
-        self,
-        query_tokens: List[str],
-        doc_tokens: List[str],
-        chunk_id: str
+        self, query_tokens: list[str], doc_tokens: list[str], chunk_id: str
     ) -> float:
         """
         Compute BM25 score for a single document.
@@ -227,9 +219,7 @@ class BM25Index:
 
             # BM25 scoring formula
             numerator = tf * (self.k1 + 1)
-            denominator = tf + self.k1 * (
-                1 - self.b + self.b * (doc_length / self._avg_doc_length)
-            )
+            denominator = tf + self.k1 * (1 - self.b + self.b * (doc_length / self._avg_doc_length))
 
             score += idf * (numerator / denominator)
 
@@ -275,9 +265,7 @@ class BM25Index:
         # Recompute IDF for affected terms
         for term in unique_terms:
             df = self._doc_freqs[term]
-            self._idf_cache[term] = math.log(
-                (self._total_docs - df + 0.5) / (df + 0.5) + 1
-            )
+            self._idf_cache[term] = math.log((self._total_docs - df + 0.5) / (df + 0.5) + 1)
 
         logger.debug(f"Updated BM25 index with chunk {chunk_id}")
 
@@ -317,14 +305,12 @@ class BM25Index:
             else:
                 # Recompute IDF for this term
                 df = self._doc_freqs[term]
-                self._idf_cache[term] = math.log(
-                    (self._total_docs - df + 0.5) / (df + 0.5) + 1
-                )
+                self._idf_cache[term] = math.log((self._total_docs - df + 0.5) / (df + 0.5) + 1)
 
         logger.debug(f"Removed chunk {chunk_id} from BM25 index")
         return True
 
-    def get_index_stats(self) -> Dict:
+    def get_index_stats(self) -> dict:
         """
         Get statistics about the current index.
 

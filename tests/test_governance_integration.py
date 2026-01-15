@@ -50,7 +50,6 @@ async def test_governance_check_before_lease_grant():
     # lease = await lease_manager.validate("test_client_id", "write_file")
     # assert lease is None, "Should not grant lease for blocked tool"
 
-    pass
 
 
 @pytest.mark.asyncio
@@ -101,7 +100,6 @@ async def test_token_verification_at_call_time():
     # Now when tool is called, middleware should verify token from lease
     # This is tested in middleware integration tests
 
-    pass
 
 
 @pytest.mark.asyncio
@@ -137,7 +135,6 @@ async def test_read_only_mode_blocks_sensitive_tools():
     #         assert response.get("status") == "success", \
     #                f"Safe tool {tool.name} should be allowed in READ_ONLY"
 
-    pass
 
 
 @pytest.mark.asyncio
@@ -171,7 +168,6 @@ async def test_bypass_mode_skips_governance():
     # assert lease is not None
     # assert lease.mode_at_issue == "BYPASS"
 
-    pass
 
 
 @pytest.mark.asyncio
@@ -205,7 +201,6 @@ async def test_mode_change_affects_new_lease_grants():
     # assert response2.get("status") == "success", \
     #        "BYPASS mode should grant lease without approval"
 
-    pass
 
 
 @pytest.mark.asyncio
@@ -246,7 +241,6 @@ async def test_existing_leases_remain_valid_after_mode_change():
     # Note: Tool CALL might still be blocked by middleware governance check
     # This test only verifies lease validity, not tool execution permission
 
-    pass
 
 
 @pytest.mark.asyncio
@@ -288,7 +282,6 @@ async def test_policy_matrix_integration():
     # response = await get_tool_schema.fn(tool_name="delete_file")
     # assert response.get("status") == "success"
 
-    pass
 
 
 @pytest.mark.asyncio
@@ -320,7 +313,6 @@ async def test_lease_ttl_based_on_risk_level():
     # lease_sensitive = await lease_manager.validate("test_client_id", "write_file")
     # assert lease_sensitive.calls_remaining == Config.LEASE_CALLS_BY_RISK["sensitive"]
 
-    pass
 
 
 @pytest.mark.asyncio
@@ -352,7 +344,6 @@ async def test_governance_fail_safe_on_redis_error():
     #     # Should require approval (fail-safe behavior)
     #     assert response.get("status") in ["approval_required", "error"]
 
-    pass
 
 
 @pytest.mark.asyncio
@@ -395,4 +386,3 @@ async def test_token_required_in_permission_mode():
     # )
     # assert response2.get("status") == "success"
 
-    pass

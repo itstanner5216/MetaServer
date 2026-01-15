@@ -5,7 +5,7 @@ import hashlib
 import hmac
 import json
 import time
-from typing import Any, Dict, Optional
+from typing import Any
 
 from loguru import logger
 
@@ -15,7 +15,7 @@ def generate_token(
     tool_id: str,
     ttl_seconds: int,
     secret: str,
-    context_key: Optional[str] = None,
+    context_key: str | None = None,
 ) -> str:
     """
     Generate HMAC-SHA256 signed capability token.
@@ -78,7 +78,7 @@ def verify_token(
     client_id: str,
     tool_id: str,
     secret: str,
-    context_key: Optional[str] = None,
+    context_key: str | None = None,
 ) -> bool:
     """
     Verify capability token signature and claims.
@@ -179,7 +179,7 @@ def verify_token(
         return False
 
 
-def decode_token(token: str) -> Optional[Dict[str, Any]]:
+def decode_token(token: str) -> dict[str, Any] | None:
     """
     Decode token payload WITHOUT verification.
 

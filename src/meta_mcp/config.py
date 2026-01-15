@@ -1,6 +1,6 @@
 """Centralized configuration for MetaMCP."""
+
 import os
-from typing import Dict
 
 
 class Config:
@@ -35,6 +35,11 @@ class Config:
     # ========================================================================
     REDIS_URL: str = os.getenv("REDIS_URL", "redis://localhost:6379")
     REDIS_DB: int = 0
+    REDIS_MAX_CONNECTIONS: int = int(os.getenv("REDIS_MAX_CONNECTIONS", "100"))
+    REDIS_SOCKET_CONNECT_TIMEOUT: float = float(
+        os.getenv("REDIS_SOCKET_CONNECT_TIMEOUT", "2")
+    )
+    REDIS_SOCKET_TIMEOUT: float = float(os.getenv("REDIS_SOCKET_TIMEOUT", "2"))
 
     # ========================================================================
     # Governance Configuration
@@ -46,21 +51,19 @@ class Config:
     # ========================================================================
     # Lease Configuration (Phase 3)
     # ========================================================================
-    LEASE_TTL_BY_RISK: Dict[str, int] = {
-        "safe": 300,      # 5 minutes, 3 calls
+    LEASE_TTL_BY_RISK: dict[str, int] = {
+        "safe": 300,  # 5 minutes, 3 calls
         "sensitive": 300,  # 5 minutes, 1 call
-        "dangerous": 120   # 2 minutes, 1 call
+        "dangerous": 120,  # 2 minutes, 1 call
     }
-    LEASE_CALLS_BY_RISK: Dict[str, int] = {
-        "safe": 3,
-        "sensitive": 1,
-        "dangerous": 1
-    }
+    LEASE_CALLS_BY_RISK: dict[str, int] = {"safe": 3, "sensitive": 1, "dangerous": 1}
 
     # ========================================================================
     # HMAC Secret for Capability Tokens (Phase 4)
     # ========================================================================
-    HMAC_SECRET: str = os.getenv("HMAC_SECRET", "default_dev_secret_change_in_production_32bytes_minimum")
+    HMAC_SECRET: str = os.getenv(
+        "HMAC_SECRET", "default_dev_secret_change_in_production_32bytes_minimum"
+    )
 
     # ========================================================================
     # Progressive Schemas (Phase 5)
@@ -78,9 +81,9 @@ class Config:
     # Feature Flags (Phase 9)
     # ========================================================================
     ENABLE_SEMANTIC_RETRIEVAL: bool = False  # Phase 2
-    ENABLE_LEASE_MANAGEMENT: bool = True     # Phase 3
-    ENABLE_PROGRESSIVE_SCHEMAS: bool = False # Phase 5
-    ENABLE_MACROS: bool = True               # Phase 7
+    ENABLE_LEASE_MANAGEMENT: bool = True  # Phase 3
+    ENABLE_PROGRESSIVE_SCHEMAS: bool = False  # Phase 5
+    ENABLE_MACROS: bool = True  # Phase 7
 
     @classmethod
     def validate(cls) -> bool:
@@ -101,7 +104,9 @@ class Config:
 
         # Validate HMAC secret
         is_production = os.getenv("ENVIRONMENT", "").lower() == "production"
-        is_default_secret = cls.HMAC_SECRET == "default_dev_secret_change_in_production_32bytes_minimum"
+        is_default_secret = (
+            cls.HMAC_SECRET == "default_dev_secret_change_in_production_32bytes_minimum"
+        )
 
         if is_production and (not cls.HMAC_SECRET or is_default_secret):
             errors.append(
@@ -110,6 +115,7 @@ class Config:
             )
         elif not cls.HMAC_SECRET:
             import warnings
+
             warnings.warn(
                 "HMAC_SECRET not set - capability tokens will fail in Phase 4. "
                 "Set HMAC_SECRET environment variable for production use."
@@ -122,6 +128,7 @@ class Config:
             )
         elif len(cls.HMAC_SECRET) < 32:
             import warnings
+
             warnings.warn(
                 f"HMAC_SECRET is only {len(cls.HMAC_SECRET)} characters. "
                 "For security, use at least 32 characters (256 bits)."
@@ -139,6 +146,21 @@ class Config:
         # Validate ELICITATION_TIMEOUT
         if cls.ELICITATION_TIMEOUT <= 0:
             errors.append(f"ELICITATION_TIMEOUT must be > 0, got {cls.ELICITATION_TIMEOUT}")
+
+        # Validate Redis settings
+        if cls.REDIS_MAX_CONNECTIONS <= 0:
+            errors.append(
+                f"REDIS_MAX_CONNECTIONS must be > 0, got {cls.REDIS_MAX_CONNECTIONS}"
+            )
+        if cls.REDIS_SOCKET_CONNECT_TIMEOUT <= 0:
+            errors.append(
+                "REDIS_SOCKET_CONNECT_TIMEOUT must be > 0, "
+                f"got {cls.REDIS_SOCKET_CONNECT_TIMEOUT}"
+            )
+        if cls.REDIS_SOCKET_TIMEOUT <= 0:
+            errors.append(
+                f"REDIS_SOCKET_TIMEOUT must be > 0, got {cls.REDIS_SOCKET_TIMEOUT}"
+            )
 
         if errors:
             raise ValueError(f"Config validation failed: {'; '.join(errors)}")

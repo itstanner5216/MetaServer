@@ -1,0 +1,73 @@
+name: 🚀 Full PR Cleanup & Refresh
+
+on:
+  workflow_dispatch:
+    inputs:
+      skip_consolidation:
+        description: 'Skip PR consolidation (already done)'
+        type: boolean
+        default: false
+
+permissions:
+  pull-requests: write
+  issues: write
+  actions: write
+  contents: read
+
+jobs:
+  step1-consolidate:
+    name: "Step 1: Consolidate PRs"
+    if: inputs.skip_consolidation != true
+    uses: ./.github/workflows/pr-consolidation.yml
+    with:
+      dry_run: false
+      auto_approve: true
+  
+  step2-cleanup-comments:
+    name: "Step 2: Clean Comments"
+    needs: step1-consolidate
+    if: always() && !cancelled() && (needs.step1-consolidate.result == 'success' || needs.step1-consolidate.result == 'skipped')
+    uses: ./.github/workflows/cleanup-pr-comments.yml
+    with:
+      pr_numbers: 'all'
+  
+  step3-rerun-reviews:
+    name: "Step 3: Re-run Reviews"
+    needs: step2-cleanup-comments
+    if: always() && needs.step2-cleanup-comments.result == 'success'
+    uses: ./.github/workflows/rerun-pr-reviews.yml
+    with:
+      pr_numbers: 'all'
+      agent_mode: 'review_and_fix'
+  
+  summary:
+    name: "Final Summary"
+    needs: [step1-consolidate, step2-cleanup-comments, step3-rerun-reviews]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Generate Summary
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const summary = [
+              '# 🚀 Full PR Cleanup Complete',
+              '',
+              '## Steps Completed',
+              '| Step | Status |',
+              '|------|--------|',
+              `| 1. Consolidate PRs | ${{ needs.step1-consolidate.result }} |`,
+              `| 2. Clean Comments | ${{ needs.step2-cleanup-comments.result }} |`,
+              `| 3. Re-run Reviews | ${{ needs.step3-rerun-reviews.result }} |`,
+              '',
+              '## Results',
+              '✅ All remaining PRs now have fresh, accurate AI review comments!',
+              '',
+              '## Next Steps',
+              '- Review the workflow run logs for details',
+              '- Check PRs for fresh AI review comments',
+              '- Monitor the Actions tab for triggered review pipeline runs'
+            ].join('\n');
+            
+            core.summary.addRaw(summary);
+            await core.summary.write();

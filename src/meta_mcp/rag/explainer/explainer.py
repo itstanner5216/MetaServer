@@ -12,7 +12,7 @@ import logging
 import re
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 try:
     import litellm
@@ -38,16 +38,16 @@ class ExplainerOutput:
     the selection process for auditability and debugging.
     """
 
-    selected_chunk_ids: List[str]  # 3-12 chunks selected by LLM
-    rationales: Dict[str, str]  # chunk_id -> 1-2 sentence reason
-    key_concepts: List[str]  # Extracted from query + chunks
-    missing_context_requests: List[Dict[str, str]]  # {"topic": str, "reason": str}
+    selected_chunk_ids: list[str]  # 3-12 chunks selected by LLM
+    rationales: dict[str, str]  # chunk_id -> 1-2 sentence reason
+    key_concepts: list[str]  # Extracted from query + chunks
+    missing_context_requests: list[dict[str, str]]  # {"topic": str, "reason": str}
     confidence_score: float  # 0-1 confidence in selection quality
-    discarded_top: List[Dict[str, str]]  # {"chunk_id": str, "reason": str}
+    discarded_top: list[dict[str, str]]  # {"chunk_id": str, "reason": str}
     token_count: int  # Approximate tokens used by selected chunks
     generated_at: datetime = field(default_factory=datetime.utcnow)
 
-    def to_dict(self) -> Dict:
+    def to_dict(self) -> dict:
         """Convert to dictionary for serialization."""
         return {
             "selected_chunk_ids": self.selected_chunk_ids,
@@ -200,8 +200,7 @@ class RetrievalExplainer:
         if llm_client is None:
             if litellm is None:
                 raise ImportError(
-                    "litellm is required for RetrievalExplainer. "
-                    "Install with: pip install litellm"
+                    "litellm is required for RetrievalExplainer. Install with: pip install litellm"
                 )
             self.llm_client = litellm
         else:
@@ -226,7 +225,7 @@ class RetrievalExplainer:
     def select_chunks(
         self,
         query: str,
-        candidates: List[RetrievalCandidate],
+        candidates: list[RetrievalCandidate],
         token_budget: int = 4000,
     ) -> ExplainerOutput:
         """
@@ -294,12 +293,9 @@ class RetrievalExplainer:
                         f"confidence={output.confidence_score:.2f}"
                     )
                     return output
-                else:
-                    last_error = error_msg
-                    logger.warning(
-                        f"Validation failed (attempt {attempt + 1}): {error_msg}"
-                    )
-                    self._validation_failures += 1
+                last_error = error_msg
+                logger.warning(f"Validation failed (attempt {attempt + 1}): {error_msg}")
+                self._validation_failures += 1
 
             except json.JSONDecodeError as e:
                 last_error = f"JSON parse error: {e}"
@@ -317,7 +313,7 @@ class RetrievalExplainer:
     def _build_prompt(
         self,
         query: str,
-        candidates: List[RetrievalCandidate],
+        candidates: list[RetrievalCandidate],
     ) -> str:
         """
         Build the user prompt with query and candidate snippets.
@@ -354,7 +350,7 @@ class RetrievalExplainer:
     def _build_retry_prompt(
         self,
         query: str,
-        candidates: List[RetrievalCandidate],
+        candidates: list[RetrievalCandidate],
     ) -> str:
         """
         Build a cleaner retry prompt for JSON parsing errors.
@@ -369,7 +365,7 @@ class RetrievalExplainer:
         # Simpler candidate format for retry
         candidate_lines = []
         for c in candidates:
-            line = f"- {c.chunk_id}: score={c.score:.3f}, snippet=\"{c.snippet[:100]}...\""
+            line = f'- {c.chunk_id}: score={c.score:.3f}, snippet="{c.snippet[:100]}..."'
             candidate_lines.append(line)
 
         candidates_text = "\n".join(candidate_lines)
@@ -424,7 +420,7 @@ class RetrievalExplainer:
     def _parse_response(
         self,
         response: str,
-        candidates: List[RetrievalCandidate],
+        candidates: list[RetrievalCandidate],
         valid_chunk_ids: set,
     ) -> ExplainerOutput:
         """
@@ -475,16 +471,11 @@ class RetrievalExplainer:
                 logger.warning(f"Detected hallucinated chunk_id: {chunk_id}")
 
         if hallucinated:
-            logger.warning(
-                f"Filtered {len(hallucinated)} hallucinated chunk IDs: {hallucinated}"
-            )
+            logger.warning(f"Filtered {len(hallucinated)} hallucinated chunk IDs: {hallucinated}")
 
         # Extract rationales (only for valid IDs)
         raw_rationales = data.get("rationales", {})
-        rationales = {
-            k: v for k, v in raw_rationales.items()
-            if k in valid_chunk_ids
-        }
+        rationales = {k: v for k, v in raw_rationales.items() if k in valid_chunk_ids}
 
         # Extract other fields
         key_concepts = data.get("key_concepts", [])
@@ -520,8 +511,8 @@ class RetrievalExplainer:
     def _validate_output(
         self,
         output: ExplainerOutput,
-        candidates: List[RetrievalCandidate],
-    ) -> Tuple[bool, str]:
+        candidates: list[RetrievalCandidate],
+    ) -> tuple[bool, str]:
         """
         Validate the parsed output.
 
@@ -557,8 +548,8 @@ class RetrievalExplainer:
 
     def _estimate_tokens(
         self,
-        chunk_ids: List[str],
-        candidates: List[RetrievalCandidate],
+        chunk_ids: list[str],
+        candidates: list[RetrievalCandidate],
     ) -> int:
         """
         Estimate token count for selected chunks.
@@ -588,7 +579,7 @@ class RetrievalExplainer:
     def _apply_token_budget(
         self,
         output: ExplainerOutput,
-        candidate_lookup: Dict[str, RetrievalCandidate],
+        candidate_lookup: dict[str, RetrievalCandidate],
         token_budget: int,
     ) -> ExplainerOutput:
         """
@@ -607,9 +598,7 @@ class RetrievalExplainer:
         if output.token_count <= token_budget:
             return output
 
-        logger.info(
-            f"Token budget exceeded ({output.token_count} > {token_budget}), trimming"
-        )
+        logger.info(f"Token budget exceeded ({output.token_count} > {token_budget}), trimming")
 
         # Sort selected chunks by score (descending)
         scored_ids = [
@@ -648,10 +637,7 @@ class RetrievalExplainer:
                     break
 
         # Update rationales to only include kept chunks
-        kept_rationales = {
-            k: v for k, v in output.rationales.items()
-            if k in kept_ids
-        }
+        kept_rationales = {k: v for k, v in output.rationales.items() if k in kept_ids}
 
         # Recalculate token count
         new_token_count = sum(
@@ -676,7 +662,7 @@ class RetrievalExplainer:
     def _create_fallback_output(
         self,
         query: str,
-        candidates: List[RetrievalCandidate],
+        candidates: list[RetrievalCandidate],
         error: str,
     ) -> ExplainerOutput:
         """
@@ -696,7 +682,7 @@ class RetrievalExplainer:
 
         # Sort by score and take top candidates
         sorted_candidates = sorted(candidates, key=lambda c: c.score, reverse=True)
-        selected = sorted_candidates[:self.min_selected]
+        selected = sorted_candidates[: self.min_selected]
 
         selected_ids = [c.chunk_id for c in selected]
         rationales = {
@@ -710,16 +696,18 @@ class RetrievalExplainer:
             selected_chunk_ids=selected_ids,
             rationales=rationales,
             key_concepts=[],
-            missing_context_requests=[{
-                "topic": "LLM Selection",
-                "reason": f"LLM-based selection failed: {error}. Using score-based fallback."
-            }],
+            missing_context_requests=[
+                {
+                    "topic": "LLM Selection",
+                    "reason": f"LLM-based selection failed: {error}. Using score-based fallback.",
+                }
+            ],
             confidence_score=0.3,  # Low confidence for fallback
             discarded_top=[],
             token_count=token_count,
         )
 
-    def get_metrics(self) -> Dict:
+    def get_metrics(self) -> dict:
         """
         Get explainer metrics.
 

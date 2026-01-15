@@ -14,14 +14,17 @@ Security Invariants:
 """
 
 import pytest
+
+from src.meta_mcp.leases.manager import lease_manager
 from src.meta_mcp.macros.batch_read import batch_read_tools
 from src.meta_mcp.macros.batch_search import batch_search_tools
-from src.meta_mcp.registry.registry import ToolRegistry
 from src.meta_mcp.registry.models import ToolRecord
-from src.meta_mcp.leases.manager import lease_manager
+from src.meta_mcp.registry.registry import ToolRegistry
 
 
 @pytest.mark.asyncio
+@pytest.mark.integration
+@pytest.mark.requires_redis
 async def test_batch_read_basic_operation(redis_client):
     """
     Verify batch read retrieves multiple tools efficiently.
@@ -35,28 +38,29 @@ async def test_batch_read_basic_operation(redis_client):
     registry = ToolRegistry()
 
     # Add test tools
-    registry.add(ToolRecord(
-        tool_id="tool_a",
-        server_id="test_server",
-        description_1line="Tool A",
-        description_full="Tool A",
-        tags=["test"],
-        risk_level="safe"
-    ))
-    registry.add(ToolRecord(
-        tool_id="tool_b",
-        server_id="test_server",
-        description_1line="Tool B",
-        description_full="Tool B",
-        tags=["test"],
-        risk_level="sensitive"
-    ))
+    registry.add(
+        ToolRecord(
+            tool_id="tool_a",
+            server_id="test_server",
+            description_1line="Tool A",
+            description_full="Tool A",
+            tags=["test"],
+            risk_level="safe",
+        )
+    )
+    registry.add(
+        ToolRecord(
+            tool_id="tool_b",
+            server_id="test_server",
+            description_1line="Tool B",
+            description_full="Tool B",
+            tags=["test"],
+            risk_level="sensitive",
+        )
+    )
 
     # Batch read
-    results = batch_read_tools(
-        registry=registry,
-        tool_ids=["tool_a", "tool_b"]
-    )
+    results = batch_read_tools(registry=registry, tool_ids=["tool_a", "tool_b"])
 
     # Verify results
     assert "tool_a" in results
@@ -66,6 +70,8 @@ async def test_batch_read_basic_operation(redis_client):
 
 
 @pytest.mark.asyncio
+@pytest.mark.integration
+@pytest.mark.requires_redis
 async def test_batch_read_with_risk_filtering(redis_client):
     """
     Verify batch read filters by max risk level.
@@ -78,36 +84,42 @@ async def test_batch_read_with_risk_filtering(redis_client):
     registry = ToolRegistry()
 
     # Add tools with different risks
-    registry.add(ToolRecord(
-        tool_id="safe_tool",
-        server_id="test_server",
-        description_1line="Safe tool",
-        description_full="Safe tool",
-        tags=["test"],
-        risk_level="safe"
-    ))
-    registry.add(ToolRecord(
-        tool_id="sensitive_tool",
-        server_id="test_server",
-        description_1line="Sensitive tool",
-        description_full="Sensitive tool",
-        tags=["test"],
-        risk_level="sensitive"
-    ))
-    registry.add(ToolRecord(
-        tool_id="dangerous_tool",
-        server_id="test_server",
-        description_1line="Dangerous tool",
-        description_full="Dangerous tool",
-        tags=["test"],
-        risk_level="dangerous"
-    ))
+    registry.add(
+        ToolRecord(
+            tool_id="safe_tool",
+            server_id="test_server",
+            description_1line="Safe tool",
+            description_full="Safe tool",
+            tags=["test"],
+            risk_level="safe",
+        )
+    )
+    registry.add(
+        ToolRecord(
+            tool_id="sensitive_tool",
+            server_id="test_server",
+            description_1line="Sensitive tool",
+            description_full="Sensitive tool",
+            tags=["test"],
+            risk_level="sensitive",
+        )
+    )
+    registry.add(
+        ToolRecord(
+            tool_id="dangerous_tool",
+            server_id="test_server",
+            description_1line="Dangerous tool",
+            description_full="Dangerous tool",
+            tags=["test"],
+            risk_level="dangerous",
+        )
+    )
 
     # Batch read with risk filtering
     results = batch_read_tools(
         registry=registry,
         tool_ids=["safe_tool", "sensitive_tool", "dangerous_tool"],
-        max_risk_level="safe"
+        max_risk_level="safe",
     )
 
     # Only safe tool should be returned
@@ -117,6 +129,8 @@ async def test_batch_read_with_risk_filtering(redis_client):
 
 
 @pytest.mark.asyncio
+@pytest.mark.integration
+@pytest.mark.requires_redis
 async def test_batch_read_size_limit(redis_client):
     """
     Verify batch read enforces size limits.
@@ -133,17 +147,15 @@ async def test_batch_read_size_limit(redis_client):
     large_batch = [f"tool_{i}" for i in range(2000)]
 
     # Batch read with limit
-    results = batch_read_tools(
-        registry=registry,
-        tool_ids=large_batch,
-        max_batch_size=1000
-    )
+    results = batch_read_tools(registry=registry, tool_ids=large_batch, max_batch_size=1000)
 
     # Should contain error
     assert "error" in results
 
 
 @pytest.mark.asyncio
+@pytest.mark.integration
+@pytest.mark.requires_redis
 async def test_batch_search_basic_operation(redis_client):
     """
     Verify batch search executes multiple queries efficiently.
@@ -156,28 +168,29 @@ async def test_batch_search_basic_operation(redis_client):
     registry = ToolRegistry()
 
     # Add test tools
-    registry.add(ToolRecord(
-        tool_id="read_file",
-        server_id="test_server",
-        description_1line="Read file from disk",
-        description_full="Read file from disk",
-        tags=["test"],
-        risk_level="safe"
-    ))
-    registry.add(ToolRecord(
-        tool_id="write_file",
-        server_id="test_server",
-        description_1line="Write file to disk",
-        description_full="Write file to disk",
-        tags=["test"],
-        risk_level="sensitive"
-    ))
+    registry.add(
+        ToolRecord(
+            tool_id="read_file",
+            server_id="test_server",
+            description_1line="Read file from disk",
+            description_full="Read file from disk",
+            tags=["test"],
+            risk_level="safe",
+        )
+    )
+    registry.add(
+        ToolRecord(
+            tool_id="write_file",
+            server_id="test_server",
+            description_1line="Write file to disk",
+            description_full="Write file to disk",
+            tags=["test"],
+            risk_level="sensitive",
+        )
+    )
 
     # Batch search
-    results = batch_search_tools(
-        registry=registry,
-        queries=["read", "write"]
-    )
+    results = batch_search_tools(registry=registry, queries=["read", "write"])
 
     # Verify results
     assert "read" in results
@@ -187,6 +200,8 @@ async def test_batch_search_basic_operation(redis_client):
 
 
 @pytest.mark.asyncio
+@pytest.mark.integration
+@pytest.mark.requires_redis
 async def test_batch_search_with_risk_exclusion(redis_client):
     """
     Verify batch search excludes specified risk levels.
@@ -199,28 +214,30 @@ async def test_batch_search_with_risk_exclusion(redis_client):
     registry = ToolRegistry()
 
     # Add tools
-    registry.add(ToolRecord(
-        tool_id="safe_tool",
-        server_id="test_server",
-        description_1line="Safe operation",
-        description_full="Safe operation",
-        tags=["test"],
-        risk_level="safe"
-    ))
-    registry.add(ToolRecord(
-        tool_id="dangerous_tool",
-        server_id="test_server",
-        description_1line="Dangerous operation",
-        description_full="Dangerous operation",
-        tags=["test"],
-        risk_level="dangerous"
-    ))
+    registry.add(
+        ToolRecord(
+            tool_id="safe_tool",
+            server_id="test_server",
+            description_1line="Safe operation",
+            description_full="Safe operation",
+            tags=["test"],
+            risk_level="safe",
+        )
+    )
+    registry.add(
+        ToolRecord(
+            tool_id="dangerous_tool",
+            server_id="test_server",
+            description_1line="Dangerous operation",
+            description_full="Dangerous operation",
+            tags=["test"],
+            risk_level="dangerous",
+        )
+    )
 
     # Batch search with risk exclusion
     results = batch_search_tools(
-        registry=registry,
-        queries=["operation"],
-        exclude_risk_levels=["dangerous"]
+        registry=registry, queries=["operation"], exclude_risk_levels=["dangerous"]
     )
 
     # Only safe tool in results
@@ -230,6 +247,8 @@ async def test_batch_search_with_risk_exclusion(redis_client):
 
 
 @pytest.mark.asyncio
+@pytest.mark.integration
+@pytest.mark.requires_redis
 async def test_batch_search_with_min_score(redis_client):
     """
     Verify batch search filters by minimum relevance score.
@@ -241,36 +260,38 @@ async def test_batch_search_with_min_score(redis_client):
     registry = ToolRegistry()
 
     # Add tools
-    registry.add(ToolRecord(
-        tool_id="exact_match",
-        server_id="test_server",
-        description_1line="Exact query match",
-        description_full="Exact query match",
-        tags=["test"],
-        risk_level="safe"
-    ))
-    registry.add(ToolRecord(
-        tool_id="partial_match",
-        server_id="test_server",
-        description_1line="Partial query similarity",
-        description_full="Partial query similarity",
-        tags=["test"],
-        risk_level="safe"
-    ))
+    registry.add(
+        ToolRecord(
+            tool_id="exact_match",
+            server_id="test_server",
+            description_1line="Exact query match",
+            description_full="Exact query match",
+            tags=["test"],
+            risk_level="safe",
+        )
+    )
+    registry.add(
+        ToolRecord(
+            tool_id="partial_match",
+            server_id="test_server",
+            description_1line="Partial query similarity",
+            description_full="Partial query similarity",
+            tags=["test"],
+            risk_level="safe",
+        )
+    )
 
     # Batch search with min_score
     # Note: Actual scoring depends on search implementation
-    results = batch_search_tools(
-        registry=registry,
-        queries=["match"],
-        min_score=0.5
-    )
+    results = batch_search_tools(registry=registry, queries=["match"], min_score=0.5)
 
     # Results should exist
     assert "match" in results
 
 
 @pytest.mark.asyncio
+@pytest.mark.integration
+@pytest.mark.requires_redis
 async def test_batch_search_limit_per_query(redis_client):
     """
     Verify batch search respects per-query result limit.
@@ -284,27 +305,27 @@ async def test_batch_search_limit_per_query(redis_client):
 
     # Add multiple matching tools
     for i in range(10):
-        registry.add(ToolRecord(
-            tool_id=f"test_tool_{i}",
-            server_id="test_server",
-            description_1line="Test tool for searching",
-            description_full="Test tool for searching",
-            tags=["test"],
-            risk_level="safe"
-        ))
+        registry.add(
+            ToolRecord(
+                tool_id=f"test_tool_{i}",
+                server_id="test_server",
+                description_1line="Test tool for searching",
+                description_full="Test tool for searching",
+                tags=["test"],
+                risk_level="safe",
+            )
+        )
 
     # Batch search with limit
-    results = batch_search_tools(
-        registry=registry,
-        queries=["test"],
-        limit=3
-    )
+    results = batch_search_tools(registry=registry, queries=["test"], limit=3)
 
     # Verify limit enforced
     assert len(results["test"]) <= 3
 
 
 @pytest.mark.asyncio
+@pytest.mark.integration
+@pytest.mark.requires_redis
 async def test_macro_operations_respect_leases(redis_client):
     """
     Verify macro operations check leases before execution.
@@ -320,7 +341,7 @@ async def test_macro_operations_respect_leases(redis_client):
         tool_id="read_file",
         ttl_seconds=300,
         calls_remaining=5,
-        mode_at_issue="PERMISSION"
+        mode_at_issue="PERMISSION",
     )
 
     # Verify lease exists
@@ -333,6 +354,8 @@ async def test_macro_operations_respect_leases(redis_client):
 
 
 @pytest.mark.asyncio
+@pytest.mark.integration
+@pytest.mark.requires_redis
 async def test_batch_read_audit_logging(redis_client):
     """
     Verify batch read logs operations when audit=True.
@@ -344,14 +367,16 @@ async def test_batch_read_audit_logging(redis_client):
     registry = ToolRegistry()
 
     # Add test tool
-    registry.add(ToolRecord(
-        tool_id="test_tool",
-        server_id="test_server",
-        description_1line="Test tool",
-        description_full="Test tool",
-        tags=["test"],
-        risk_level="safe"
-    ))
+    registry.add(
+        ToolRecord(
+            tool_id="test_tool",
+            server_id="test_server",
+            description_1line="Test tool",
+            description_full="Test tool",
+            tags=["test"],
+            risk_level="safe",
+        )
+    )
 
     # Batch read with audit
     results = batch_read_tools(
@@ -359,7 +384,7 @@ async def test_batch_read_audit_logging(redis_client):
         tool_ids=["test_tool"],
         audit=True,
         session_id="audit_test_session",
-        user_id="test_user"
+        user_id="test_user",
     )
 
     # Operation succeeds (audit is logged internally)
@@ -367,6 +392,8 @@ async def test_batch_read_audit_logging(redis_client):
 
 
 @pytest.mark.asyncio
+@pytest.mark.integration
+@pytest.mark.requires_redis
 async def test_batch_operations_empty_input(redis_client):
     """
     Verify batch operations handle empty input gracefully.
@@ -379,35 +406,25 @@ async def test_batch_operations_empty_input(redis_client):
     registry = ToolRegistry()
 
     # Batch read with None
-    read_results = batch_read_tools(
-        registry=registry,
-        tool_ids=None
-    )
+    read_results = batch_read_tools(registry=registry, tool_ids=None)
     assert read_results == {}
 
     # Batch read with empty list
-    read_results = batch_read_tools(
-        registry=registry,
-        tool_ids=[]
-    )
+    read_results = batch_read_tools(registry=registry, tool_ids=[])
     assert read_results == {}
 
     # Batch search with None
-    search_results = batch_search_tools(
-        registry=registry,
-        queries=None
-    )
+    search_results = batch_search_tools(registry=registry, queries=None)
     assert search_results == {}
 
     # Batch search with empty list
-    search_results = batch_search_tools(
-        registry=registry,
-        queries=[]
-    )
+    search_results = batch_search_tools(registry=registry, queries=[])
     assert search_results == {}
 
 
 @pytest.mark.asyncio
+@pytest.mark.integration
+@pytest.mark.requires_redis
 async def test_batch_read_nonexistent_tools(redis_client):
     """
     Verify batch read handles nonexistent tools gracefully.
@@ -420,20 +437,19 @@ async def test_batch_read_nonexistent_tools(redis_client):
     registry = ToolRegistry()
 
     # Add one tool
-    registry.add(ToolRecord(
-        tool_id="exists",
-        server_id="test_server",
-        description_1line="This tool exists",
-        description_full="This tool exists",
-        tags=["test"],
-        risk_level="safe"
-    ))
+    registry.add(
+        ToolRecord(
+            tool_id="exists",
+            server_id="test_server",
+            description_1line="This tool exists",
+            description_full="This tool exists",
+            tags=["test"],
+            risk_level="safe",
+        )
+    )
 
     # Batch read with mix
-    results = batch_read_tools(
-        registry=registry,
-        tool_ids=["exists", "does_not_exist"]
-    )
+    results = batch_read_tools(registry=registry, tool_ids=["exists", "does_not_exist"])
 
     # Existent tool found
     assert results["exists"] is not None
@@ -443,6 +459,8 @@ async def test_batch_read_nonexistent_tools(redis_client):
 
 
 @pytest.mark.asyncio
+@pytest.mark.integration
+@pytest.mark.requires_redis
 async def test_complete_macro_governance_workflow(redis_client):
     """
     End-to-end test of macro operations with governance.
@@ -458,44 +476,40 @@ async def test_complete_macro_governance_workflow(redis_client):
     registry = ToolRegistry()
 
     # Register tools
-    registry.add(ToolRecord(
-        tool_id="safe_read",
-        server_id="test_server",
-        description_1line="Safe read operation",
-        description_full="Safe read operation",
-        tags=["test"],
-        risk_level="safe"
-    ))
-    registry.add(ToolRecord(
-        tool_id="sensitive_write",
-        server_id="test_server",
-        description_1line="Sensitive write operation",
-        description_full="Sensitive write operation",
-        tags=["test"],
-        risk_level="sensitive"
-    ))
+    registry.add(
+        ToolRecord(
+            tool_id="safe_read",
+            server_id="test_server",
+            description_1line="Safe read operation",
+            description_full="Safe read operation",
+            tags=["test"],
+            risk_level="safe",
+        )
+    )
+    registry.add(
+        ToolRecord(
+            tool_id="sensitive_write",
+            server_id="test_server",
+            description_1line="Sensitive write operation",
+            description_full="Sensitive write operation",
+            tags=["test"],
+            risk_level="sensitive",
+        )
+    )
 
     # Step 1: Batch search
-    search_results = batch_search_tools(
-        registry=registry,
-        queries=["read", "write"]
-    )
+    search_results = batch_search_tools(registry=registry, queries=["read", "write"])
     assert len(search_results["read"]) > 0
     assert len(search_results["write"]) > 0
 
     # Step 2: Batch read all tools
-    all_results = batch_read_tools(
-        registry=registry,
-        tool_ids=["safe_read", "sensitive_write"]
-    )
+    all_results = batch_read_tools(registry=registry, tool_ids=["safe_read", "sensitive_write"])
     assert all_results["safe_read"] is not None
     assert all_results["sensitive_write"] is not None
 
     # Step 3: Batch read with safe-only filter
     safe_results = batch_read_tools(
-        registry=registry,
-        tool_ids=["safe_read", "sensitive_write"],
-        max_risk_level="safe"
+        registry=registry, tool_ids=["safe_read", "sensitive_write"], max_risk_level="safe"
     )
     assert safe_results["safe_read"] is not None
     assert safe_results["sensitive_write"] is None
@@ -506,7 +520,7 @@ async def test_complete_macro_governance_workflow(redis_client):
         tool_id="sensitive_write",
         ttl_seconds=300,
         calls_remaining=5,
-        mode_at_issue="PERMISSION"
+        mode_at_issue="PERMISSION",
     )
 
     # Step 5: Verify lease exists

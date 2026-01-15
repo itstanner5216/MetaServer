@@ -13,8 +13,7 @@ import time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from enum import Enum
-from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from loguru import logger
 
@@ -45,10 +44,10 @@ class ApprovalRequest:
     request_id: str
     tool_name: str
     message: str
-    required_scopes: List[str]
-    artifacts_path: Optional[str] = None
+    required_scopes: list[str]
+    artifacts_path: str | None = None
     timeout_seconds: int = 300
-    context_metadata: Dict[str, Any] = field(default_factory=dict)
+    context_metadata: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass
@@ -66,10 +65,10 @@ class ApprovalResponse:
 
     request_id: str
     decision: ApprovalDecision
-    selected_scopes: List[str] = field(default_factory=list)
+    selected_scopes: list[str] = field(default_factory=list)
     lease_seconds: int = 0
     timestamp: float = field(default_factory=time.time)
-    error_message: Optional[str] = None
+    error_message: str | None = None
 
     def is_approved(self) -> bool:
         """Check if request was approved with at least one scope."""
@@ -98,7 +97,6 @@ class ApprovalProvider(ABC):
             TimeoutError: If request times out
             Exception: On provider-specific errors
         """
-        pass
 
     @abstractmethod
     async def is_available(self) -> bool:
@@ -107,7 +105,6 @@ class ApprovalProvider(ABC):
         Returns:
             True if provider can handle requests, False otherwise
         """
-        pass
 
     @abstractmethod
     def get_name(self) -> str:
@@ -116,7 +113,6 @@ class ApprovalProvider(ABC):
         Returns:
             Provider name (e.g., "DBus GUI", "FastMCP Elicit")
         """
-        pass
 
 
 class DBusGUIProvider(ApprovalProvider):
@@ -133,7 +129,7 @@ class DBusGUIProvider(ApprovalProvider):
         self._bus_name = "org.gnome.Shell.Extensions.MetaMCP"
         self._object_path = "/org/gnome/Shell/Extensions/MetaMCP"
         self._interface_name = "org.gnome.Shell.Extensions.MetaMCP"
-        self._available: Optional[bool] = None
+        self._available: bool | None = None
 
     async def is_available(self) -> bool:
         """Check if DBus GUI is available.
@@ -312,13 +308,12 @@ Do you approve this operation? (yes/no)
                     lease_seconds=300,  # Default 5 minute lease
                     timestamp=time.time(),
                 )
-            else:
-                return ApprovalResponse(
-                    request_id=request.request_id,
-                    decision=ApprovalDecision.DENIED,
-                    selected_scopes=[],
-                    timestamp=time.time(),
-                )
+            return ApprovalResponse(
+                request_id=request.request_id,
+                decision=ApprovalDecision.DENIED,
+                selected_scopes=[],
+                timestamp=time.time(),
+            )
 
         except asyncio.TimeoutError:
             return ApprovalResponse(
@@ -380,7 +375,9 @@ class SystemdFallbackProvider(ApprovalProvider):
         try:
             # Format prompt message
             scope_list = ", ".join(request.required_scopes)
-            prompt = f"Approve {request.tool_name}? ({request.message}) [Scopes: {scope_list}] (yes/no)"
+            prompt = (
+                f"Approve {request.tool_name}? ({request.message}) [Scopes: {scope_list}] (yes/no)"
+            )
 
             # Use systemd-ask-password
             proc = await asyncio.create_subprocess_exec(
@@ -403,13 +400,12 @@ class SystemdFallbackProvider(ApprovalProvider):
                     lease_seconds=300,  # Default 5 minute lease
                     timestamp=time.time(),
                 )
-            else:
-                return ApprovalResponse(
-                    request_id=request.request_id,
-                    decision=ApprovalDecision.DENIED,
-                    selected_scopes=[],
-                    timestamp=time.time(),
-                )
+            return ApprovalResponse(
+                request_id=request.request_id,
+                decision=ApprovalDecision.DENIED,
+                selected_scopes=[],
+                timestamp=time.time(),
+            )
 
         except Exception as e:
             logger.error(f"systemd fallback approval failed: {e}")
@@ -433,7 +429,7 @@ class ApprovalProviderFactory:
 
     @staticmethod
     async def create_provider(
-        provider_name: Optional[str] = None, context: Any = None
+        provider_name: str | None = None, context: Any = None
     ) -> ApprovalProvider:
         """Create approval provider based on configuration.
 
@@ -473,10 +469,9 @@ class ApprovalProviderFactory:
                 if await explicit_provider.is_available():
                     logger.info(f"Using explicit approval provider: {explicit_provider.get_name()}")
                     return explicit_provider
-                else:
-                    logger.warning(
-                        f"Requested provider {preference} not available, falling back to auto"
-                    )
+                logger.warning(
+                    f"Requested provider {preference} not available, falling back to auto"
+                )
 
         # Auto-select first available provider
         for provider in providers:
@@ -491,7 +486,7 @@ class ApprovalProviderFactory:
 
 
 # Singleton instance
-_approval_provider: Optional[ApprovalProvider] = None
+_approval_provider: ApprovalProvider | None = None
 
 
 async def get_approval_provider(context: Any = None) -> ApprovalProvider:

@@ -4,21 +4,21 @@ Batch read operations for tools.
 Provides efficient batch retrieval of multiple tools from the registry.
 """
 
-from typing import Dict, List, Optional
+
 from ..registry.models import ToolRecord
 from ..registry.registry import ToolRegistry
 
 
 def batch_read_tools(
     registry: ToolRegistry,
-    tool_ids: Optional[List[str]],
-    max_risk_level: Optional[str] = None,
+    tool_ids: list[str] | None,
+    max_risk_level: str | None = None,
     max_batch_size: int = 1000,
     audit: bool = False,
-    session_id: Optional[str] = None,
-    user_id: Optional[str] = None,
-    rate_limit: bool = False
-) -> Dict[str, Optional[ToolRecord]]:
+    session_id: str | None = None,
+    user_id: str | None = None,
+    rate_limit: bool = False,
+) -> dict[str, ToolRecord | None]:
     """
     Retrieve multiple tools in a single batch operation.
 
@@ -43,15 +43,11 @@ def batch_read_tools(
         # Return error dict
         return {
             "error": f"Batch size {len(tool_ids)} exceeds maximum {max_batch_size}",
-            **{tid: None for tid in tool_ids[:max_batch_size]}
+            **dict.fromkeys(tool_ids[:max_batch_size]),
         }
 
     # Define risk level hierarchy
-    risk_hierarchy = {
-        "safe": 0,
-        "sensitive": 1,
-        "dangerous": 2
-    }
+    risk_hierarchy = {"safe": 0, "sensitive": 1, "dangerous": 2}
 
     max_risk = risk_hierarchy.get(max_risk_level, 2) if max_risk_level else 2
 
@@ -71,7 +67,8 @@ def batch_read_tools(
     # Audit logging if requested
     if audit and session_id:
         try:
-            from ..audit import AuditLogger, AuditEvent
+            from ..audit import AuditEvent, AuditLogger
+
             logger = AuditLogger()
             logger.log(
                 event=AuditEvent.TOOL_INVOKED,
@@ -82,8 +79,8 @@ def batch_read_tools(
                 metadata={
                     "tool_count": len(tool_ids),
                     "found_count": sum(1 for t in results.values() if t is not None),
-                    "max_risk_level": max_risk_level
-                }
+                    "max_risk_level": max_risk_level,
+                },
             )
         except Exception:
             # Don't fail operation if audit logging fails
