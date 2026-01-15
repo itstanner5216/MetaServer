@@ -107,7 +107,7 @@ class AgentConfig:
                     "model": "DeepSeek-V3-0324",
                     "provider": "github_models",
                     "endpoint": "https://models.inference.ai.azure.com/chat/completions",
-                    "api_key_env": "GITHUB_MODELS_TOKEN",
+                    "api_key_env": "MODELS_API_TOKEN",
                 },
                 "guardian": {
                     "display_name": "🏛️ Architectural Guardian",

@@ -46,7 +46,7 @@ class TestLLMConfig:
         
         assert model_config.model == "DeepSeek-V3-0324"
         assert model_config.provider == "github_models"
-        assert model_config.api_key_env == "GITHUB_MODELS_TOKEN"
+        assert model_config.api_key_env == "MODELS_API_TOKEN"
     
     def test_guardian_config(self):
         """Test guardian agent configuration."""

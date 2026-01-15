@@ -16,7 +16,7 @@
 #
 # Required secrets (add to GitHub repo settings):
 #   - AZURE_OPENAI_API_KEY
-#   - GITHUB_MODELS_TOKEN
+#   - MODELS_API_TOKEN
 #   - MOONSHOT_API_KEY
 #   - OPENROUTER_API_KEY
 
@@ -38,7 +38,7 @@ agents:
     model: "DeepSeek-V3-0324"
     provider: "github_models"
     endpoint: "https://models.inference.ai.azure.com/chat/completions"
-    api_key_env: "GITHUB_MODELS_TOKEN"
+    api_key_env: "MODELS_API_TOKEN"
     temperature: 0.2
     max_tokens: 8192
     timeout: 180

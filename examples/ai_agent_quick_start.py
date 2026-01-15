@@ -143,7 +143,7 @@ async def example_with_api_keys():
     
     required_keys = {
         "AZURE_OPENAI_API_KEY": "Azure OpenAI (Validator)",
-        "GITHUB_MODELS_TOKEN": "GitHub Models (Remediator)",
+        "MODELS_API_TOKEN": "GitHub Models (Remediator)",
         "MOONSHOT_API_KEY": "Moonshot (Guardian)",
         "OPENROUTER_API_KEY": "OpenRouter (Verifier)",
     }
