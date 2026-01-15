@@ -17,6 +17,18 @@ jobs:
     name: Test (Python ${{ matrix.python-version }})
     runs-on: ubuntu-latest
     
+    # Add Redis service container
+    services:
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    
     strategy:
       fail-fast: false
       matrix:
@@ -47,6 +59,12 @@ jobs:
       - name: Install dependencies
         run: uv sync --all-extras
       
+      # Add Redis connection verification
+      - name: Verify Redis connection
+        run: |
+          timeout 30 bash -c 'until printf "" 2>>/dev/null >>/dev/tcp/localhost/6379; do sleep 1; done'
+          echo "Redis is ready"
+      
       - name: Lint with Ruff
         run: uv run ruff check .
         continue-on-error: true
@@ -60,6 +78,8 @@ jobs:
         continue-on-error: true
       
       - name: Run tests with pytest
+        env:
+          REDIS_URL: redis://localhost:6379
         run: |
           uv run pytest tests/ \
             -v \
