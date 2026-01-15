@@ -2,6 +2,7 @@
 
 import hashlib
 from enum import Enum
+from typing import Optional
 
 from loguru import logger
 from redis import asyncio as aioredis
