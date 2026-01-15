@@ -288,11 +288,21 @@ Operation: {request.message}
 Required Permissions:
 {scope_list}
 
-Do you approve this operation? (yes/no)
+Respond with JSON or key=value pairs including decision, selected_scopes, lease_seconds.
+
+JSON example:
+{{"decision": "approved", "selected_scopes": [{", ".join([f'"{scope}"' for scope in request.required_scopes])}], "lease_seconds": 300}}
+
+Key-value example (line or semicolon separated):
+decision=approved
+selected_scopes={", ".join(request.required_scopes)}
+lease_seconds=300
+
+Use lease_seconds=0 for single-use approval.
 """
 
             # Elicit approval from user
-            response_text = await asyncio.wait_for(
+            response_payload = await asyncio.wait_for(
                 self._context.elicit(elicit_message),
                 timeout=request.timeout_seconds,
             )
@@ -334,6 +344,131 @@ Do you approve this operation? (yes/no)
     def get_name(self) -> str:
         """Get provider name."""
         return "FastMCP Elicit"
+
+    @staticmethod
+    def _parse_approval_payload(
+        request: ApprovalRequest, response_payload: Any
+    ) -> ApprovalResponse:
+        payload = response_payload
+        if hasattr(response_payload, "data"):
+            payload = response_payload.data
+
+        parsed = FastMCPElicitProvider._parse_structured_response(payload)
+        if not parsed:
+            return ApprovalResponse(
+                request_id=request.request_id,
+                decision=ApprovalDecision.ERROR,
+                selected_scopes=[],
+                error_message="Invalid approval response format",
+            )
+
+        decision = FastMCPElicitProvider._parse_decision(parsed.get("decision"))
+        selected_scopes = FastMCPElicitProvider._parse_scopes(parsed.get("selected_scopes"))
+        lease_seconds = FastMCPElicitProvider._parse_lease_seconds(parsed.get("lease_seconds"))
+
+        if decision is None:
+            decision = (
+                ApprovalDecision.APPROVED
+                if selected_scopes
+                else ApprovalDecision.DENIED
+            )
+
+        return ApprovalResponse(
+            request_id=request.request_id,
+            decision=decision,
+            selected_scopes=selected_scopes,
+            lease_seconds=lease_seconds,
+            timestamp=time.time(),
+        )
+
+    @staticmethod
+    def _parse_structured_response(payload: Any) -> Dict[str, Any]:
+        if payload is None:
+            return {}
+
+        if isinstance(payload, dict):
+            return {str(key).lower(): value for key, value in payload.items()}
+
+        if isinstance(payload, str):
+            stripped = payload.strip()
+            if not stripped:
+                return {}
+            try:
+                parsed_json = json.loads(stripped)
+                if isinstance(parsed_json, dict):
+                    return {
+                        str(key).lower(): value for key, value in parsed_json.items()
+                    }
+            except json.JSONDecodeError:
+                pass
+            return FastMCPElicitProvider._parse_key_value_response(stripped)
+
+        return {}
+
+    @staticmethod
+    def _parse_key_value_response(payload: str) -> Dict[str, Any]:
+        parsed: Dict[str, Any] = {}
+        for chunk in payload.split(";"):
+            for line in chunk.splitlines():
+                if not line.strip():
+                    continue
+                if "=" in line:
+                    key, value = line.split("=", 1)
+                elif ":" in line:
+                    key, value = line.split(":", 1)
+                else:
+                    continue
+                parsed[key.strip().lower()] = value.strip()
+        return parsed
+
+    @staticmethod
+    def _parse_decision(raw_value: Any) -> Optional[ApprovalDecision]:
+        if raw_value is None:
+            return None
+        normalized = str(raw_value).strip().lower()
+        if normalized in {"approved", "approve", "yes", "y"}:
+            return ApprovalDecision.APPROVED
+        if normalized in {"denied", "deny", "no", "n"}:
+            return ApprovalDecision.DENIED
+        if normalized == "timeout":
+            return ApprovalDecision.TIMEOUT
+        if normalized == "error":
+            return ApprovalDecision.ERROR
+        return None
+
+    @staticmethod
+    def _parse_scopes(raw_value: Any) -> List[str]:
+        if raw_value is None:
+            return []
+        if isinstance(raw_value, list):
+            return [str(scope).strip() for scope in raw_value if str(scope).strip()]
+        if isinstance(raw_value, str):
+            stripped = raw_value.strip()
+            if not stripped:
+                return []
+            if stripped.startswith("["):
+                try:
+                    parsed_json = json.loads(stripped)
+                    if isinstance(parsed_json, list):
+                        return [
+                            str(scope).strip()
+                            for scope in parsed_json
+                            if str(scope).strip()
+                        ]
+                except json.JSONDecodeError:
+                    pass
+            return [scope.strip() for scope in stripped.split(",") if scope.strip()]
+        return [str(raw_value).strip()] if str(raw_value).strip() else []
+
+    @staticmethod
+    def _parse_lease_seconds(raw_value: Any) -> int:
+        if raw_value is None:
+            return 0
+        try:
+            lease_seconds = int(float(raw_value))
+        except (TypeError, ValueError):
+            return 0
+        return max(0, lease_seconds)
 
 
 class SystemdFallbackProvider(ApprovalProvider):
