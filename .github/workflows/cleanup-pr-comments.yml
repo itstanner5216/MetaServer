@@ -70,20 +70,18 @@ jobs:
                 
                 console.log(`  Found ${comments.length} total comments`);
                 
-                // Filter for AI review pipeline comments
-                const aiComments = comments.filter(comment => 
-                  comment.body.includes('AI-Powered PR Review Pipeline') ||
-                  comment.body.includes('🔍 Validation Agent') ||
-                  comment.body.includes('🔧 Remediation Agent') ||
-                  comment.body.includes('🏛️ Architectural Guardian') ||
-                  comment.body.includes('✅ Functional Verifier') ||
-                  (comment.user.login === 'github-actions[bot]' && (
+                // Filter for AI review pipeline comments - check for specific patterns
+                const aiComments = comments.filter(comment => {
+                  // Must be from github-actions bot
+                  if (comment.user.login !== 'github-actions[bot]') return false;
+                  
+                  // Check for AI review pipeline patterns
+                  return comment.body.includes('AI-Powered PR Review Pipeline') ||
                     comment.body.includes('Validation Agent') ||
                     comment.body.includes('Remediation Agent') ||
                     comment.body.includes('Architectural Guardian') ||
-                    comment.body.includes('Functional Verifier')
-                  ))
-                );
+                    comment.body.includes('Functional Verifier');
+                });
                 
                 console.log(`  Found ${aiComments.length} AI review comments`);
                 

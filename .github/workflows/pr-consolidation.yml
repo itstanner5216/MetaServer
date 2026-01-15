@@ -163,12 +163,17 @@ jobs:
               });
             }
             
-            // Generate summary
+            // Generate summary (lightweight for job outputs)
             const analysis = {
               total_prs: allPRs.length,
               groups: Object.keys(groups).length,
               to_keep: toKeep.length,
-              to_close: toClose.length,
+              to_close: toClose.length
+            };
+            
+            // Generate detailed summary for artifact
+            const detailedAnalysis = {
+              ...analysis,
               groups_detail: Object.entries(groups).map(([key, g]) => ({
                 key,
                 category: g.category,
@@ -179,12 +184,12 @@ jobs:
               }))
             };
             
-            // Save outputs
-            core.setOutput('analysis', JSON.stringify(analysis, null, 2));
+            // Save outputs (keep lightweight)
+            core.setOutput('analysis', JSON.stringify(analysis));
             core.setOutput('to_keep', JSON.stringify(toKeep.map(p => p.number)));
             core.setOutput('to_close', JSON.stringify(toClose));
             
-            // Write detailed report
+            // Write detailed report to artifact
             const reportContent = [
               '# PR Consolidation Analysis',
               '',
@@ -196,7 +201,7 @@ jobs:
               '',
               '## Groups',
               '',
-              ...analysis.groups_detail.map(g => [
+              ...detailedAnalysis.groups_detail.map(g => [
                 `### ${g.category} (base: \`${g.base_branch}\`)`,
                 `- **Count:** ${g.pr_count} PRs`,
                 `- **Keep:** #${g.kept}`,
@@ -290,7 +295,7 @@ jobs:
         with:
           script: |
             const analysis = JSON.parse('${{ needs.analyze-prs.outputs.analysis }}');
-            const dryRun = ${{ inputs.dry_run }};
+            const dryRun = '${{ inputs.dry_run }}' === 'true';
             
             const summaryLines = [
               `# 🧹 PR Consolidation ${dryRun ? 'Analysis' : 'Complete'}`,
