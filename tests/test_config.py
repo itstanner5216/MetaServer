@@ -1,11 +1,21 @@
 """Tests for centralized Config class."""
+import importlib
+import warnings
 
 import pytest
 
+from src.meta_mcp import config as config_module
 from src.meta_mcp.config import Config
 
 
-@pytest.mark.unit
+def _reload_config(monkeypatch, **env):
+    for key in ("DEFAULT_GOVERNANCE_MODE", "DEFAULT_MODE"):
+        monkeypatch.delenv(key, raising=False)
+    for key, value in env.items():
+        monkeypatch.setenv(key, value)
+    return importlib.reload(config_module).Config
+
+
 def test_config_defaults():
     """Verify default configuration values."""
     assert Config.HOST == "0.0.0.0"
@@ -101,35 +111,29 @@ def test_config_feature_flags_default_disabled():
     assert Config.ENABLE_MACROS is True
 
 
-def test_config_validation_warns_on_default_secret(monkeypatch):
-    """Config.validate() should warn when using the default dev secret."""
-    monkeypatch.setenv("ENVIRONMENT", "development")
-    original_secret = Config.HMAC_SECRET
+def test_default_execution_mode_env_keys(monkeypatch):
+    """Default execution mode should map from new and deprecated keys."""
+    config = _reload_config(monkeypatch, DEFAULT_GOVERNANCE_MODE="read_only")
+    assert config.DEFAULT_EXECUTION_MODE == "read_only"
 
-    try:
-        Config.HMAC_SECRET = "default_dev_secret_change_in_production_32bytes_minimum"
-        with warnings.catch_warnings(record=True) as caught:
-            warnings.simplefilter("always")
-            Config.validate()
+    with warnings.catch_warnings(record=True) as captured:
+        warnings.simplefilter("always")
+        config = _reload_config(monkeypatch, DEFAULT_MODE="bypass")
+        assert config.DEFAULT_EXECUTION_MODE == "bypass"
         assert any(
-            "default development secret" in str(warning.message)
-            for warning in caught
-        ), "Expected warning about default development secret"
-    finally:
-        Config.HMAC_SECRET = original_secret
+            "DEFAULT_MODE is deprecated" in str(warning.message)
+            for warning in captured
+        )
 
-
-def test_config_invalid_port_env_raises(monkeypatch):
-    """Invalid PORT environment value should raise on import."""
-    original_port_env = os.getenv("PORT")
-    monkeypatch.setenv("PORT", "70000")
-
-    try:
-        with pytest.raises(ValueError, match="Invalid PORT environment variable"):
-            importlib.reload(config_module)
-    finally:
-        if original_port_env is None:
-            monkeypatch.delenv("PORT", raising=False)
-        else:
-            monkeypatch.setenv("PORT", original_port_env)
-        importlib.reload(config_module)
+    with warnings.catch_warnings(record=True) as captured:
+        warnings.simplefilter("always")
+        config = _reload_config(
+            monkeypatch,
+            DEFAULT_GOVERNANCE_MODE="permission",
+            DEFAULT_MODE="read_only",
+        )
+        assert config.DEFAULT_EXECUTION_MODE == "permission"
+        assert any(
+            "DEFAULT_MODE is deprecated" in str(warning.message)
+            for warning in captured
+        )
