@@ -20,6 +20,7 @@ artifacts/
 workspace/
 htmlcov/
 .coverage
+audit.jsonl
 
 # Downloaded tools
 actionlint

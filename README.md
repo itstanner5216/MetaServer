@@ -235,8 +235,11 @@ export DEFAULT_GOVERNANCE_MODE="permission"
 ## Running the Server
 
 ```bash
-# Start the server
-python main.py
+# Start the server (recommended with uv)
+uv run python -m meta_mcp
+
+# Or with standard Python
+python -m meta_mcp
 ```
 
 The server will start on `http://localhost:8001` by default.
