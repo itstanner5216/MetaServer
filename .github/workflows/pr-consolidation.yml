@@ -174,7 +174,7 @@ jobs:
                 category: g.category,
                 base_branch: g.baseRef,
                 pr_count: g.prs.length,
-                kept: g.prs.length === 1 ? g.prs[0].number : g.prs[0].number,
+                kept: g.prs[0].number,
                 closed: g.prs.slice(1).map(p => p.number)
               }))
             };

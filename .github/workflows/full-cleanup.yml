@@ -47,12 +47,27 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Generate Summary
-        run: |
-          echo "# 🚀 Full PR Cleanup Complete"
-          echo ""
-          echo "## Steps Completed"
-          echo "- Step 1 (Consolidate): ${{ needs.step1-consolidate.result }}"
-          echo "- Step 2 (Clean Comments): ${{ needs.step2-cleanup-comments.result }}"
-          echo "- Step 3 (Re-run Reviews): ${{ needs.step3-rerun-reviews.result }}"
-          echo ""
-          echo "All remaining PRs now have fresh, accurate AI review comments!"
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const summary = [
+              '# 🚀 Full PR Cleanup Complete',
+              '',
+              '## Steps Completed',
+              '| Step | Status |',
+              '|------|--------|',
+              `| 1. Consolidate PRs | ${{ needs.step1-consolidate.result }} |`,
+              `| 2. Clean Comments | ${{ needs.step2-cleanup-comments.result }} |`,
+              `| 3. Re-run Reviews | ${{ needs.step3-rerun-reviews.result }} |`,
+              '',
+              '## Results',
+              '✅ All remaining PRs now have fresh, accurate AI review comments!',
+              '',
+              '## Next Steps',
+              '- Review the workflow run logs for details',
+              '- Check PRs for fresh AI review comments',
+              '- Monitor the Actions tab for triggered review pipeline runs'
+            ].join('\n');
+            
+            core.summary.addRaw(summary);
+            await core.summary.write();

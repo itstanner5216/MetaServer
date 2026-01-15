@@ -77,7 +77,12 @@ jobs:
                   comment.body.includes('🔧 Remediation Agent') ||
                   comment.body.includes('🏛️ Architectural Guardian') ||
                   comment.body.includes('✅ Functional Verifier') ||
-                  comment.user.login === 'github-actions[bot]'
+                  (comment.user.login === 'github-actions[bot]' && (
+                    comment.body.includes('Validation Agent') ||
+                    comment.body.includes('Remediation Agent') ||
+                    comment.body.includes('Architectural Guardian') ||
+                    comment.body.includes('Functional Verifier')
+                  ))
                 );
                 
                 console.log(`  Found ${aiComments.length} AI review comments`);

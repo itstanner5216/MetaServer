@@ -50,11 +50,12 @@ jobs:
                 prNumbers = prNumbers.concat(prs.map(pr => pr.number));
                 page++;
               }
+              prNumbers = prNumbers.join(',');
             } else {
               prNumbers = input.split(',').map(n => n.trim()).join(',');
             }
             
-            core.setOutput('pr_numbers', typeof prNumbers === 'object' ? prNumbers.join(',') : prNumbers);
+            core.setOutput('pr_numbers', prNumbers);
       
       - name: Trigger AI PR Review Pipeline
         uses: actions/github-script@v7
