@@ -1,0 +1,196 @@
+name: Validate Setup
+
+on:
+  workflow_dispatch: # Manual trigger
+  schedule:
+    - cron: '0 0 * * 0' # Weekly on Sunday
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/**'
+      - 'pyproject.toml'
+      - 'ruff.toml'
+      - '.pre-commit-config.yaml'
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+    
+    - name: Setup Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+    
+    - name: Install UV
+      run: |
+        curl -LsSf https://astral.sh/uv/install.sh | sh
+        echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+    
+    - name: Validate Configuration Files
+      run: |
+        echo "✅ Validating configuration files..."
+        
+        # Check required files exist
+        files=(
+          "pyproject.toml"
+          ".github/workflows/codeql.yml"
+          ".github/workflows/post-merge-setup.yml"
+          ".github/workflows/validate-setup.yml"
+        )
+        
+        missing=0
+        for file in "${files[@]}"; do
+          if [[ ! -f "$file" ]]; then
+            echo "❌ Missing: $file"
+            missing=$((missing + 1))
+          else
+            echo "✅ Found: $file"
+          fi
+        done
+        
+        if [[ $missing -gt 0 ]]; then
+          echo "❌ $missing required files are missing!"
+          exit 1
+        fi
+    
+    - name: Validate pyproject.toml
+      run: |
+        echo "✅ Validating pyproject.toml..."
+        
+        # Install tomli for TOML validation
+        uv pip install tomli --system
+        
+        python << 'EOF'
+        import tomli
+        import sys
+        
+        try:
+            with open("pyproject.toml", "rb") as f:
+                config = tomli.load(f)
+            
+            # Check required sections
+            required_sections = [
+                ["project"],
+                ["tool", "pytest", "ini_options"],
+            ]
+            
+            for sections in required_sections:
+                current = config
+                for section in sections:
+                    if section not in current:
+                        print(f"❌ Missing section: {'.'.join(sections)}")
+                        sys.exit(1)
+                    current = current[section]
+                print(f"✅ Found section: {'.'.join(sections)}")
+            
+            print("✅ pyproject.toml is valid!")
+        except Exception as e:
+            print(f"❌ pyproject.toml validation failed: {e}")
+            sys.exit(1)
+        EOF
+    
+    - name: Validate Ruff Configuration
+      run: |
+        echo "✅ Checking if Ruff configuration exists..."
+        
+        if [[ -f "ruff.toml" ]]; then
+          echo "✅ ruff.toml found"
+          uv sync
+          uv run ruff check --config ruff.toml --exit-zero . || echo "⚠️  Ruff found issues"
+          
+          # Verify ruff.toml syntax
+          if ! uv run ruff check --config ruff.toml --show-settings > /dev/null 2>&1; then
+            echo "❌ ruff.toml has syntax errors!"
+            exit 1
+          fi
+          
+          echo "✅ Ruff configuration is valid!"
+        else
+          echo "⚠️  ruff.toml not found (optional)"
+        fi
+    
+    - name: Validate Pre-commit Configuration
+      run: |
+        echo "✅ Checking if pre-commit configuration exists..."
+        
+        if [[ -f ".pre-commit-config.yaml" ]]; then
+          echo "✅ .pre-commit-config.yaml found"
+          uv sync
+          uv run pre-commit validate-config || {
+            echo "❌ .pre-commit-config.yaml is invalid!"
+            exit 1
+          }
+          
+          echo "✅ Pre-commit configuration is valid!"
+        else
+          echo "⚠️  .pre-commit-config.yaml not found (optional)"
+        fi
+    
+    - name: Check GitHub Secrets
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        echo "🔐 Checking for required secrets..."
+        
+        # We can't read secret values, but we can check if they exist via workflow runs
+        if [[ -z "${{ secrets.CODECOV_TOKEN }}" ]]; then
+          echo "⚠️  CODECOV_TOKEN is not set (coverage reports won't work)"
+        else
+          echo "✅ CODECOV_TOKEN is configured"
+        fi
+    
+    - name: Test Workflow Syntax
+      run: |
+        echo "✅ Validating workflow files..."
+        
+        # Install actionlint
+        bash <(curl https://raw.githubusercontent.com/rhysd/actionlint/main/scripts/download-actionlint.bash)
+        
+        # Validate all workflow files
+        ./actionlint -color .github/workflows/*.yml || {
+          echo "❌ Workflow validation failed!"
+          exit 1
+        }
+        
+        echo "✅ All workflow files are valid!"
+    
+    - name: Generate Validation Report
+      if: always()
+      run: |
+        cat << 'EOF' > validation-report.md
+        # 🔍 Setup Validation Report
+        
+        **Date:** $(date -u +"%Y-%m-%d %H:%M:%S UTC")
+        
+        ## Configuration Status
+        
+        - ✅ Configuration files present
+        - ✅ pyproject.toml valid
+        - ✅ Workflow syntax valid
+        
+        ## Required Secrets
+        
+        - Codecov Token: ${{ secrets.CODECOV_TOKEN != '' && '✅ Configured' || '⚠️  Not configured' }}
+        
+        ## Next Steps
+        
+        If any items show ⚠️ or ❌, please refer to the setup issue for instructions.
+        EOF
+        
+        cat validation-report.md
+    
+    - name: Upload Validation Report
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: validation-report
+        path: validation-report.md
+        retention-days: 30

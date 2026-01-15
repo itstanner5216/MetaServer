@@ -12,7 +12,8 @@ This module is a standalone validation assistant that checks:
 All checks are non-blocking - they log warnings but allow startup to continue.
 """
 
-from typing import Any, Set
+from typing import Any
+
 from loguru import logger
 
 
@@ -49,38 +50,33 @@ async def validate_bootstrap_tools(mcp_instance: Any, tool_registry: Any) -> boo
             f"({', '.join(sorted(actual_exposed))})"
         )
         return True
-    else:
-        # Calculate differences
-        extra_tools = actual_exposed - expected_bootstrap
-        missing_tools = expected_bootstrap - actual_exposed
+    # Calculate differences
+    extra_tools = actual_exposed - expected_bootstrap
+    missing_tools = expected_bootstrap - actual_exposed
 
-        # Log detailed warning
-        logger.warning("=" * 60)
-        logger.warning("⚠ BOOTSTRAP VALIDATION FAILED")
-        logger.warning("=" * 60)
-        logger.warning(f"Expected tools: {sorted(expected_bootstrap)}")
-        logger.warning(f"Actual tools:   {sorted(actual_exposed)}")
+    # Log detailed warning
+    logger.warning("=" * 60)
+    logger.warning("⚠ BOOTSTRAP VALIDATION FAILED")
+    logger.warning("=" * 60)
+    logger.warning(f"Expected tools: {sorted(expected_bootstrap)}")
+    logger.warning(f"Actual tools:   {sorted(actual_exposed)}")
 
-        if extra_tools:
-            logger.warning(f"Extra tools (should not be exposed): {sorted(extra_tools)}")
-            logger.warning(
-                "  → These tools violate progressive discovery!"
-            )
+    if extra_tools:
+        logger.warning(f"Extra tools (should not be exposed): {sorted(extra_tools)}")
+        logger.warning("  → These tools violate progressive discovery!")
 
-        if missing_tools:
-            logger.warning(f"Missing tools (should be exposed): {sorted(missing_tools)}")
-            logger.warning(
-                "  → Bootstrap tools are missing from supervisor!"
-            )
+    if missing_tools:
+        logger.warning(f"Missing tools (should be exposed): {sorted(missing_tools)}")
+        logger.warning("  → Bootstrap tools are missing from supervisor!")
 
-        logger.warning("")
-        logger.warning("Action required:")
-        logger.warning("  1. Check supervisor.py @mcp.tool() decorators")
-        logger.warning("  2. Verify tool_registry.get_bootstrap_tools()")
-        logger.warning("  3. Ensure no mcp.mount() calls are active")
-        logger.warning("=" * 60)
+    logger.warning("")
+    logger.warning("Action required:")
+    logger.warning("  1. Check supervisor.py @mcp.tool() decorators")
+    logger.warning("  2. Verify tool_registry.get_bootstrap_tools()")
+    logger.warning("  3. Ensure no mcp.mount() calls are active")
+    logger.warning("=" * 60)
 
-        return False
+    return False
 
 
 async def validate_no_auto_mounts(mcp_instance: Any) -> bool:
@@ -119,9 +115,7 @@ async def run_all_validations(mcp_instance: Any, tool_registry: Any) -> dict[str
     logger.info("Running supervisor compliance validations...")
 
     # Bootstrap tools validation
-    results["bootstrap_tools"] = await validate_bootstrap_tools(
-        mcp_instance, tool_registry
-    )
+    results["bootstrap_tools"] = await validate_bootstrap_tools(mcp_instance, tool_registry)
 
     # Auto-mount validation
     results["no_auto_mounts"] = await validate_no_auto_mounts(mcp_instance)

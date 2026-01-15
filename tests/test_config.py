@@ -25,18 +25,21 @@ def test_config_defaults():
     assert Config.WORKSPACE_ROOT == "./workspace"
 
 
+@pytest.mark.unit
 def test_config_lease_ttl_positive():
     """All lease TTLs must be > 0 (Nuance 2.8)."""
     for risk, ttl in Config.LEASE_TTL_BY_RISK.items():
         assert ttl > 0, f"TTL for {risk} must be positive, got {ttl}"
 
 
+@pytest.mark.unit
 def test_config_lease_calls_positive():
     """All lease call counts must be >= 0."""
     for risk, calls in Config.LEASE_CALLS_BY_RISK.items():
         assert calls >= 0, f"Calls for {risk} must be non-negative, got {calls}"
 
 
+@pytest.mark.unit
 def test_config_validation_with_ttl():
     """Config.validate() should pass when all TTLs are positive."""
     # Save original values
@@ -56,6 +59,7 @@ def test_config_validation_with_ttl():
         Config.ELICITATION_TIMEOUT = original_timeout
 
 
+@pytest.mark.unit
 def test_config_validation_fails_on_zero_ttl():
     """Config.validate() should fail if any TTL is <= 0."""
     # Save original value
@@ -73,6 +77,7 @@ def test_config_validation_fails_on_zero_ttl():
         Config.DEFAULT_ELEVATION_TTL = original_ttl
 
 
+@pytest.mark.unit
 def test_config_validation_fails_on_negative_ttl():
     """Config.validate() should fail if any TTL is negative."""
     # Save original value
@@ -90,11 +95,13 @@ def test_config_validation_fails_on_negative_ttl():
         Config.ELICITATION_TIMEOUT = original_ttl
 
 
+@pytest.mark.unit
 def test_config_redis_url():
     """Redis URL should be set with default."""
     assert Config.REDIS_URL == "redis://localhost:6379"
 
 
+@pytest.mark.unit
 def test_config_feature_flags_default_disabled():
     """Feature flags should default to disabled (Nuance 2.7 - fail-safe)."""
     assert Config.ENABLE_SEMANTIC_RETRIEVAL is False

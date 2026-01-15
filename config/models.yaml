@@ -1,0 +1,109 @@
+# config/models.yaml
+# 
+# AI Agent Model Configuration
+# ============================
+# 
+# To swap a model, just change the values here - no code changes needed!
+# 
+# Supported providers:
+#   - azure_openai: Azure OpenAI Service
+#   - openai: OpenAI API
+#   - anthropic: Anthropic Claude
+#   - github_models: GitHub Models API
+#   - moonshot: Moonshot AI (Kimi)
+#   - openrouter: OpenRouter (access to many models)
+#   - ollama: Local Ollama models
+#
+# Required secrets (add to GitHub repo settings):
+#   - AZURE_OPENAI_API_KEY
+#   - MODELS_API_TOKEN
+#   - MOONSHOT_API_KEY
+#   - OPENROUTER_API_KEY
+
+agents:
+  validator:
+    display_name: "🔍 Validation Agent"
+    description: "Reviews PRs for code quality, patterns, and security"
+    model: "o4-mini"
+    provider: "azure_openai"
+    endpoint: "https://myproject5216.openai.azure.com/openai/v1/chat/completions"
+    api_key_env: "AZURE_OPENAI_API_KEY"
+    temperature: 0.3
+    max_tokens: 4096
+    timeout: 120
+
+  remediator:
+    display_name: "🔧 Remediation Agent"
+    description: "Auto-fixes common issues and pushes to PR branch"
+    model: "DeepSeek-V3-0324"
+    provider: "github_models"
+    endpoint: "https://models.inference.ai.azure.com/chat/completions"
+    api_key_env: "MODELS_API_TOKEN"
+    temperature: 0.2
+    max_tokens: 8192
+    timeout: 180
+
+  guardian:
+    display_name: "🏛️ Architectural Guardian"
+    description: "Validates architectural integrity and detects breaking changes"
+    model: "kimi-k2-turbo"
+    provider: "moonshot"
+    endpoint: "https://api.moonshot.ai/v1/chat/completions"
+    api_key_env: "MOONSHOT_API_KEY"
+    temperature: 0.4
+    max_tokens: 4096
+    timeout: 120
+
+  verifier:
+    display_name: "✅ Functional Verifier"
+    description: "Analyzes test results and determines merge readiness"
+    model: "xiaomi/mimo-v2-flash:free"
+    provider: "openrouter"
+    endpoint: "https://openrouter.ai/api/v1/chat/completions"
+    api_key_env: "OPENROUTER_API_KEY"
+    temperature: 0.3
+    max_tokens: 4096
+    timeout: 120
+
+# Default settings applied to all agents unless overridden
+defaults:
+  temperature: 0.3
+  max_tokens: 4096
+  timeout: 120
+  max_retries: 3
+  retry_delay: 2.0
+
+# Provider-specific header configurations
+providers:
+  azure_openai:
+    auth_header: "api-key"
+    auth_prefix: ""
+  
+  openai:
+    auth_header: "Authorization"
+    auth_prefix: "Bearer "
+  
+  anthropic:
+    auth_header: "x-api-key"
+    auth_prefix: ""
+    extra_headers:
+      anthropic-version: "2023-06-01"
+  
+  github_models:
+    auth_header: "Authorization"
+    auth_prefix: "Bearer "
+  
+  moonshot:
+    auth_header: "Authorization"
+    auth_prefix: "Bearer "
+  
+  openrouter:
+    auth_header: "Authorization"
+    auth_prefix: "Bearer "
+    extra_headers:
+      HTTP-Referer: "https://github.com/itstanner5216/MetaServer"
+      X-Title: "MetaServer AI Agent Pipeline"
+  
+  ollama:
+    auth_header: ""
+    auth_prefix: ""

@@ -67,13 +67,12 @@ async def inspect_context(test_param: str = "test") -> str:
             elif attr_name.startswith("_"):
                 # Private attributes
                 context_data["private_attributes"][attr_name] = str(attr_value)
+            # Public attributes - these are what we care about
+            # Convert to string for JSON serialization
+            elif isinstance(attr_value, (str, int, float, bool, type(None))):
+                context_data["available_attributes"][attr_name] = attr_value
             else:
-                # Public attributes - these are what we care about
-                # Convert to string for JSON serialization
-                if isinstance(attr_value, (str, int, float, bool, type(None))):
-                    context_data["available_attributes"][attr_name] = attr_value
-                else:
-                    context_data["available_attributes"][attr_name] = str(attr_value)
+                context_data["available_attributes"][attr_name] = str(attr_value)
 
         except Exception as e:
             context_data["available_attributes"][attr_name] = f"<Error: {e}>"
@@ -81,8 +80,10 @@ async def inspect_context(test_param: str = "test") -> str:
     # Look for common session/client ID patterns
     potential_ids = {}
     for attr_name, attr_value in context_data["available_attributes"].items():
-        if any(keyword in attr_name.lower() for keyword in
-               ["session", "client", "connection", "id", "user", "caller"]):
+        if any(
+            keyword in attr_name.lower()
+            for keyword in ["session", "client", "connection", "id", "user", "caller"]
+        ):
             potential_ids[attr_name] = attr_value
 
     context_data["potential_session_identifiers"] = potential_ids
@@ -178,8 +179,9 @@ async def test_context_stability(call_number: int = 1) -> str:
     # Get potential ID fields
     potential_ids = {}
     for attr_name in dir(ctx):
-        if (not attr_name.startswith("_") and
-            any(kw in attr_name.lower() for kw in ["session", "client", "connection", "id"])):
+        if not attr_name.startswith("_") and any(
+            kw in attr_name.lower() for kw in ["session", "client", "connection", "id"]
+        ):
             try:
                 potential_ids[attr_name] = getattr(ctx, attr_name)
             except:

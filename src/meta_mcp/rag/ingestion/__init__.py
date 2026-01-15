@@ -1,19 +1,19 @@
 """Ingestion pipeline for document processing and embedding."""
 
 from .extractors import (
-    Extractor,
-    PlainTextExtractor,
-    PDFExtractor,
     DOCXExtractor,
+    Extractor,
     ExtractorRegistry,
-    create_default_registry
+    PDFExtractor,
+    PlainTextExtractor,
+    create_default_registry,
 )
 
 __all__ = [
-    "Extractor",
-    "PlainTextExtractor",
-    "PDFExtractor",
     "DOCXExtractor",
+    "Extractor",
     "ExtractorRegistry",
-    "create_default_registry"
+    "PDFExtractor",
+    "PlainTextExtractor",
+    "create_default_registry",
 ]

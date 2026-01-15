@@ -4,12 +4,12 @@ Structure-aware document chunking with deterministic output.
 Splits on document structure first, then by token count with overlap.
 """
 
-import tiktoken
-from dataclasses import dataclass
-from typing import List, Optional
 import hashlib
-import re
 import logging
+import re
+from dataclasses import dataclass
+
+import tiktoken
 
 logger = logging.getLogger(__name__)
 
@@ -17,6 +17,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class Chunk:
     """A single chunk of document text."""
+
     text: str
     index: int
     offset_start: int  # Byte offset in source document
@@ -40,7 +41,7 @@ class SemanticChunker:
         target_tokens: int = 512,
         overlap_tokens: int = 50,
         min_tokens: int = 100,
-        max_tokens: int = 2000
+        max_tokens: int = 2000,
     ):
         self.target_tokens = target_tokens
         self.overlap_tokens = overlap_tokens
@@ -49,7 +50,7 @@ class SemanticChunker:
         # Use cl100k_base encoding (same as GPT-4, close to Gemini tokenization)
         self.encoder = tiktoken.get_encoding("cl100k_base")
 
-    def chunk(self, text: str, mime_type: str = "text/plain") -> List[Chunk]:
+    def chunk(self, text: str, mime_type: str = "text/plain") -> list[Chunk]:
         """
         Chunk document text with structure awareness.
 
@@ -86,48 +87,50 @@ class SemanticChunker:
         # Step 4: Assign final indexes and compute hashes
         for i, chunk in enumerate(chunks):
             chunk.index = i
-            chunk.chunk_hash = hashlib.sha256(chunk.text.encode('utf-8')).hexdigest()
+            chunk.chunk_hash = hashlib.sha256(chunk.text.encode("utf-8")).hexdigest()
             chunk.token_count = len(self.encoder.encode(chunk.text))
 
         logger.info(f"Created {len(chunks)} chunks from document")
         return chunks
 
-    def _split_by_structure(self, text: str, mime_type: str) -> List[str]:
+    def _split_by_structure(self, text: str, mime_type: str) -> list[str]:
         """Split document by structural boundaries."""
 
         if mime_type in ["text/markdown", "text/x-markdown"]:
             # Split on markdown headings (# through ###)
             # Keep the heading with its content
-            pattern = r'(?=^#{1,3}\s+)'
+            pattern = r"(?=^#{1,3}\s+)"
             sections = re.split(pattern, text, flags=re.MULTILINE)
         elif mime_type == "text/plain":
             # Split on double newlines (paragraph boundaries)
             # Also split on lines that look like headers (ALL CAPS, numbered)
-            sections = re.split(r'\n\n+', text)
+            sections = re.split(r"\n\n+", text)
         else:
             # For other types, split on double newlines
-            sections = re.split(r'\n\n+', text)
+            sections = re.split(r"\n\n+", text)
 
         # Filter empty sections and clean whitespace
         sections = [s.strip() for s in sections if s.strip()]
 
         return sections
 
-    def _chunk_by_tokens(self, text: str, base_offset: int) -> List[Chunk]:
+    def _chunk_by_tokens(self, text: str, base_offset: int) -> list[Chunk]:
         """Split text into chunks of target_tokens with overlap."""
 
         tokens = self.encoder.encode(text)
 
         # If text fits in one chunk, return as-is
         if len(tokens) <= self.target_tokens:
-            return [Chunk(
-                text=text,
-                index=-1,  # Set later
-                offset_start=base_offset,
-                offset_end=base_offset + len(text),
-                chunk_hash="",  # Set later
-                token_count=len(tokens)
-            )]
+            return [
+                Chunk(
+                    text=text,
+                    index=-1,  # Set later
+                    offset_start=base_offset,
+                    offset_end=base_offset + len(text),
+                    chunk_hash="",  # Set later
+                    token_count=len(tokens),
+                )
+            ]
 
         chunks = []
         i = 0
@@ -141,17 +144,19 @@ class SemanticChunker:
             # Calculate byte offsets
             # Note: This is approximate due to token-to-byte mapping
             prefix_text = self.encoder.decode(tokens[:i])
-            offset_start = base_offset + len(prefix_text.encode('utf-8'))
-            offset_end = offset_start + len(chunk_text.encode('utf-8'))
+            offset_start = base_offset + len(prefix_text.encode("utf-8"))
+            offset_end = offset_start + len(chunk_text.encode("utf-8"))
 
-            chunks.append(Chunk(
-                text=chunk_text,
-                index=-1,
-                offset_start=offset_start,
-                offset_end=offset_end,
-                chunk_hash="",
-                token_count=len(chunk_tokens)
-            ))
+            chunks.append(
+                Chunk(
+                    text=chunk_text,
+                    index=-1,
+                    offset_start=offset_start,
+                    offset_end=offset_end,
+                    chunk_hash="",
+                    token_count=len(chunk_tokens),
+                )
+            )
 
             # Move forward, leaving overlap
             step = self.target_tokens - self.overlap_tokens
@@ -159,7 +164,7 @@ class SemanticChunker:
 
         return chunks
 
-    def _merge_small_chunks(self, chunks: List[Chunk]) -> List[Chunk]:
+    def _merge_small_chunks(self, chunks: list[Chunk]) -> list[Chunk]:
         """Merge chunks that are too small."""
         if not chunks:
             return chunks

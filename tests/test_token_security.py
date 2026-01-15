@@ -16,8 +16,8 @@ Security Requirements:
 This is the #1 security critical component of Phase 4.
 """
 
+
 import pytest
-import time
 
 
 @pytest.mark.asyncio
@@ -76,7 +76,6 @@ async def test_token_forgery_rejected():
     # )
     # assert legit_valid is True, "Legitimate token should be accepted"
 
-    pass
 
 
 @pytest.mark.asyncio
@@ -125,7 +124,6 @@ async def test_expired_token_rejected():
     # )
     # assert valid_expired is False, "SECURITY BREACH: Expired token accepted!"
 
-    pass
 
 
 @pytest.mark.asyncio
@@ -173,7 +171,6 @@ async def test_token_replay_prevention():
     # )
     # assert second_use is False, "SECURITY BREACH: Token replay succeeded!"
 
-    pass
 
 
 @pytest.mark.asyncio
@@ -226,7 +223,6 @@ async def test_invalid_signature_rejected():
     # )
     # assert valid is False, "SECURITY BREACH: Tampered token accepted!"
 
-    pass
 
 
 @pytest.mark.asyncio
@@ -258,7 +254,6 @@ async def test_token_canonicalization_deterministic():
     # All tokens should be identical
     # assert len(set(tokens)) == 1, "Token generation is non-deterministic!"
 
-    pass
 
 
 @pytest.mark.asyncio
@@ -305,7 +300,6 @@ async def test_token_client_id_binding():
     # )
     # assert valid_b is False, "SECURITY BREACH: Token used across sessions!"
 
-    pass
 
 
 @pytest.mark.asyncio
@@ -351,7 +345,6 @@ async def test_token_tool_id_binding():
     # )
     # assert valid_write is False, "SECURITY BREACH: Token used for wrong tool!"
 
-    pass
 
 
 @pytest.mark.asyncio
@@ -372,7 +365,6 @@ async def test_hmac_secret_not_empty():
     # assert Config.HMAC_SECRET is not None, "HMAC_SECRET must be configured"
     # assert len(Config.HMAC_SECRET) >= 32, "HMAC_SECRET should be at least 32 bytes"
 
-    pass
 
 
 @pytest.mark.asyncio
@@ -415,7 +407,6 @@ async def test_token_contains_required_fields():
     # assert payload["tool_id"] == "write_file"
     # assert payload["exp"] > payload["iat"]
 
-    pass
 
 
 @pytest.mark.asyncio
@@ -459,7 +450,6 @@ async def test_token_with_context_key():
     # )
     # assert valid_mismatch is False, "Token should be invalid for different context"
 
-    pass
 
 
 @pytest.mark.asyncio
@@ -492,7 +482,6 @@ async def test_malformed_token_rejected():
     # None token
     # assert verify_token(None, "session", "tool", Config.HMAC_SECRET) is False
 
-    pass
 
 
 @pytest.mark.asyncio
@@ -532,4 +521,3 @@ async def test_token_generation_performance():
 
     # assert verify_time_ms < 5, f"Token verification too slow: {verify_time_ms:.2f}ms"
 
-    pass

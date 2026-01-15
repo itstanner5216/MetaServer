@@ -7,12 +7,14 @@ Tests:
 - Integration with registry
 - Edge cases and error handling
 """
+
+
 import pytest
-from datetime import datetime
-from src.meta_mcp.registry.models import ToolRecord, ToolCandidate
+
+from src.meta_mcp.registry.models import ToolCandidate, ToolRecord
 from src.meta_mcp.registry.registry import ToolRegistry
-from src.meta_mcp.retrieval.search import SemanticSearch, search_tools_semantic
 from src.meta_mcp.retrieval.embedder import ToolEmbedder
+from src.meta_mcp.retrieval.search import SemanticSearch, search_tools_semantic
 
 
 class TestSemanticSearch:
@@ -28,7 +30,7 @@ class TestSemanticSearch:
                 description_1line="Read files from disk",
                 description_full="Read text and binary files from the file system",
                 tags=["file", "read", "disk", "io"],
-                risk_level="safe"
+                risk_level="safe",
             ),
             ToolRecord(
                 tool_id="write_file",
@@ -36,7 +38,7 @@ class TestSemanticSearch:
                 description_1line="Write files to disk",
                 description_full="Write text and binary files to the file system",
                 tags=["file", "write", "disk", "io"],
-                risk_level="sensitive"
+                risk_level="sensitive",
             ),
             ToolRecord(
                 tool_id="list_directory",
@@ -44,7 +46,7 @@ class TestSemanticSearch:
                 description_1line="List directory contents",
                 description_full="List all files and subdirectories in a directory",
                 tags=["file", "directory", "list"],
-                risk_level="safe"
+                risk_level="safe",
             ),
             ToolRecord(
                 tool_id="send_email",
@@ -52,7 +54,7 @@ class TestSemanticSearch:
                 description_1line="Send email messages",
                 description_full="Send email messages to one or more recipients",
                 tags=["email", "network", "send", "communication"],
-                risk_level="sensitive"
+                risk_level="sensitive",
             ),
             ToolRecord(
                 tool_id="http_request",
@@ -60,7 +62,7 @@ class TestSemanticSearch:
                 description_1line="Make HTTP requests",
                 description_full="Send HTTP/HTTPS requests to web endpoints",
                 tags=["http", "network", "web", "api"],
-                risk_level="sensitive"
+                risk_level="sensitive",
             ),
             ToolRecord(
                 tool_id="execute_shell",
@@ -68,8 +70,8 @@ class TestSemanticSearch:
                 description_1line="Execute shell commands",
                 description_full="Run shell commands on the system",
                 tags=["shell", "system", "execute", "command"],
-                risk_level="dangerous"
-            )
+                risk_level="dangerous",
+            ),
         ]
 
     @pytest.fixture
@@ -350,7 +352,7 @@ class TestSemanticSearch:
             description_1line="Only tool",
             description_full="The only tool available",
             tags=["only"],
-            risk_level="safe"
+            risk_level="safe",
         )
 
         searcher = SemanticSearch(registry)
@@ -373,5 +375,6 @@ class TestSemanticSearch:
         assert len(results3) > 0
 
         # Different queries should have different top results
-        assert results1[0].tool_id != results2[0].tool_id or \
-               results1[0].tool_id != results3[0].tool_id
+        assert (
+            results1[0].tool_id != results2[0].tool_id or results1[0].tool_id != results3[0].tool_id
+        )

@@ -16,6 +16,10 @@ GUIPlan/
 
 # Generated artifacts and reports
 reports/
+artifacts/
 workspace/
 htmlcov/
 .coverage
+
+# Downloaded tools
+actionlint
