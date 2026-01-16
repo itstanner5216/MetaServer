@@ -13,7 +13,6 @@ import time
 import pytest
 
 from src.meta_mcp.registry.models import ToolRecord
-from src.meta_mcp.registry.registry import ToolRegistry
 from src.meta_mcp.retrieval.embedder import ToolEmbedder
 from src.meta_mcp.retrieval.search import SemanticSearch
 
@@ -22,9 +21,9 @@ class TestRetrievalPerformance:
     """Performance benchmarks for semantic retrieval."""
 
     @pytest.fixture
-    def large_registry(self):
+    def large_registry(self, fresh_registry):
         """Create registry with 100+ tools for performance testing."""
-        registry = ToolRegistry()
+        registry = fresh_registry
 
         # Create diverse set of tools
         categories = [
@@ -43,13 +42,15 @@ class TestRetrievalPerformance:
             for operation in operations:
                 for variant in range(3):  # 3 variants per operation
                     tool_id = f"{category}_{operation}_{variant}"
-                    registry._tools[tool_id] = ToolRecord(
-                        tool_id=tool_id,
-                        server_id=f"{category}_server",
-                        description_1line=f"{operation.capitalize()} {category} data variant {variant}",
-                        description_full=f"Perform {operation} operation on {category} resources. This is variant {variant} with extended capabilities.",
-                        tags=[category, operation, f"variant_{variant}"],
-                        risk_level=["safe", "sensitive", "dangerous"][variant % 3],
+                    registry.add_for_testing(
+                        ToolRecord(
+                            tool_id=tool_id,
+                            server_id=f"{category}_server",
+                            description_1line=f"{operation.capitalize()} {category} data variant {variant}",
+                            description_full=f"Perform {operation} operation on {category} resources. This is variant {variant} with extended capabilities.",
+                            tags=[category, operation, f"variant_{variant}"],
+                            risk_level=["safe", "sensitive", "dangerous"][variant % 3],
+                        )
                     )
                     tool_count += 1
 
@@ -141,9 +142,9 @@ class TestRetrievalPerformance:
 
         print(f"\nCache speedup: {uncached_time / cached_time:.1f}x faster")
 
-    def test_semantic_vs_keyword_quality(self):
+    def test_semantic_vs_keyword_quality(self, fresh_registry):
         """Compare semantic search quality vs keyword search."""
-        registry = ToolRegistry()
+        registry = fresh_registry
 
         # Create tools where semantic search should outperform keyword
         tools = [
@@ -174,7 +175,7 @@ class TestRetrievalPerformance:
         ]
 
         for tool in tools:
-            registry._tools[tool.tool_id] = tool
+            registry.add_for_testing(tool)
 
         # Query: "retrieve file contents"
         # Semantic should match read_file/load_document

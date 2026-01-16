@@ -19,6 +19,7 @@ async def test_approval_grants_execution(
     governance_in_permission,
     mock_fastmcp_context,
     mock_elicit_approve,
+    grant_lease,
 ):
     """
     Test that elicitation response "approve" allows tool execution.
@@ -32,6 +33,7 @@ async def test_approval_grants_execution(
     mock_fastmcp_context.request_context.arguments = {"path": "test.txt", "content": "data"}
     mock_fastmcp_context.request_context.session_id = "session-123"
     mock_fastmcp_context.elicit = mock_elicit_approve
+    await grant_lease(client_id="session-123", tool_name="write_file")
 
     # Create mock call_next
     call_next = AsyncMock(return_value="File written successfully")
@@ -53,6 +55,7 @@ async def test_denial_blocks_execution(
     governance_in_permission,
     mock_fastmcp_context,
     mock_elicit_deny,
+    grant_lease,
 ):
     """
     Test that elicitation response "deny" blocks tool execution.
@@ -66,6 +69,7 @@ async def test_denial_blocks_execution(
     mock_fastmcp_context.request_context.arguments = {"path": "test.txt", "content": "data"}
     mock_fastmcp_context.request_context.session_id = "session-123"
     mock_fastmcp_context.elicit = mock_elicit_deny
+    await grant_lease(client_id="session-123", tool_name="write_file")
 
     # Create mock call_next
     call_next = AsyncMock()
@@ -92,6 +96,7 @@ async def test_timeout_blocks_execution(
     governance_in_permission,
     mock_fastmcp_context,
     mock_elicit_timeout,
+    grant_lease,
 ):
     """
     Test that elicitation timeout (>300s) denies and logs timeout.
@@ -105,6 +110,7 @@ async def test_timeout_blocks_execution(
     mock_fastmcp_context.request_context.arguments = {"path": "test.txt", "content": "data"}
     mock_fastmcp_context.request_context.session_id = "session-123"
     mock_fastmcp_context.elicit = mock_elicit_timeout
+    await grant_lease(client_id="session-123", tool_name="write_file")
 
     # Create mock call_next
     call_next = AsyncMock()
@@ -130,6 +136,7 @@ async def test_timeout_blocks_execution(
 async def test_malformed_response_blocks(
     governance_in_permission,
     mock_fastmcp_context,
+    grant_lease,
 ):
     """
     Test that invalid elicitation response denies (fail-safe).
@@ -142,6 +149,7 @@ async def test_malformed_response_blocks(
     mock_fastmcp_context.request_context.tool_name = "write_file"
     mock_fastmcp_context.request_context.arguments = {"path": "test.txt", "content": "data"}
     mock_fastmcp_context.request_context.session_id = "session-123"
+    await grant_lease(client_id="session-123", tool_name="write_file")
 
     # Create mock elicit that returns malformed response
     async def _malformed(*args, **kwargs):
@@ -176,6 +184,7 @@ async def test_elicitation_declined_blocks(
     governance_in_permission,
     mock_fastmcp_context,
     mock_elicit_declined,
+    grant_lease,
 ):
     """
     Test that DeclinedElicitation result denies execution.
@@ -189,6 +198,7 @@ async def test_elicitation_declined_blocks(
     mock_fastmcp_context.request_context.arguments = {"path": "test.txt", "content": "data"}
     mock_fastmcp_context.request_context.session_id = "session-123"
     mock_fastmcp_context.elicit = mock_elicit_declined
+    await grant_lease(client_id="session-123", tool_name="write_file")
 
     # Create mock call_next
     call_next = AsyncMock()
@@ -210,6 +220,7 @@ async def test_elicitation_cancelled_blocks(
     governance_in_permission,
     mock_fastmcp_context,
     mock_elicit_cancelled,
+    grant_lease,
 ):
     """
     Test that CancelledElicitation result denies execution.
@@ -223,6 +234,7 @@ async def test_elicitation_cancelled_blocks(
     mock_fastmcp_context.request_context.arguments = {"path": "test.txt", "content": "data"}
     mock_fastmcp_context.request_context.session_id = "session-123"
     mock_fastmcp_context.elicit = mock_elicit_cancelled
+    await grant_lease(client_id="session-123", tool_name="write_file")
 
     # Create mock call_next
     call_next = AsyncMock()
@@ -249,6 +261,7 @@ async def test_approval_creates_audit_log(
     governance_in_permission,
     mock_fastmcp_context,
     mock_elicit_approve,
+    grant_lease,
 ):
     """
     Test that approval decision is logged to audit.jsonl.
@@ -263,6 +276,7 @@ async def test_approval_creates_audit_log(
     mock_fastmcp_context.request_context.arguments = {"path": "test.txt", "content": "data"}
     mock_fastmcp_context.request_context.session_id = "session-audit-test"
     mock_fastmcp_context.elicit = mock_elicit_approve
+    await grant_lease(client_id="session-audit-test", tool_name="write_file")
 
     # Create mock call_next
     call_next = AsyncMock(return_value="Success")

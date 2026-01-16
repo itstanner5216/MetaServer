@@ -15,9 +15,10 @@ def test_registry_loads_from_yaml():
 
 
 def test_bootstrap_tools_defined():
-    """Bootstrap tools must be exactly search_tools and get_tool_schema (Nuance 5.3)."""
+    """Bootstrap tools must include expand_tool_schema (Phase 5)."""
     bootstrap = tool_registry.get_bootstrap_tools()
-    assert bootstrap == {"search_tools", "get_tool_schema"}
+    assert bootstrap == {"search_tools", "get_tool_schema", "expand_tool_schema"}
+    assert len(bootstrap) == 3
 
 
 def test_tool_record_validation():
@@ -99,9 +100,11 @@ def test_bootstrap_tools_are_safe():
     """Bootstrap tools should have risk_level=safe (Nuance 5.3)."""
     search_tool = tool_registry.get("search_tools")
     schema_tool = tool_registry.get("get_tool_schema")
+    expand_tool = tool_registry.get("expand_tool_schema")
 
     assert search_tool.risk_level == "safe"
     assert schema_tool.risk_level == "safe"
+    assert expand_tool.risk_level == "safe"
 
 
 def test_sensitive_tools_require_permission():

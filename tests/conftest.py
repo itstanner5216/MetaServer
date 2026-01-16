@@ -478,6 +478,99 @@ async def lease_for_tool(redis_client):
     return _grant
 
 
+@pytest.fixture
+async def grant_lease(redis_client):
+    """
+    Fixture to grant leases for testing.
+
+    Usage:
+        async def test_something(grant_lease):
+            await grant_lease(client_id="test_client", tool_name="write_file")
+    """
+    from src.meta_mcp.leases import lease_manager
+    from src.meta_mcp.registry import tool_registry
+
+    async def _grant(
+        client_id: str,
+        tool_name: str,
+        ttl_seconds: int = 300,
+        calls_remaining: int = 3,
+    ):
+        """Grant a lease for testing."""
+        tool = tool_registry.get(tool_name)
+        if tool is None:
+            raise ValueError(f"Tool {tool_name} not in registry")
+
+        mode = await governance_state.get_mode()
+        lease = await lease_manager.grant(
+            client_id=client_id,
+            tool_id=tool_name,
+            ttl_seconds=ttl_seconds,
+            calls_remaining=calls_remaining,
+            mode_at_issue=mode.value,
+        )
+        if lease is None:
+            raise RuntimeError(f"Failed to grant lease for tool '{tool_name}'")
+        return lease
+
+    return _grant
+
+
+@pytest.fixture
+async def grant_all_leases(redis_client):
+    """
+    Grant leases for ALL tools in registry (for comprehensive tests).
+
+    Usage:
+        async def test_something(grant_all_leases):
+            await grant_all_leases(client_id="test_client")
+    """
+    from src.meta_mcp.leases import lease_manager
+    from src.meta_mcp.registry import tool_registry
+
+    async def _grant_all(client_id: str, ttl_seconds: int = 300):
+        """Grant leases for all registered tools."""
+        tools = tool_registry.get_all_summaries()
+        granted = []
+
+        mode = await governance_state.get_mode()
+        for tool in tools:
+            lease = await lease_manager.grant(
+                client_id=client_id,
+                tool_id=tool.tool_id,
+                ttl_seconds=ttl_seconds,
+                calls_remaining=10,
+                mode_at_issue=mode.value,
+            )
+            if lease is None:
+                raise RuntimeError(f"Failed to grant lease for tool '{tool.tool_id}'")
+            granted.append(lease)
+
+        return granted
+
+    return _grant_all
+
+
+# ============================================================================
+# REGISTRY FIXTURES
+# ============================================================================
+
+
+@pytest.fixture
+def fresh_registry():
+    """Provide a fresh registry for testing with cleanup."""
+    from src.meta_mcp.registry.registry import ToolRegistry
+
+    registry = ToolRegistry()
+    original_tools = registry._tools.copy()
+    original_by_server = registry._tools_by_server.copy()
+
+    yield registry
+
+    registry._tools = original_tools
+    registry._tools_by_server = original_by_server
+
+
 # ============================================================================
 # HELPER UTILITIES
 # ============================================================================
@@ -509,6 +602,9 @@ def read_audit_log(log_path: Path) -> list[dict[str, Any]]:
 # Export helper for use in tests
 __all__ = [
     "audit_log_path",
+    "fresh_registry",
+    "grant_all_leases",
+    "grant_lease",
     "governance_in_bypass",
     "governance_in_permission",
     "governance_in_read_only",
