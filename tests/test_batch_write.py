@@ -11,16 +11,15 @@ Tests:
 import pytest
 
 from src.meta_mcp.registry.models import ToolRecord
-from src.meta_mcp.registry.registry import ToolRegistry
 
 
 class TestBatchWrite:
     """Test suite for batch write operations."""
 
     @pytest.fixture
-    def sample_registry(self):
+    def sample_registry(self, fresh_registry):
         """Create registry with sample tools."""
-        registry = ToolRegistry()
+        registry = fresh_registry
 
         tools = [
             ToolRecord(
@@ -42,7 +41,7 @@ class TestBatchWrite:
         ]
 
         for tool in tools:
-            registry._tools[tool.tool_id] = tool
+            registry.add_for_testing(tool)
 
         return registry
 

@@ -1,6 +1,7 @@
 """Tool registry implementation."""
 
 import asyncio
+import logging
 import os
 from pathlib import Path
 
@@ -15,6 +16,8 @@ from .models import (
     ToolRecord,
     extract_schema_hint,
 )
+
+logger = logging.getLogger(__name__)
 
 
 def _resolve_governance_mode():
@@ -42,7 +45,9 @@ class ToolRegistry:
         """Initialize empty tool registry."""
         self._tools: dict[str, ToolRecord] = {}
         self._servers: dict[str, ServerRecord] = {}
+        self._tools_by_server: dict[str, list[ToolRecord]] = {}
         self._bootstrap_tools = {"search_tools", "get_tool_schema"}
+
 
     @classmethod
     def from_yaml(cls, yaml_path: str) -> "ToolRegistry":
@@ -88,8 +93,29 @@ class ToolRegistry:
             tool = ToolRecord(**tool_data)
             tool.validate_invariants()
             registry._tools[tool.tool_id] = tool
+            registry._tools_by_server.setdefault(tool.server_id, []).append(tool)
 
         return registry
+
+    def add_for_testing(self, tool: ToolRecord) -> None:
+        """
+        Add a tool to the registry (testing only).
+
+        WARNING: This method is for testing purposes only. In production,
+        tools should be loaded from YAML files via from_yaml().
+
+        Args:
+            tool: ToolRecord to add to registry
+        """
+        if not isinstance(tool, ToolRecord):
+            raise ValueError(f"Expected ToolRecord, got {type(tool)}")
+
+        tool.validate_invariants()
+        self._tools[tool.tool_id] = tool
+        self._tools_by_server.setdefault(tool.server_id, [])
+        if tool not in self._tools_by_server[tool.server_id]:
+            self._tools_by_server[tool.server_id].append(tool)
+        logger.debug("Added tool for testing: %s", tool.tool_id)
 
     def is_registered(self, tool_id: str) -> bool:
         """
@@ -218,7 +244,6 @@ class ToolRegistry:
         Bootstrap tools are:
         - search_tools: Entry point for discovery
         - get_tool_schema: Triggers tool exposure
-
         These tools are auto-exposed at startup and always available.
 
         Returns:

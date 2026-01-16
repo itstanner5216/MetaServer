@@ -12,7 +12,6 @@ Tests:
 import pytest
 
 from src.meta_mcp.registry.models import ToolCandidate, ToolRecord
-from src.meta_mcp.registry.registry import ToolRegistry
 from src.meta_mcp.retrieval.embedder import ToolEmbedder
 from src.meta_mcp.retrieval.search import SemanticSearch, search_tools_semantic
 
@@ -75,11 +74,11 @@ class TestSemanticSearch:
         ]
 
     @pytest.fixture
-    def registry_with_tools(self, sample_tools):
+    def registry_with_tools(self, sample_tools, fresh_registry):
         """Create registry populated with sample tools."""
-        registry = ToolRegistry()
+        registry = fresh_registry
         for tool in sample_tools:
-            registry._tools[tool.tool_id] = tool
+            registry.add_for_testing(tool)
         return registry
 
     def test_semantic_search_initialization(self, registry_with_tools):
@@ -334,25 +333,27 @@ class TestSemanticSearch:
         tool_ids = [r.tool_id for r in results]
         assert "http_request" in tool_ids
 
-    def test_empty_registry(self):
+    def test_empty_registry(self, fresh_registry):
         """Test search on empty registry."""
-        registry = ToolRegistry()
+        registry = fresh_registry
         searcher = SemanticSearch(registry)
 
         results = searcher.search("anything")
 
         assert results == []
 
-    def test_single_tool_registry(self):
+    def test_single_tool_registry(self, fresh_registry):
         """Test search with single tool."""
-        registry = ToolRegistry()
-        registry._tools["only_tool"] = ToolRecord(
-            tool_id="only_tool",
-            server_id="core",
-            description_1line="Only tool",
-            description_full="The only tool available",
-            tags=["only"],
-            risk_level="safe",
+        registry = fresh_registry
+        registry.add_for_testing(
+            ToolRecord(
+                tool_id="only_tool",
+                server_id="core",
+                description_1line="Only tool",
+                description_full="The only tool available",
+                tags=["only"],
+                risk_level="safe",
+            )
         )
 
         searcher = SemanticSearch(registry)

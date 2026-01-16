@@ -127,6 +127,7 @@ async def test_bootstrap_tools_always_allowed(redis_client):
         assert decision.action == "allow"
 
 
+
 @pytest.mark.asyncio
 @pytest.mark.integration
 @pytest.mark.requires_redis

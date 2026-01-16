@@ -14,7 +14,6 @@ verifying all phases work together correctly.
 import asyncio
 
 import pytest
-import yaml
 from src.meta_mcp.config import Config
 from src.meta_mcp.registry import tool_registry
 from src.meta_mcp.governance.policy import evaluate_policy
@@ -22,15 +21,9 @@ from src.meta_mcp.governance.tokens import generate_token, verify_token
 from src.meta_mcp.leases.manager import lease_manager
 from src.meta_mcp.macros.batch_read import batch_read_tools
 from src.meta_mcp.macros.batch_search import batch_search_tools
-from src.meta_mcp.registry.registry import ToolRegistry
+from src.meta_mcp.registry.models import ToolRecord
 from src.meta_mcp.state import ExecutionMode, governance_state
 from src.meta_mcp.toon.encoder import encode_output
-
-
-def _registry_from_tools(tmp_path, tools):
-    yaml_path = tmp_path / "test_tools.yaml"
-    yaml_path.write_text(yaml.safe_dump({"tools": tools}))
-    return ToolRegistry.from_yaml(str(yaml_path))
 
 
 @pytest.mark.asyncio
@@ -317,7 +310,7 @@ async def test_progressive_discovery_with_toon_encoding(redis_client):
 @pytest.mark.asyncio
 @pytest.mark.integration
 @pytest.mark.requires_redis
-async def test_batch_operations_with_governance(redis_client, tmp_path):
+async def test_batch_operations_with_governance(redis_client, fresh_registry):
     """
     Test batch operations respect governance policies.
 
@@ -334,18 +327,20 @@ async def test_batch_operations_with_governance(redis_client, tmp_path):
         ("sensitive_tool_1", "sensitive"),
         ("dangerous_tool_1", "dangerous"),
     ]
-    tools = [
-        {
-            "tool_id": tool_id,
-            "server_id": "test_server",
-            "description_1line": f"{risk.capitalize()} tool",
-            "description_full": f"{risk.capitalize()} tool",
-            "tags": ["test"],
-            "risk_level": risk,
-        }
-        for tool_id, risk in tool_specs
-    ]
-    registry = _registry_from_tools(tmp_path, tools)
+
+    registry = fresh_registry
+
+    for tool_id, risk in tool_specs:
+        registry.add_for_testing(
+            ToolRecord(
+                tool_id=tool_id,
+                server_id="test_server",
+                description_1line=f"{risk.capitalize()} tool",
+                description_full=f"{risk.capitalize()} tool",
+                tags=["test"],
+                risk_level=risk,
+            )
+        )
 
     # Step 2: Batch search
     search_results = batch_search_tools(registry=registry, queries=["tool"])
@@ -550,7 +545,7 @@ async def test_complete_user_journey(redis_client):
 @pytest.mark.asyncio
 @pytest.mark.integration
 @pytest.mark.requires_redis
-async def test_security_invariants_maintained(redis_client, tmp_path):
+async def test_security_invariants_maintained(redis_client, fresh_registry):
     """
     Verify critical security invariants across all phases.
 
@@ -592,26 +587,26 @@ async def test_security_invariants_maintained(redis_client, tmp_path):
     assert validated.mode_at_issue == "PERMISSION"
 
     # Invariant 6: Risk filtering
-    registry = _registry_from_tools(
-        tmp_path,
-        [
-            {
-                "tool_id": "safe",
-                "server_id": "test_server",
-                "description_1line": "Safe",
-                "description_full": "Safe",
-                "tags": ["test"],
-                "risk_level": "safe",
-            },
-            {
-                "tool_id": "dangerous",
-                "server_id": "test_server",
-                "description_1line": "Dangerous",
-                "description_full": "Dangerous",
-                "tags": ["test"],
-                "risk_level": "dangerous",
-            },
-        ],
+    registry = fresh_registry
+    registry.add_for_testing(
+        ToolRecord(
+            tool_id="safe",
+            server_id="test_server",
+            description_1line="Safe",
+            description_full="Safe",
+            tags=["test"],
+            risk_level="safe",
+        )
+    )
+    registry.add_for_testing(
+        ToolRecord(
+            tool_id="dangerous",
+            server_id="test_server",
+            description_1line="Dangerous",
+            description_full="Dangerous",
+            tags=["test"],
+            risk_level="dangerous",
+        )
     )
 
     results = batch_read_tools(registry, ["safe", "dangerous"], max_risk_level="safe")
