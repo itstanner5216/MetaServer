@@ -14,18 +14,36 @@ Security Requirements:
 3. Schema only returned when lease is successfully granted
 """
 
+import json
+from typing import Any
 
 import pytest
+from loguru import logger
 
 from fastmcp.exceptions import ToolError
 
+from src.meta_mcp.config import Config
+from src.meta_mcp.leases import lease_manager
 from src.meta_mcp.state import ExecutionMode, governance_state
-from src.meta_mcp.supervisor import get_tool_schema, mcp
-from tests.test_utils import assert_audit_log_contains
+from src.meta_mcp.supervisor import get_tool_schema, mcp, search_tools
+from tests.test_utils import assert_audit_log_contains, mock_fastmcp_context
+
+pytestmark = pytest.mark.requires_redis
+
+
+def _parse_response(response: Any) -> dict[str, Any]:
+    if isinstance(response, str):
+        return json.loads(response)
+    return response
+
+
+def _assert_no_schema_keywords(text: str) -> None:
+    lowered = text.lower()
+    for keyword in ["inputschema", "properties", "\"type\": \"object\"", "\"$schema\""]:
+        assert keyword not in lowered, f"SECURITY BREACH: Schema keyword '{keyword}' found"
 
 
 @pytest.mark.asyncio
-@pytest.mark.requires_redis
 async def test_blocked_tool_schema_not_exposed(audit_log_path, redis_client):
     """
     Blocked tools should not expose schemas.
@@ -40,8 +58,9 @@ async def test_blocked_tool_schema_not_exposed(audit_log_path, redis_client):
     tools_before = await mcp.get_tools()
     tool_names_before = {tool.name for tool in tools_before.values()}
 
-    with pytest.raises(ToolError, match="blocked by policy"):
+    with pytest.raises(ToolError, match="blocked by policy") as exc_info:
         await get_tool_schema.fn(tool_name="write_file")
+    _assert_no_schema_keywords(str(exc_info.value))
 
     tools_after = await mcp.get_tools()
     tool_names_after = {tool.name for tool in tools_after.values()}
@@ -55,8 +74,6 @@ async def test_blocked_tool_schema_not_exposed(audit_log_path, redis_client):
         )
 
 
-
-@pytest.mark.skip(reason="Phase 4 not yet implemented")
 @pytest.mark.asyncio
 async def test_approval_required_no_schema():
     """
@@ -64,51 +81,15 @@ async def test_approval_required_no_schema():
 
     Security Risk: Schema in approval request leaks tool structure
     before user approves.
-
-    Attack Scenario:
-    1. Mode is PERMISSION
-    2. Attacker calls get_tool_schema("write_file")
-    3. Governance requires approval
-    4. Response status=approval_required
-    5. Response must NOT include inputSchema
-
-    The schema should only be revealed AFTER approval is granted
-    and lease is created.
     """
-    # TODO: Implement after Phase 4
-    # from src.meta_mcp.supervisor import get_tool_schema
-    # from src.meta_mcp.state import governance_state, ExecutionMode
+    await governance_state.set_mode(ExecutionMode.PERMISSION)
 
-    # Set mode to PERMISSION
-    # await governance_state.set_mode(ExecutionMode.PERMISSION)
+    with pytest.raises(ToolError, match="requires approval") as exc_info:
+        await get_tool_schema.fn(tool_name="write_file")
 
-    # Request schema for sensitive tool (requires approval)
-    # response = await get_tool_schema.fn(tool_name="write_file")
-
-    # Parse response
-    # if isinstance(response, str):
-    #     response_data = json.loads(response)
-    # else:
-    #     response_data = response
-
-    # If approval required
-    # if response_data.get("status") == "approval_required":
-    #     # CRITICAL: Verify no schema in response
-    #     assert "inputSchema" not in response_data, \
-    #            "SECURITY BREACH: Schema leaked in approval request!"
-    #     assert "properties" not in response_data, \
-    #            "SECURITY BREACH: Schema properties leaked in approval request!"
-    #     assert "schema_min" not in response_data, \
-    #            "SECURITY BREACH: Minimal schema leaked in approval request!"
-    #
-    #     # Response should include approval token instead
-    #     assert "approval_token" in response_data or \
-    #            "token" in response_data, \
-    #            "approval_required response should include token"
+    _assert_no_schema_keywords(str(exc_info.value))
 
 
-
-@pytest.mark.skip(reason="Phase 4 not yet implemented")
 @pytest.mark.asyncio
 async def test_schema_only_after_lease_grant():
     """
@@ -117,35 +98,18 @@ async def test_schema_only_after_lease_grant():
     This is the positive test case: when authorization succeeds,
     schema should be included in response.
     """
-    # TODO: Implement after Phase 3+4
-    # from src.meta_mcp.supervisor import get_tool_schema
-    # from src.meta_mcp.state import governance_state, ExecutionMode
-    # from src.meta_mcp.leases import lease_manager
+    await governance_state.set_mode(ExecutionMode.BYPASS)
 
-    # Set mode to BYPASS (auto-approve)
-    # await governance_state.set_mode(ExecutionMode.BYPASS)
+    ctx = mock_fastmcp_context(session_id="schema_grant_client")
+    response = await get_tool_schema.fn(tool_name="read_file", ctx=ctx)
+    response_data = _parse_response(response)
 
-    # Request schema for read_file (safe tool)
-    # response = await get_tool_schema.fn(tool_name="read_file")
+    assert response_data.get("inputSchema") is not None
 
-    # Parse response
-    # if isinstance(response, str):
-    #     response_data = json.loads(response)
-    # else:
-    #     response_data = response
-
-    # Verify schema is included
-    # assert response_data.get("status") == "success"
-    # assert "inputSchema" in response_data or "schema" in response_data, \
-    #        "Schema should be included when lease granted"
-
-    # Verify lease was created
-    # lease = await lease_manager.validate("test_client_id", "read_file")
-    # assert lease is not None, "Lease should be created when schema returned"
+    lease = await lease_manager.validate("schema_grant_client", "read_file")
+    assert lease is not None, "Lease should be created when schema returned"
 
 
-
-@pytest.mark.skip(reason="Phase 5 not yet implemented")
 @pytest.mark.asyncio
 async def test_schema_minimal_before_expansion():
     """
@@ -156,33 +120,18 @@ async def test_schema_minimal_before_expansion():
 
     This test ensures full schema is not leaked in initial response.
     """
-    # TODO: Implement after Phase 5
-    # from src.meta_mcp.supervisor import get_tool_schema
+    await governance_state.set_mode(ExecutionMode.BYPASS)
 
-    # Request schema for complex tool
-    # response = await get_tool_schema.fn(tool_name="write_file")
+    response = await get_tool_schema.fn(tool_name="write_file")
+    response_data = _parse_response(response)
+    schema = response_data.get("inputSchema") or response_data.get("schema")
 
-    # if isinstance(response, str):
-    #     response_data = json.loads(response)
-    # else:
-    #     response_data = response
-
-    # if response_data.get("status") == "success":
-    #     # Verify minimal schema returned
-    #     schema = response_data.get("inputSchema") or response_data.get("schema")
-    #
-    #     # Estimate token count (rough)
-    #     schema_str = json.dumps(schema)
-    #     token_estimate = len(schema_str) / 4  # Rough estimate
-    #
-    #     # Should be under 50 tokens for minimal schema
-    #     assert token_estimate < 200, \
-    #            f"Initial schema too large: ~{token_estimate} tokens"
-    #
-    #     # Verify expansion_available flag
-    #     assert response_data.get("expansion_available") is True, \
-    #            "Should indicate full schema is available"
-
+    if Config.ENABLE_PROGRESSIVE_SCHEMAS:
+        schema_str = json.dumps(schema)
+        token_estimate = len(schema_str) / 4
+        assert token_estimate < 200, f"Initial schema too large: ~{token_estimate} tokens"
+    else:
+        assert schema is not None
 
 
 @pytest.mark.asyncio
@@ -192,28 +141,12 @@ async def test_error_message_no_schema_leak():
 
     Even in error cases, schema details should not be exposed.
     """
-    # TODO: Implement after Phase 4
-    # from src.meta_mcp.supervisor import get_tool_schema
-    # from src.meta_mcp.state import governance_state, ExecutionMode
+    await governance_state.set_mode(ExecutionMode.READ_ONLY)
 
-    # Set mode to READ_ONLY
-    # await governance_state.set_mode(ExecutionMode.READ_ONLY)
+    with pytest.raises(ToolError) as exc_info:
+        await get_tool_schema.fn(tool_name="write_file")
 
-    # Try to get schema for blocked tool
-    # try:
-    #     response = await get_tool_schema.fn(tool_name="write_file")
-    #     fail("Should have raised error for blocked tool")
-    # except Exception as e:
-    #     error_msg = str(e).lower()
-    #
-    #     # Verify error message doesn't contain schema keywords
-    #     assert "properties" not in error_msg, \
-    #            "Error message leaked schema properties"
-    #     assert "required" not in error_msg or "requires" in error_msg, \
-    #            "Error message leaked schema required fields"
-    #     assert "type" not in error_msg or "file" in error_msg, \
-    #            "Error message leaked schema types"
-
+    _assert_no_schema_keywords(str(exc_info.value))
 
 
 @pytest.mark.asyncio
@@ -224,30 +157,17 @@ async def test_search_results_no_schema():
     search_tools should return metadata only (name, description, tags).
     Schemas are only revealed via get_tool_schema.
     """
-    # TODO: Implement after Phase 4
-    # from src.meta_mcp.supervisor import search_tools
+    results = search_tools.fn(query="file")
 
-    # Search for tools
-    # results = search_tools.fn(query="file")
-
-    # Parse results
-    # if isinstance(results, str):
-    #     # Results are formatted text, check for schema keywords
-    #     results_lower = results.lower()
-    #     assert "inputschema" not in results_lower, \
-    #            "Search results leaked inputSchema"
-    #     assert "properties:" not in results_lower, \
-    #            "Search results leaked schema properties"
-    # else:
-    #     # Results are structured, verify no schema fields
-    #     for result in results:
-    #         assert "inputSchema" not in result, \
-    #                "Search result leaked inputSchema"
-    #         assert "schema" not in result, \
-    #                "Search result leaked schema"
-    #         assert "properties" not in result, \
-    #                "Search result leaked properties"
-
+    if isinstance(results, str):
+        results_lower = results.lower()
+        assert "inputschema" not in results_lower
+        assert "properties:" not in results_lower
+    else:
+        for result in results:
+            assert "inputSchema" not in result
+            assert "schema" not in result
+            assert "properties" not in result
 
 
 @pytest.mark.asyncio
@@ -258,26 +178,12 @@ async def test_bootstrap_tools_schema_always_available():
     Bootstrap tools (search_tools, get_tool_schema) should always
     be accessible regardless of governance mode.
     """
-    # TODO: Implement after Phase 4
-    # from src.meta_mcp.supervisor import get_tool_schema
-    # from src.meta_mcp.state import governance_state, ExecutionMode
+    await governance_state.set_mode(ExecutionMode.READ_ONLY)
 
-    # Set strict mode
-    # await governance_state.set_mode(ExecutionMode.READ_ONLY)
+    response = await get_tool_schema.fn(tool_name="search_tools")
+    response_data = _parse_response(response)
 
-    # Request schema for bootstrap tool
-    # response = await get_tool_schema.fn(tool_name="search_tools")
-
-    # if isinstance(response, str):
-    #     response_data = json.loads(response)
-    # else:
-    #     response_data = response
-
-    # Verify schema is returned
-    # assert response_data.get("status") == "success"
-    # assert "inputSchema" in response_data or "schema" in response_data, \
-    #        "Bootstrap tools should always return schema"
-
+    assert response_data.get("inputSchema") is not None, "Bootstrap tools should return schema"
 
 
 @pytest.mark.asyncio
@@ -288,32 +194,12 @@ async def test_schema_stripped_from_denial_response():
     This tests the response construction code to verify schemas are
     explicitly stripped from denial/error responses.
     """
-    # TODO: Implement after Phase 4
-    # from src.meta_mcp.supervisor import get_tool_schema
-    # from src.meta_mcp.state import governance_state, ExecutionMode
+    await governance_state.set_mode(ExecutionMode.READ_ONLY)
 
-    # Set mode to READ_ONLY
-    # await governance_state.set_mode(ExecutionMode.READ_ONLY)
+    with pytest.raises(ToolError) as exc_info:
+        await get_tool_schema.fn(tool_name="write_file")
 
-    # Request schema for write_file
-    # response = await get_tool_schema.fn(tool_name="write_file")
-
-    # Serialize response to check all fields
-    # response_str = json.dumps(response) if not isinstance(response, str) else response
-
-    # Check for any schema-related keywords in entire response
-    # forbidden_keywords = [
-    #     '"inputSchema"',
-    #     '"properties"',
-    #     '"required"',
-    #     '"type": "object"',
-    #     '"$schema"'
-    # ]
-    #
-    # for keyword in forbidden_keywords:
-    #     assert keyword not in response_str, \
-    #            f"SECURITY BREACH: Schema keyword '{keyword}' found in denial response"
-
+    _assert_no_schema_keywords(str(exc_info.value))
 
 
 @pytest.mark.asyncio
@@ -324,37 +210,12 @@ async def test_partial_schema_leak_in_json():
     Sometimes schemas leak via nested JSON fields or error details.
     This test checks the entire response structure.
     """
-    # TODO: Implement after Phase 4
-    # from src.meta_mcp.supervisor import get_tool_schema
-    # from src.meta_mcp.state import governance_state, ExecutionMode
-    # import json
+    await governance_state.set_mode(ExecutionMode.READ_ONLY)
 
-    # Set mode to READ_ONLY
-    # await governance_state.set_mode(ExecutionMode.READ_ONLY)
+    with pytest.raises(ToolError) as exc_info:
+        await get_tool_schema.fn(tool_name="delete_file")
 
-    # Request schema for sensitive tool
-    # response = await get_tool_schema.fn(tool_name="delete_file")
-
-    # Parse and check every field recursively
-    # def check_no_schema(obj, path="root"):
-    #     if isinstance(obj, dict):
-    #         for key, value in obj.items():
-    #             # Check key names
-    #             assert key not in ["inputSchema", "properties", "items"], \
-    #                    f"Schema field '{key}' found at {path}.{key}"
-    #             # Recurse
-    #             check_no_schema(value, f"{path}.{key}")
-    #     elif isinstance(obj, list):
-    #         for i, item in enumerate(obj):
-    #             check_no_schema(item, f"{path}[{i}]")
-    #
-    # if isinstance(response, str):
-    #     response_data = json.loads(response)
-    # else:
-    #     response_data = response
-    #
-    # check_no_schema(response_data)
-
+    _assert_no_schema_keywords(str(exc_info.value))
 
 
 @pytest.mark.asyncio
@@ -365,6 +226,15 @@ async def test_schema_not_in_logs():
     Even if schemas aren't returned to client, logging them could
     leak information through log aggregation systems.
     """
-    # TODO: Implement after Phase 4
-    # This test would need to capture log output and verify
-    # no schema information is logged for blocked tools
+    await governance_state.set_mode(ExecutionMode.READ_ONLY)
+
+    messages: list[str] = []
+    handler_id = logger.add(lambda msg: messages.append(msg), format="{message}")
+    try:
+        with pytest.raises(ToolError):
+            await get_tool_schema.fn(tool_name="write_file")
+    finally:
+        logger.remove(handler_id)
+
+    for message in messages:
+        _assert_no_schema_keywords(message)
