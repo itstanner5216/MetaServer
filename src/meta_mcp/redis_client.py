@@ -1,7 +1,8 @@
 """Shared async Redis client provider and health checks."""
 
 import asyncio
-from typing import Optional, Tuple
+import time
+from typing import Any, Optional, Protocol, Tuple
 
 from loguru import logger
 
@@ -11,6 +12,98 @@ from .config import Config
 
 _redis_client: Optional[aioredis.Redis] = None
 _redis_pool: Optional[aioredis.ConnectionPool] = None
+_redis_metrics_handler: Optional["RedisMetricsHandler"] = None
+
+_REDIS_SLOW_OPERATION_MS = 100.0
+
+
+class RedisMetricsHandler(Protocol):
+    """Optional metrics sink for Redis operation instrumentation."""
+
+    def timing(self, name: str, value_ms: float, tags: dict[str, str]) -> None:
+        """Record a timing metric in milliseconds."""
+
+    def gauge(self, name: str, value: float, tags: dict[str, str]) -> None:
+        """Record a gauge metric."""
+
+    def increment(self, name: str, value: int, tags: dict[str, str]) -> None:
+        """Increment a counter metric."""
+
+
+def set_redis_metrics_handler(handler: Optional["RedisMetricsHandler"]) -> None:
+    """
+    Register a metrics handler for Redis instrumentation.
+
+    This can be used to integrate with Prometheus/StatsD clients without
+    introducing a hard dependency in this module.
+    """
+    global _redis_metrics_handler
+    _redis_metrics_handler = handler
+
+
+def _safe_len(value: Any) -> int:
+    if value is None:
+        return 0
+    try:
+        return len(value)
+    except TypeError:
+        return 0
+
+
+def _get_pool_stats(pool: aioredis.ConnectionPool) -> dict[str, float]:
+    in_use = _safe_len(getattr(pool, "_in_use_connections", None))
+    available = _safe_len(getattr(pool, "_available_connections", None))
+    max_connections = getattr(pool, "max_connections", None)
+    total = in_use + available
+    utilization = None
+    if isinstance(max_connections, int) and max_connections > 0:
+        utilization = in_use / max_connections
+    return {
+        "in_use": float(in_use),
+        "available": float(available),
+        "total": float(total),
+        "max": float(max_connections) if max_connections else 0.0,
+        "utilization": float(utilization) if utilization is not None else 0.0,
+    }
+
+
+def _record_metrics(command: str, duration_ms: float, pool: aioredis.ConnectionPool) -> None:
+    if _redis_metrics_handler is None:
+        return
+    tags = {"command": command}
+    _redis_metrics_handler.timing("redis.operation.duration_ms", duration_ms, tags)
+    _redis_metrics_handler.increment("redis.operation.count", 1, tags)
+
+    pool_stats = _get_pool_stats(pool)
+    _redis_metrics_handler.gauge("redis.pool.in_use", pool_stats["in_use"], tags)
+    _redis_metrics_handler.gauge("redis.pool.available", pool_stats["available"], tags)
+    _redis_metrics_handler.gauge("redis.pool.max", pool_stats["max"], tags)
+    _redis_metrics_handler.gauge("redis.pool.utilization", pool_stats["utilization"], tags)
+
+
+class InstrumentedRedis(aioredis.Redis):
+    """Redis client that records timing and pool utilization metrics."""
+
+    async def execute_command(self, *args: Any, **options: Any) -> Any:
+        command = "unknown"
+        if args:
+            command = args[0]
+            if isinstance(command, bytes):
+                command = command.decode("utf-8", errors="ignore")
+            else:
+                command = str(command)
+        start_time = time.perf_counter()
+        try:
+            return await super().execute_command(*args, **options)
+        finally:
+            duration_ms = (time.perf_counter() - start_time) * 1000.0
+            _record_metrics(command, duration_ms, self.connection_pool)
+            if duration_ms > _REDIS_SLOW_OPERATION_MS:
+                logger.warning(
+                    "Slow Redis operation detected (command={}, duration_ms={:.2f})",
+                    command,
+                    duration_ms,
+                )
 
 
 async def get_redis_client() -> aioredis.Redis:
@@ -29,7 +122,7 @@ async def get_redis_client() -> aioredis.Redis:
                         socket_connect_timeout=Config.REDIS_SOCKET_CONNECT_TIMEOUT,
                         socket_timeout=Config.REDIS_SOCKET_TIMEOUT,
                     )
-                _redis_client = aioredis.Redis(connection_pool=_redis_pool)
+                _redis_client = InstrumentedRedis(connection_pool=_redis_pool)
                 await _redis_client.ping()
                 _log_pool_stats("ready")
                 break

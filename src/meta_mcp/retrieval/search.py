@@ -6,6 +6,8 @@ query and tool descriptions using embedding vectors.
 """
 
 import asyncio
+import heapq
+import math
 
 from ..governance.policy import evaluate_policy
 from ..registry.models import AllowedInMode, ToolCandidate, extract_schema_hint
@@ -56,25 +58,38 @@ class SemanticSearch:
 
         self._index_built = True
 
-    def _cosine_similarity(self, vec_a: list[float], vec_b: list[float]) -> float:
+    @staticmethod
+    def _vector_magnitude(vector: list[float]) -> float:
+        return math.sqrt(sum(x * x for x in vector))
+
+    def _cosine_similarity_with_query(
+        self, query_vector: list[float], query_magnitude: float, tool_vector: list[float]
+    ) -> float:
         """
-        Compute cosine similarity between two vectors.
+        Compute cosine similarity between query and tool vector.
 
         Args:
-            vec_a: First vector
-            vec_b: Second vector
+            query_vector: Query embedding vector
+            query_magnitude: Pre-computed query vector magnitude
+            tool_vector: Tool embedding vector
 
         Returns:
             Cosine similarity score in range [0, 1]
         """
-        if not vec_a or not vec_b or len(vec_a) != len(vec_b):
+        if (
+            not query_vector
+            or not tool_vector
+            or len(query_vector) != len(tool_vector)
+            or query_magnitude == 0.0
+        ):
             return 0.0
 
         # Vectors are already normalized, so dot product = cosine similarity
-        dot_product = sum(a * b for a, b in zip(vec_a, vec_b))
+        dot_product = sum(a * b for a, b in zip(query_vector, tool_vector))
+        score = dot_product / query_magnitude
 
         # Clamp to [0, 1] range (handles floating point errors)
-        return max(0.0, min(1.0, dot_product))
+        return max(0.0, min(1.0, score))
 
     def search(self, query: str, limit: int = 10, min_score: float = 0.0) -> list[ToolCandidate]:
         """
@@ -96,27 +111,34 @@ class SemanticSearch:
 
         # Generate query embedding
         query_embedding = self.embedder.embed_query(query)
+        query_magnitude = self._vector_magnitude(query_embedding)
+        if query_magnitude == 0.0:
+            return []
 
-        # Calculate similarity scores for all tools
-        scored_tools = []
-        for tool in self.registry.get_all_summaries():
-            tool_embedding = self.embedder.get_cached_embedding(tool.tool_id)
+        tools = self.registry.get_all_summaries()
+        use_numpy = len(tools) >= 100
+        numpy = None
+        if use_numpy:
+            try:
+                import numpy as numpy  # type: ignore[import-not-found]
+            except ImportError:
+                numpy = None
+                use_numpy = False
 
-            # Skip if embedding failed
-            if not tool_embedding or all(x == 0.0 for x in tool_embedding):
-                continue
-
-            # Calculate cosine similarity
-            score = self._cosine_similarity(query_embedding, tool_embedding)
-
-            # Apply minimum score threshold
-            if score >= min_score:
-                scored_tools.append((tool, score))
-
-        # Apply governance penalties and annotate policy
         mode = self._resolve_governance_mode()
-        adjusted_tools = []
-        for tool, score in scored_tools:
+        top_k = max(limit, 0)
+        adjusted_tools: list[tuple[float, str, object, AllowedInMode]] = []
+
+        def _push_top_k(tool, score: float, allowed_in_mode: AllowedInMode) -> None:
+            if top_k == 0:
+                return
+            entry = (score, tool.tool_id, tool, allowed_in_mode)
+            if len(adjusted_tools) < top_k:
+                heapq.heappush(adjusted_tools, entry)
+            elif score > adjusted_tools[0][0]:
+                heapq.heapreplace(adjusted_tools, entry)
+
+        def _apply_governance(tool, raw_score: float) -> None:
             policy = evaluate_policy(mode, tool.risk_level, tool.tool_id)
             if policy.action == "allow":
                 penalty = 0.0
@@ -127,16 +149,49 @@ class SemanticSearch:
             else:
                 penalty = 0.80
                 allowed_in_mode = AllowedInMode.BLOCKED
+            adjusted_score = raw_score * (1.0 - penalty)
+            _push_top_k(tool, adjusted_score, allowed_in_mode)
 
-            adjusted_score = score * (1.0 - penalty)
-            adjusted_tools.append((tool, adjusted_score, allowed_in_mode))
+        if use_numpy and numpy is not None:
+            tool_vectors = []
+            tool_records = []
+            for tool in tools:
+                tool_embedding = self.embedder.get_cached_embedding(tool.tool_id)
+                if not tool_embedding or all(x == 0.0 for x in tool_embedding):
+                    continue
+                tool_vectors.append(tool_embedding)
+                tool_records.append(tool)
 
-        # Sort by adjusted score (highest first)
-        adjusted_tools.sort(key=lambda x: x[1], reverse=True)
+            if tool_vectors:
+                tool_matrix = numpy.array(tool_vectors, dtype=float)
+                query_vector = numpy.array(query_embedding, dtype=float)
+                query_magnitude = numpy.linalg.norm(query_vector)
+                if query_magnitude == 0.0:
+                    return []
+                scores = tool_matrix.dot(query_vector) / query_magnitude
+                scores = numpy.clip(scores, 0.0, 1.0)
+                for tool, score in zip(tool_records, scores.tolist()):
+                    if score >= min_score:
+                        _apply_governance(tool, score)
+        else:
+            for tool in tools:
+                tool_embedding = self.embedder.get_cached_embedding(tool.tool_id)
+
+                # Skip if embedding failed
+                if not tool_embedding or all(x == 0.0 for x in tool_embedding):
+                    continue
+
+                score = self._cosine_similarity_with_query(
+                    query_embedding, query_magnitude, tool_embedding
+                )
+
+                if score >= min_score:
+                    _apply_governance(tool, score)
 
         # Convert to ToolCandidate objects
         results = []
-        for tool, score, allowed_in_mode in adjusted_tools[:limit]:
+        adjusted_tools.sort(key=lambda x: x[0], reverse=True)
+        for score, _tool_id, tool, allowed_in_mode in adjusted_tools[:limit]:
             results.append(
                 ToolCandidate(
                     tool_id=tool.tool_id,
