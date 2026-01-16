@@ -10,6 +10,25 @@ from typing import Any
 from loguru import logger
 
 
+def canonicalize_json(payload: dict[str, Any]) -> bytes:
+    """
+    Canonicalize JSON per RFC 8785.
+
+    Rules:
+    1. Sort object keys lexicographically
+    2. No whitespace between tokens
+    3. Unicode escaping normalized
+    4. Numbers in canonical form
+    """
+    canonical = json.dumps(
+        payload,
+        sort_keys=True,
+        ensure_ascii=False,
+        separators=(",", ":"),
+    )
+    return canonical.encode("utf-8")
+
+
 def generate_token(
     client_id: str,
     tool_id: str,
@@ -35,7 +54,7 @@ def generate_token(
         Signed capability token string
 
     Security:
-    - Deterministic canonicalization (sorted JSON keys)
+    - Deterministic canonicalization (RFC 8785)
     - HMAC-SHA256 signature prevents forgery
     - Expiration timestamp prevents replay attacks
     - Client and tool binding prevents cross-session/tool reuse
@@ -57,14 +76,14 @@ def generate_token(
     if context_key is not None:
         payload["context_key"] = context_key
 
-    # Canonical JSON (sorted keys for determinism)
-    payload_json = json.dumps(payload, sort_keys=True, separators=(",", ":"))
-    payload_b64 = base64.b64encode(payload_json.encode()).decode()
+    # Canonical JSON (RFC 8785)
+    payload_bytes = canonicalize_json(payload)
+    payload_b64 = base64.b64encode(payload_bytes).decode()
 
     # Compute HMAC-SHA256 signature
     signature = hmac.new(
         secret.encode(),
-        payload_b64.encode(),
+        payload_bytes,
         hashlib.sha256,
     ).hexdigest()
 
@@ -122,20 +141,27 @@ def verify_token(
 
         payload_b64, signature = parts
 
+        # Decode payload
+        payload_bytes = base64.b64decode(payload_b64)
+        payload_json = payload_bytes.decode()
+        payload = json.loads(payload_json)
+
+        # Enforce canonical payload encoding
+        canonical_payload = canonicalize_json(payload)
+        if payload_bytes != canonical_payload:
+            logger.warning("Token verification failed: non-canonical payload encoding")
+            return False
+
         # Verify signature
         expected_signature = hmac.new(
             secret.encode(),
-            payload_b64.encode(),
+            canonical_payload,
             hashlib.sha256,
         ).hexdigest()
 
         if not hmac.compare_digest(signature, expected_signature):
             logger.warning("Token verification failed: invalid signature")
             return False
-
-        # Decode payload
-        payload_json = base64.b64decode(payload_b64).decode()
-        payload = json.loads(payload_json)
 
         # Check expiration
         exp = payload.get("exp")

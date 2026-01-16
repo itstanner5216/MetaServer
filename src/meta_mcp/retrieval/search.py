@@ -5,9 +5,12 @@ Provides ranking of tools based on semantic similarity between
 query and tool descriptions using embedding vectors.
 """
 
+import asyncio
 
-from ..registry.models import ToolCandidate
+from ..governance.policy import evaluate_policy
+from ..registry.models import AllowedInMode, ToolCandidate, extract_schema_hint
 from ..registry.registry import ToolRegistry
+from ..state import governance_state
 from .embedder import ToolEmbedder
 
 
@@ -110,12 +113,30 @@ class SemanticSearch:
             if score >= min_score:
                 scored_tools.append((tool, score))
 
-        # Sort by score (highest first)
-        scored_tools.sort(key=lambda x: x[1], reverse=True)
+        # Apply governance penalties and annotate policy
+        mode = self._resolve_governance_mode()
+        adjusted_tools = []
+        for tool, score in scored_tools:
+            policy = evaluate_policy(mode, tool.risk_level, tool.tool_id)
+            if policy.action == "allow":
+                penalty = 0.0
+                allowed_in_mode = AllowedInMode.ALLOWED
+            elif policy.action == "require_approval":
+                penalty = 0.20
+                allowed_in_mode = AllowedInMode.REQUIRES_APPROVAL
+            else:
+                penalty = 0.80
+                allowed_in_mode = AllowedInMode.BLOCKED
+
+            adjusted_score = score * (1.0 - penalty)
+            adjusted_tools.append((tool, adjusted_score, allowed_in_mode))
+
+        # Sort by adjusted score (highest first)
+        adjusted_tools.sort(key=lambda x: x[1], reverse=True)
 
         # Convert to ToolCandidate objects
         results = []
-        for tool, score in scored_tools[:limit]:
+        for tool, score, allowed_in_mode in adjusted_tools[:limit]:
             results.append(
                 ToolCandidate(
                     tool_id=tool.tool_id,
@@ -124,10 +145,20 @@ class SemanticSearch:
                     tags=tool.tags,
                     risk_level=tool.risk_level,
                     relevance_score=score,
+                    allowed_in_mode=allowed_in_mode,
+                    schema_hint=extract_schema_hint(tool.schema_min),
                 )
             )
 
         return results
+
+    @staticmethod
+    def _resolve_governance_mode():
+        try:
+            asyncio.get_running_loop()
+        except RuntimeError:
+            return asyncio.run(governance_state.get_mode())
+        return governance_state._default_mode()
 
     def rebuild_index(self) -> None:
         """

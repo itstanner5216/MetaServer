@@ -4,7 +4,7 @@ from datetime import datetime
 
 import pytest
 
-from src.meta_mcp.registry.models import ServerRecord, ToolCandidate, ToolRecord
+from src.meta_mcp.registry.models import AllowedInMode, ServerRecord, ToolCandidate, ToolRecord
 
 
 @pytest.mark.unit
@@ -127,6 +127,7 @@ def test_tool_candidate_creation():
     assert candidate.tags == ["test"]
     assert candidate.risk_level == "safe"
     assert candidate.relevance_score == 0.95
+    assert candidate.allowed_in_mode == AllowedInMode.ALLOWED
 
 
 @pytest.mark.unit
@@ -150,6 +151,7 @@ def test_tool_candidate_default_relevance_score():
     )
 
     assert candidate.relevance_score == 0.0
+    assert candidate.allowed_in_mode == AllowedInMode.ALLOWED
 
 
 @pytest.mark.unit
