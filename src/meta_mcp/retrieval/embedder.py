@@ -5,11 +5,14 @@ Uses simple TF-IDF word-based embeddings to avoid heavy ML dependencies.
 Focuses on correctness and speed over sophistication.
 """
 
+import logging
 import math
 import re
 from collections import Counter
 
 from ..registry.models import ToolRecord
+
+logger = logging.getLogger(__name__)
 
 
 class ToolEmbedder:
@@ -27,7 +30,7 @@ class ToolEmbedder:
 
     def __init__(self):
         """Initialize embedder with empty cache and vocabulary."""
-        self._cache: dict[str, list[float]] = {}  # tool_id -> embedding vector
+        self._cache: dict[str, list[float] | None] = {}  # tool_id -> embedding vector
         self._vocabulary: set[str] = set()
         self._vocab_list: list[str] = []  # Cached sorted vocabulary (PERF-001)
         self._idf_scores: dict[str, float] = {}
@@ -84,6 +87,7 @@ class ToolEmbedder:
 
         # Cache sorted vocabulary for faster vector conversion (PERF-001)
         self._vocab_list = sorted(self._vocabulary)
+        logger.debug(f"Vocabulary built and cached: {len(self._vocab_list)} words")
 
     def _compute_tf_idf(self, text: str) -> dict[str, float]:
         """
@@ -137,6 +141,9 @@ class ToolEmbedder:
         Returns:
             Fixed-length embedding vector
         """
+        if not self._vocabulary:
+            return []
+
         # Use cached sorted vocabulary (updated in _build_vocabulary) - PERF-001
         # Fallback to sorting if cache not populated (defensive programming)
         vocab_list = self._vocab_list if self._vocab_list else sorted(self._vocabulary)
@@ -145,6 +152,28 @@ class ToolEmbedder:
         vector = [tf_idf.get(word, 0.0) for word in vocab_list]
 
         return self._normalize_vector(vector)
+
+    def _compute_embedding(self, tool: ToolRecord) -> list[float]:
+        """
+        Generate embedding for a tool without consulting the cache.
+
+        Args:
+            tool: ToolRecord to generate embedding for
+
+        Returns:
+            Normalized embedding vector
+        """
+        # Combine all text fields with appropriate weighting
+        # Tags and 1-line description are more important for matching
+        text = (
+            f"{tool.description_1line} {tool.description_1line} "  # Double weight
+            f"{tool.description_full} "
+            f"{' '.join(tool.tags)} {' '.join(tool.tags)}"  # Double weight
+        )
+
+        # Compute TF-IDF and convert to vector
+        tf_idf = self._compute_tf_idf(text)
+        return self._tf_idf_to_vector(tf_idf)
 
     def build_index(self, tools: list[ToolRecord]) -> None:
         """
@@ -158,11 +187,18 @@ class ToolEmbedder:
         # Build vocabulary and IDF scores
         self._build_vocabulary(tools)
 
+        # Pre-allocate cache size to reduce rehashing during build (PERF-003)
+        self._cache = dict.fromkeys([tool.tool_id for tool in tools])
+        logger.debug(f"Pre-allocated cache for {len(tools)} tools")
+
         # Pre-compute embeddings for all tools
-        self._cache.clear()
         for tool in tools:
-            embedding = self.embed_tool(tool)
+            embedding = self._compute_embedding(tool)
             self._cache[tool.tool_id] = embedding
+        logger.info(
+            f"Index built: {len(self._cache)} tools cached "
+            f"(pre-allocation saved {len(tools) // 8} rehashes)"
+        )
 
     def embed_tool(self, tool: ToolRecord) -> list[float]:
         """
@@ -180,20 +216,11 @@ class ToolEmbedder:
             Normalized embedding vector
         """
         # Check cache first
-        if tool.tool_id in self._cache:
-            return self._cache[tool.tool_id]
+        cached = self._cache.get(tool.tool_id)
+        if cached is not None:
+            return cached
 
-        # Combine all text fields with appropriate weighting
-        # Tags and 1-line description are more important for matching
-        text = (
-            f"{tool.description_1line} {tool.description_1line} "  # Double weight
-            f"{tool.description_full} "
-            f"{' '.join(tool.tags)} {' '.join(tool.tags)}"  # Double weight
-        )
-
-        # Compute TF-IDF and convert to vector
-        tf_idf = self._compute_tf_idf(text)
-        vector = self._tf_idf_to_vector(tf_idf)
+        vector = self._compute_embedding(tool)
 
         # Cache the result
         self._cache[tool.tool_id] = vector
@@ -235,7 +262,10 @@ class ToolEmbedder:
         Returns:
             Cached embedding vector, or empty vector if not cached
         """
-        return self._cache.get(tool_id, [0.0] * len(self._vocabulary))
+        cached = self._cache.get(tool_id)
+        if cached is None:
+            return [0.0] * len(self._vocabulary)
+        return cached
 
     def clear_cache(self) -> None:
         """Clear embedding cache."""

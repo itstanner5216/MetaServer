@@ -1,8 +1,10 @@
 """Structured JSON audit trail for governance decisions."""
 
+import atexit
 import json
 import logging
 import os
+import time
 from datetime import datetime, timezone
 from enum import Enum
 from logging.handlers import RotatingFileHandler
@@ -12,7 +14,6 @@ from typing import Any, Dict, Optional
 from loguru import logger
 
 from .config import Config
-from typing import Any
 
 # Constants
 MAX_CONTENT_LENGTH = 1000  # Truncate large content to prevent log bloat
@@ -51,6 +52,8 @@ class AuditLogger:
         log_path: str = None,
         max_bytes: Optional[int] = None,
         backup_count: Optional[int] = None,
+        buffer_size: Optional[int] = None,
+        flush_interval: Optional[float] = None,
         fallback_logger: Optional[Any] = None,
     ):
         """
@@ -60,6 +63,8 @@ class AuditLogger:
             log_path: Path to audit log file (defaults to AUDIT_LOG_PATH env var or ./audit.jsonl)
             max_bytes: Maximum file size in bytes before rotation
             backup_count: Number of rotated audit logs to retain
+            buffer_size: Number of entries to buffer before flushing
+            flush_interval: Maximum seconds between buffer flushes
             fallback_logger: Optional logger to use if audit file is unavailable
         """
         if log_path is None:
@@ -67,12 +72,21 @@ class AuditLogger:
         self.log_path = Path(log_path)
         self.max_bytes = Config.AUDIT_LOG_MAX_BYTES if max_bytes is None else max_bytes
         self.backup_count = Config.AUDIT_LOG_BACKUP_COUNT if backup_count is None else backup_count
+        self.buffer_size = (
+            Config.AUDIT_LOG_BUFFER_SIZE if buffer_size is None else buffer_size
+        )
+        self.flush_interval = (
+            Config.AUDIT_LOG_FLUSH_INTERVAL if flush_interval is None else flush_interval
+        )
         self.fallback_logger = fallback_logger or logger
         self._logger = logging.getLogger(f"audit_logger.{id(self)}")
         self._logger.setLevel(logging.INFO)
         self._logger.propagate = False
         self._handler: Optional[RotatingFileHandler] = None
+        self._buffer: list[str] = []
+        self._last_flush = time.monotonic()
         self._configure_handler()
+        atexit.register(self.flush)
 
     def _configure_handler(self) -> None:
         for handler in list(self._logger.handlers):
@@ -145,12 +159,55 @@ class AuditLogger:
             return
 
         try:
-            self._logger.info(json_line)
+            if self.buffer_size <= 1:
+                self._logger.info(json_line)
+                return
+
+            self._buffer.append(json_line)
+            self._maybe_flush()
         except Exception as exc:
             self.fallback_logger.opt(exception=exc).warning(
                 "Audit log write failed. Emitting audit record to fallback logger."
             )
             self.fallback_logger.info(json_line)
+            self.flush()
+
+    def _maybe_flush(self) -> None:
+        if not self._buffer:
+            return
+        if len(self._buffer) >= self.buffer_size:
+            self.flush()
+            return
+        elapsed = time.monotonic() - self._last_flush
+        if elapsed >= self.flush_interval:
+            self.flush()
+
+    def flush(self) -> None:
+        """Flush buffered audit entries to disk."""
+        if not self._buffer:
+            return
+        if self._handler is None:
+            self._configure_handler()
+        if self._handler is None:
+            for line in self._buffer:
+                self.fallback_logger.info(line)
+            self._buffer.clear()
+            self._last_flush = time.monotonic()
+            return
+
+        buffer = self._buffer
+        self._buffer = []
+        try:
+            for line in buffer:
+                self._logger.info(line)
+        except Exception as exc:
+            self.fallback_logger.opt(exception=exc).warning(
+                "Audit log write failed. Emitting buffered records to fallback logger."
+            )
+            for line in buffer:
+                self.fallback_logger.info(line)
+        finally:
+            self._last_flush = time.monotonic()
 
     def log_tool_call(
         self,
