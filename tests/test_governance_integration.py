@@ -29,7 +29,9 @@ from src.meta_mcp.supervisor import get_tool_schema
 
 @pytest.mark.asyncio
 @pytest.mark.requires_redis
-async def test_governance_check_before_lease_grant(redis_client, mock_fastmcp_context):
+async def test_governance_check_before_lease_grant(
+    redis_client, governance_in_read_only, mock_fastmcp_context
+):
     """
     Verify governance check happens BEFORE lease is granted.
 
@@ -41,9 +43,6 @@ async def test_governance_check_before_lease_grant(redis_client, mock_fastmcp_co
 
     This prevents granting leases for tools that will be blocked anyway.
     """
-    # Set mode to READ_ONLY
-    await governance_state.set_mode(ExecutionMode.READ_ONLY)
-
     client_id = "test_client_id"
     mock_fastmcp_context.session_id = client_id
 
@@ -144,7 +143,9 @@ async def test_bypass_mode_skips_governance(
 
 @pytest.mark.asyncio
 @pytest.mark.requires_redis
-async def test_mode_change_affects_new_lease_grants(redis_client, mock_fastmcp_context):
+async def test_mode_change_affects_new_lease_grants(
+    redis_client, governance_in_permission, mock_fastmcp_context
+):
     """
     Verify mode changes affect NEW lease grants.
 
@@ -157,9 +158,6 @@ async def test_mode_change_affects_new_lease_grants(redis_client, mock_fastmcp_c
     """
     client_id = "test_client_id"
     mock_fastmcp_context.session_id = client_id
-
-    # Set mode to PERMISSION
-    await governance_state.set_mode(ExecutionMode.PERMISSION)
 
     # Request schema for write_file
     with pytest.raises(ToolError, match="requires approval"):
@@ -211,7 +209,9 @@ async def test_existing_leases_remain_valid_after_mode_change(
 
 @pytest.mark.asyncio
 @pytest.mark.requires_redis
-async def test_policy_matrix_integration(redis_client, mock_fastmcp_context):
+async def test_policy_matrix_integration(
+    redis_client, governance_in_permission, mock_fastmcp_context
+):
     """
     Verify governance policy matrix correctly gates lease grants.
 

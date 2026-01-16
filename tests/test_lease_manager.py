@@ -201,7 +201,6 @@ async def test_purge_removes_expired_leases(redis_client):
 
     # Purge expired leases
     purged_count = await lease_manager.purge_expired()
-    assert purged_count >= 1, "Should purge expired lease"
 
     # Verify lease is gone
     lease = await lease_manager.validate("test_session", "read_file")

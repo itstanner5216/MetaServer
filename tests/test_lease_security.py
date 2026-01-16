@@ -282,7 +282,7 @@ async def test_lease_ttl_enforced(redis_client):
 
 @pytest.mark.asyncio
 @pytest.mark.requires_redis
-async def test_lease_mode_consistency(redis_client):
+async def test_lease_mode_consistency(redis_client, governance_in_permission):
     """
     Verify lease stores governance mode at time of issue.
 
@@ -293,8 +293,7 @@ async def test_lease_mode_consistency(redis_client):
     Current design: Lease remains valid until expiration regardless
     of mode changes. This test documents that behavior.
     """
-    # Set mode to PERMISSION
-    await governance_state.set_mode(ExecutionMode.PERMISSION)
+    # Start in PERMISSION mode (fixture)
 
     # Grant lease
     lease = await lease_manager.grant(
