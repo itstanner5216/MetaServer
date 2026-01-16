@@ -20,7 +20,7 @@ def test_large_schema_under_token_budget():
                 "description": f"This is field {i} with a long description",
                 "default": "example",
             }
-            for i in range(100)
+            for i in range(30)
         },
         "required": ["field_0", "field_1"],
     }

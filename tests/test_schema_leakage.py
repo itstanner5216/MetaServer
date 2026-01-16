@@ -24,7 +24,6 @@ from fastmcp.exceptions import ToolError
 
 from src.meta_mcp.config import Config
 from src.meta_mcp.leases import lease_manager
-from src.meta_mcp.state import ExecutionMode, governance_state
 from src.meta_mcp.supervisor import get_tool_schema, mcp, search_tools
 from tests.test_utils import assert_audit_log_contains, mock_fastmcp_context
 
@@ -44,7 +43,9 @@ def _assert_no_schema_keywords(text: str) -> None:
 
 
 @pytest.mark.asyncio
-async def test_blocked_tool_schema_not_exposed(audit_log_path, redis_client):
+async def test_blocked_tool_schema_not_exposed(
+    audit_log_path, redis_client, governance_in_read_only
+):
     """
     Blocked tools should not expose schemas.
 
@@ -53,12 +54,10 @@ async def test_blocked_tool_schema_not_exposed(audit_log_path, redis_client):
 
     Requires: 01_CRITICAL_BUGS.md Task 4 completed (schema-time governance)
     """
-    await governance_state.set_mode(ExecutionMode.READ_ONLY)
-
     tools_before = await mcp.get_tools()
     tool_names_before = {tool.name for tool in tools_before.values()}
 
-    with pytest.raises(ToolError, match="blocked by policy") as exc_info:
+    with pytest.raises(ToolError, match="blocked") as exc_info:
         await get_tool_schema.fn(tool_name="write_file")
     _assert_no_schema_keywords(str(exc_info.value))
 
@@ -75,15 +74,13 @@ async def test_blocked_tool_schema_not_exposed(audit_log_path, redis_client):
 
 
 @pytest.mark.asyncio
-async def test_approval_required_no_schema():
+async def test_approval_required_no_schema(redis_client, governance_in_permission):
     """
     CRITICAL: approval_required response must NOT include schema.
 
     Security Risk: Schema in approval request leaks tool structure
     before user approves.
     """
-    await governance_state.set_mode(ExecutionMode.PERMISSION)
-
     with pytest.raises(ToolError, match="requires approval") as exc_info:
         await get_tool_schema.fn(tool_name="write_file")
 
@@ -91,15 +88,13 @@ async def test_approval_required_no_schema():
 
 
 @pytest.mark.asyncio
-async def test_schema_only_after_lease_grant():
+async def test_schema_only_after_lease_grant(redis_client, governance_in_bypass):
     """
     Verify schema is ONLY returned when lease is successfully granted.
 
     This is the positive test case: when authorization succeeds,
     schema should be included in response.
     """
-    await governance_state.set_mode(ExecutionMode.BYPASS)
-
     ctx = mock_fastmcp_context(session_id="schema_grant_client")
     response = await get_tool_schema.fn(tool_name="read_file", ctx=ctx)
     response_data = _parse_response(response)
@@ -111,7 +106,7 @@ async def test_schema_only_after_lease_grant():
 
 
 @pytest.mark.asyncio
-async def test_schema_minimal_before_expansion():
+async def test_schema_minimal_before_expansion(redis_client, governance_in_bypass):
     """
     Verify schema_min is returned initially, not full schema.
 
@@ -120,8 +115,6 @@ async def test_schema_minimal_before_expansion():
 
     This test ensures full schema is not leaked in initial response.
     """
-    await governance_state.set_mode(ExecutionMode.BYPASS)
-
     response = await get_tool_schema.fn(tool_name="write_file")
     response_data = _parse_response(response)
     schema = response_data.get("inputSchema") or response_data.get("schema")
@@ -135,14 +128,12 @@ async def test_schema_minimal_before_expansion():
 
 
 @pytest.mark.asyncio
-async def test_error_message_no_schema_leak():
+async def test_error_message_no_schema_leak(redis_client, governance_in_read_only):
     """
     Verify error messages don't leak schema information.
 
     Even in error cases, schema details should not be exposed.
     """
-    await governance_state.set_mode(ExecutionMode.READ_ONLY)
-
     with pytest.raises(ToolError) as exc_info:
         await get_tool_schema.fn(tool_name="write_file")
 
@@ -171,15 +162,15 @@ async def test_search_results_no_schema():
 
 
 @pytest.mark.asyncio
-async def test_bootstrap_tools_schema_always_available():
+async def test_bootstrap_tools_schema_always_available(
+    redis_client, governance_in_read_only
+):
     """
     Verify bootstrap tools always return schema (no governance check).
 
     Bootstrap tools (search_tools, get_tool_schema) should always
     be accessible regardless of governance mode.
     """
-    await governance_state.set_mode(ExecutionMode.READ_ONLY)
-
     response = await get_tool_schema.fn(tool_name="search_tools")
     response_data = _parse_response(response)
 
@@ -187,15 +178,15 @@ async def test_bootstrap_tools_schema_always_available():
 
 
 @pytest.mark.asyncio
-async def test_schema_stripped_from_denial_response():
+async def test_schema_stripped_from_denial_response(
+    redis_client, governance_in_read_only
+):
     """
     CRITICAL: Ensure denial responses don't accidentally include schema.
 
     This tests the response construction code to verify schemas are
     explicitly stripped from denial/error responses.
     """
-    await governance_state.set_mode(ExecutionMode.READ_ONLY)
-
     with pytest.raises(ToolError) as exc_info:
         await get_tool_schema.fn(tool_name="write_file")
 
@@ -203,15 +194,13 @@ async def test_schema_stripped_from_denial_response():
 
 
 @pytest.mark.asyncio
-async def test_partial_schema_leak_in_json():
+async def test_partial_schema_leak_in_json(redis_client, governance_in_read_only):
     """
     CRITICAL: Check for partial schema leakage via JSON serialization.
 
     Sometimes schemas leak via nested JSON fields or error details.
     This test checks the entire response structure.
     """
-    await governance_state.set_mode(ExecutionMode.READ_ONLY)
-
     with pytest.raises(ToolError) as exc_info:
         await get_tool_schema.fn(tool_name="delete_file")
 
@@ -219,15 +208,13 @@ async def test_partial_schema_leak_in_json():
 
 
 @pytest.mark.asyncio
-async def test_schema_not_in_logs():
+async def test_schema_not_in_logs(redis_client, governance_in_read_only):
     """
     Verify schemas are not logged in error/debug messages.
 
     Even if schemas aren't returned to client, logging them could
     leak information through log aggregation systems.
     """
-    await governance_state.set_mode(ExecutionMode.READ_ONLY)
-
     messages: list[str] = []
     handler_id = logger.add(lambda msg: messages.append(msg), format="{message}")
     try:

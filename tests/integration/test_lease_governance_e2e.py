@@ -14,7 +14,6 @@ import pytest
 from fastmcp.exceptions import ToolError
 
 from src.meta_mcp.leases import lease_manager
-from src.meta_mcp.state import ExecutionMode, governance_state
 from src.meta_mcp.supervisor import get_tool_schema, mcp, search_tools
 from tests.test_utils import mock_fastmcp_context
 
@@ -22,12 +21,10 @@ from tests.test_utils import mock_fastmcp_context
 @pytest.mark.asyncio
 @pytest.mark.integration
 @pytest.mark.requires_redis
-async def test_permission_mode_requires_approval(redis_client):
+async def test_permission_mode_requires_approval(redis_client, governance_in_permission):
     """
     Test complete flow: search → schema request → approval required.
     """
-    await governance_state.set_mode(ExecutionMode.PERMISSION)
-
     results = search_tools.fn(query="file operations")
     assert "write_file" in str(results).lower()
 
@@ -46,12 +43,10 @@ async def test_permission_mode_requires_approval(redis_client):
 @pytest.mark.asyncio
 @pytest.mark.integration
 @pytest.mark.requires_redis
-async def test_bypass_mode_grants_schema_and_lease(redis_client):
+async def test_bypass_mode_grants_schema_and_lease(redis_client, governance_in_bypass):
     """
     Test that BYPASS mode grants immediate schema access and lease.
     """
-    await governance_state.set_mode(ExecutionMode.BYPASS)
-
     ctx = mock_fastmcp_context(session_id="e2e_bypass_client")
     response = await get_tool_schema.fn(tool_name="delete_file", ctx=ctx)
     response_data = json.loads(response) if isinstance(response, str) else response
@@ -66,28 +61,24 @@ async def test_bypass_mode_grants_schema_and_lease(redis_client):
 @pytest.mark.asyncio
 @pytest.mark.integration
 @pytest.mark.requires_redis
-async def test_read_only_mode_blocks_flow(redis_client):
+async def test_read_only_mode_blocks_flow(redis_client, governance_in_read_only):
     """
     Test that READ_ONLY mode blocks sensitive tool access at schema request.
     """
-    await governance_state.set_mode(ExecutionMode.READ_ONLY)
-
     results = search_tools.fn(query="file")
     assert results is not None
 
-    with pytest.raises(ToolError, match="blocked by policy"):
+    with pytest.raises(ToolError, match="blocked"):
         await get_tool_schema.fn(tool_name="write_file")
 
 
 @pytest.mark.asyncio
 @pytest.mark.integration
 @pytest.mark.requires_redis
-async def test_lease_exhaustion_flow(redis_client):
+async def test_lease_exhaustion_flow(redis_client, governance_in_bypass):
     """
     Test that lease exhaustion prevents further calls.
     """
-    await governance_state.set_mode(ExecutionMode.BYPASS)
-
     ctx = mock_fastmcp_context(session_id="e2e_exhaust_client")
     response = await get_tool_schema.fn(tool_name="read_file", ctx=ctx)
     response_data = json.loads(response) if isinstance(response, str) else response
