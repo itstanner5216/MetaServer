@@ -158,7 +158,7 @@ class SemanticSearch:
             asyncio.get_running_loop()
         except RuntimeError:
             return asyncio.run(governance_state.get_mode())
-        return governance_state._default_mode()
+        return governance_state.get_cached_mode()
 
     def rebuild_index(self) -> None:
         """

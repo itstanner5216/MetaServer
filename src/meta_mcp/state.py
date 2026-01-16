@@ -38,6 +38,7 @@ class GovernanceState:
     def __init__(self):
         """Initialize governance state with lazy Redis connection."""
         self._redis_client: Optional[aioredis.Redis] = None
+        self._cached_mode: Optional[ExecutionMode] = None
 
     @staticmethod
     def _parse_mode(mode_value: Optional[str]) -> Optional[ExecutionMode]:
@@ -99,6 +100,7 @@ class GovernanceState:
                     logger.error(
                         f"Failed to initialize governance mode in Redis: {e}"
                     )
+                self._cached_mode = default_mode
                 return default_mode
 
             # Validate and return mode
@@ -114,19 +116,36 @@ class GovernanceState:
                     logger.error(
                         f"Failed to reset governance mode in Redis: {e}"
                     )
+                self._cached_mode = default_mode
                 return default_mode
+            self._cached_mode = parsed_mode
             return parsed_mode
 
         except (aioredis.ConnectionError, aioredis.TimeoutError) as e:
             logger.error(
                 f"Redis connection failed in get_mode: {e}, using fail-safe default: {ExecutionMode.PERMISSION}"
             )
-            return ExecutionMode.PERMISSION
+            fallback_mode = ExecutionMode.PERMISSION
+            self._cached_mode = fallback_mode
+            return fallback_mode
         except Exception as e:
             logger.error(
                 f"Unexpected error in get_mode: {e}, using fail-safe default: {ExecutionMode.PERMISSION}"
             )
-            return ExecutionMode.PERMISSION
+            fallback_mode = ExecutionMode.PERMISSION
+            self._cached_mode = fallback_mode
+            return fallback_mode
+
+    def get_cached_mode(self) -> ExecutionMode:
+        """
+        Get last-known governance mode without awaiting Redis.
+
+        Returns:
+            Cached mode if available, otherwise config default.
+        """
+        if self._cached_mode is not None:
+            return self._cached_mode
+        return self._default_mode()
 
     async def set_mode(self, mode: ExecutionMode) -> bool:
         """
@@ -142,6 +161,7 @@ class GovernanceState:
             redis = await self._get_redis()
             await redis.set(GOVERNANCE_MODE_KEY, mode.value)
             logger.info(f"Governance mode set to: {mode.value}")
+            self._cached_mode = mode
             return True
         except (aioredis.ConnectionError, aioredis.TimeoutError) as e:
             logger.error(f"Redis connection failed in set_mode: {e}")
