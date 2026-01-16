@@ -1,4 +1,23 @@
-"""Data models for tool registry."""
+"""
+Tool registry data models.
+
+Defines ToolRecord, ToolCandidate, and ServerRecord for tool metadata storage.
+
+## API Compatibility Notes
+
+ToolCandidate includes backward compatibility properties for test code:
+- `.name` → Returns `tool_id` (canonical identifier)
+- `.description` → Returns `description_1line` (canonical field)
+- `.sensitive` → Returns `risk_level != 'safe'` (boolean mapping of three-tier enum)
+
+**When to use canonical vs compatibility fields:**
+- **New code**: Use canonical fields (tool_id, description_1line, risk_level)
+- **Legacy tests**: Compatibility properties allow gradual migration
+- **API contracts**: Document which fields are canonical in external APIs
+
+**Deprecation plan**: Compatibility properties will be maintained for at least one
+major version to allow gradual migration. New code should not rely on them.
+"""
 
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -106,6 +125,7 @@ class ToolCandidate:
 
     @property
     def name(self) -> str:
+        # Backward compatibility - use tool_id in new code.
         """
         Compatibility property: maps to tool_id.
 
@@ -115,6 +135,7 @@ class ToolCandidate:
 
     @property
     def description(self) -> str:
+        # Backward compatibility - use description_1line in new code.
         """
         Compatibility property: maps to description_1line.
 
@@ -124,6 +145,7 @@ class ToolCandidate:
 
     @property
     def sensitive(self) -> bool:
+        # Backward compatibility - use risk_level in new code.
         """
         Compatibility property: maps risk_level to boolean sensitivity flag.
 

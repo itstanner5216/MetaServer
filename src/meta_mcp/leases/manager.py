@@ -358,12 +358,12 @@ class LeaseManager:
             logger.error(f"Unexpected error in purge_expired: {e}")
             return 0
 
-    async def close(self):
+    async def close(self) -> None:
         """Close Redis connection and pool."""
         await close_redis_client()
         self._redis_client = None
 
-    async def _emit_list_changed(self, client_id: str):
+    async def _emit_list_changed(self, client_id: str) -> None:
         """
         Emit list_changed notification to client (Phase 8).
 
@@ -385,7 +385,7 @@ class LeaseManager:
             except Exception as e:
                 logger.error(f"Error in notification callback: {e}")
 
-    def register_notification_callback(self, callback):
+    def register_notification_callback(self, callback) -> None:
         """
         Register a callback for list_changed notifications (Phase 8).
 
@@ -394,7 +394,7 @@ class LeaseManager:
         """
         self._notification_callbacks.append(callback)
 
-    def unregister_notification_callback(self, callback):
+    def unregister_notification_callback(self, callback) -> None:
         """
         Unregister a notification callback (Phase 8).
 
