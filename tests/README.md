@@ -192,7 +192,7 @@ Tests run automatically on:
 - Pull requests (full suite)
 - Nightly (full suite + slow tests)
 
-CI configuration: `.github/workflows/test.yml`
+CI configuration: `.github/workflows/ci.yml`
 
 ## Resources
 

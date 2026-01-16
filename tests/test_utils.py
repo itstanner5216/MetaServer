@@ -54,7 +54,7 @@ def create_test_registry(tools: Iterable[ToolRecord]) -> ToolRegistry:
     """
     registry = ToolRegistry()
     for tool in tools:
-        registry.add(tool)
+        registry.add_for_testing(tool)
     return registry
 
 
