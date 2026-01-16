@@ -92,11 +92,11 @@ class ToolCandidate:
     Model must call get_tool_schema() to access a tool.
     """
 
-    tool_id: str
+    tool_id: str  # Canonical identifier (also exposed via .name for compatibility)
     server_id: str
-    description_1line: str
+    description_1line: str  # 1-line summary (also exposed via .description for compatibility)
     tags: list[str]
-    risk_level: str
+    risk_level: str  # "safe", "sensitive", "dangerous" (also exposed via .sensitive)
     relevance_score: float = 0.0  # Semantic similarity (Phase 2)
     allowed_in_mode: AllowedInMode = AllowedInMode.ALLOWED
     schema_hint: str | None = None  # Brief parameter summary

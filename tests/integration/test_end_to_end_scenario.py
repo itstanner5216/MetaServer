@@ -46,8 +46,8 @@ async def test_complete_safe_tool_workflow(redis_client):
     results = tool_registry.search("read")
     assert len(results) > 0
 
-    # Step 2: Find read_file
-    read_file = next((t for t in results if t.name == "read_file"), None)
+    # Step 2: Find read_file (use canonical tool_id instead of compatibility name)
+    read_file = next((t for t in results if t.tool_id == "read_file"), None)
     assert read_file is not None
     assert read_file.sensitive is False  # Safe tool
 
@@ -85,8 +85,8 @@ async def test_complete_sensitive_tool_workflow(redis_client):
     results = tool_registry.search("write")
     assert len(results) > 0
 
-    # Step 2: Find write_file
-    write_file = next((t for t in results if t.name == "write_file"), None)
+    # Step 2: Find write_file (use canonical tool_id instead of compatibility name)
+    write_file = next((t for t in results if t.tool_id == "write_file"), None)
     assert write_file is not None
     assert write_file.sensitive is True  # Sensitive tool
 
