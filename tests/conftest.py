@@ -567,6 +567,10 @@ def fresh_registry():
     original_servers = copy.deepcopy(tool_registry._servers)
     original_by_server = copy.deepcopy(tool_registry._tools_by_server)
 
+    tool_registry._tools = {}
+    tool_registry._servers = {}
+    tool_registry._tools_by_server = {}
+
     yield tool_registry
 
     tool_registry._tools = original_tools

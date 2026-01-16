@@ -119,7 +119,7 @@ async def test_approval_provider_scopes_propagate(monkeypatch, mock_fastmcp_cont
     response = ApprovalResponse(
         request_id="req-1",
         decision=ApprovalDecision.APPROVED,
-        selected_scopes=["tool:write_file", "resource:path:test.txt"],
+        selected_scopes=["tool:write_file", "filesystem:write", "resource:path:test.txt"],
         lease_seconds=120,
     )
     provider = CapturingProvider(response)
@@ -136,11 +136,12 @@ async def test_approval_provider_scopes_propagate(monkeypatch, mock_fastmcp_cont
     )
 
     assert provider.request is not None
-    assert "tool:write_file" in provider.request.required_scopes
-    assert "resource:path:test.txt" in provider.request.required_scopes
+    expected_scopes = {"tool:write_file", "filesystem:write", "resource:path:test.txt"}
+
+    assert set(provider.request.required_scopes) == expected_scopes
     assert approved is True
     assert lease_seconds == 120
-    assert selected_scopes == ["tool:write_file", "resource:path:test.txt"]
+    assert set(selected_scopes) == expected_scopes
 
 
 @pytest.mark.asyncio
