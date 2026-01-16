@@ -80,7 +80,7 @@ class Config:
         "AUDIT_LOG_BACKUP_COUNT",
     )
     AUDIT_LOG_BUFFER_SIZE: int = _parse_non_negative_int.__func__(
-        os.getenv("AUDIT_LOG_BUFFER_SIZE", "50"),
+        os.getenv("AUDIT_LOG_BUFFER_SIZE", "100"),
         "AUDIT_LOG_BUFFER_SIZE",
     )
     AUDIT_LOG_FLUSH_INTERVAL: float = _parse_non_negative_float.__func__(

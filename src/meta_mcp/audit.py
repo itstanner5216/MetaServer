@@ -188,26 +188,23 @@ class AuditLogger:
             return
         if self._handler is None:
             self._configure_handler()
-        if self._handler is None:
-            for line in self._buffer:
-                self.fallback_logger.info(line)
-            self._buffer.clear()
-            self._last_flush = time.monotonic()
-            return
-
         buffer = self._buffer
         self._buffer = []
-        try:
+        self._last_flush = time.monotonic()
+        if self._handler is None:
             for line in buffer:
-                self._logger.info(line)
+                self.fallback_logger.info(line)
+            return
+
+        payload = "\n".join(buffer)
+        try:
+            self._logger.info(payload)
         except Exception as exc:
             self.fallback_logger.opt(exception=exc).warning(
                 "Audit log write failed. Emitting buffered records to fallback logger."
             )
             for line in buffer:
                 self.fallback_logger.info(line)
-        finally:
-            self._last_flush = time.monotonic()
 
     def log_tool_call(
         self,
