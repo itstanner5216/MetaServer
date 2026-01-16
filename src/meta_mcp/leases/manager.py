@@ -347,7 +347,12 @@ class LeaseManager:
             purged = 0
             if expired_keys:
                 purged = await redis.delete(*expired_keys)
-                logger.info(f"Purged {purged} expired leases")
+                logger.info(
+                    f"Purged {purged} expired leases in batch "
+                    f"(scanned {len(expired_keys)} keys)"
+                )
+            else:
+                logger.debug("No expired leases to purge")
 
             return purged
 

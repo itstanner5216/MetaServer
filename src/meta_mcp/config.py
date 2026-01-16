@@ -53,6 +53,17 @@ class Config:
         except ValueError as e:
             raise ValueError(f"Invalid {name} environment variable: {e}")
 
+    @staticmethod
+    def _parse_non_negative_float(value: str, name: str) -> float:
+        """Parse and validate a non-negative float environment variable."""
+        try:
+            parsed = float(value)
+            if parsed < 0:
+                raise ValueError(f"{name} must be >= 0, got {parsed}")
+            return parsed
+        except ValueError as e:
+            raise ValueError(f"Invalid {name} environment variable: {e}")
+
     # ========================================================================
     # Server Configuration
     # ========================================================================
@@ -68,6 +79,14 @@ class Config:
         os.getenv("AUDIT_LOG_BACKUP_COUNT", "5"),
         "AUDIT_LOG_BACKUP_COUNT",
     )
+    AUDIT_LOG_BUFFER_SIZE: int = _parse_non_negative_int.__func__(
+        os.getenv("AUDIT_LOG_BUFFER_SIZE", "100"),
+        "AUDIT_LOG_BUFFER_SIZE",
+    )
+    AUDIT_LOG_FLUSH_INTERVAL: float = _parse_non_negative_float.__func__(
+        os.getenv("AUDIT_LOG_FLUSH_INTERVAL", "1.0"),
+        "AUDIT_LOG_FLUSH_INTERVAL",
+    )
 
     # ========================================================================
     # Redis Configuration
@@ -79,6 +98,18 @@ class Config:
         os.getenv("REDIS_SOCKET_CONNECT_TIMEOUT", "2")
     )
     REDIS_SOCKET_TIMEOUT: float = float(os.getenv("REDIS_SOCKET_TIMEOUT", "2"))
+    REDIS_CONNECT_RETRIES: int = _parse_non_negative_int.__func__(
+        os.getenv("REDIS_CONNECT_RETRIES", "3"),
+        "REDIS_CONNECT_RETRIES",
+    )
+    REDIS_CONNECT_RETRY_DELAY: float = _parse_non_negative_float.__func__(
+        os.getenv("REDIS_CONNECT_RETRY_DELAY", "0.2"),
+        "REDIS_CONNECT_RETRY_DELAY",
+    )
+    REDIS_CONNECT_RETRY_MAX_DELAY: float = _parse_non_negative_float.__func__(
+        os.getenv("REDIS_CONNECT_RETRY_MAX_DELAY", "2.0"),
+        "REDIS_CONNECT_RETRY_MAX_DELAY",
+    )
 
     # ========================================================================
     # Governance Configuration
@@ -199,6 +230,29 @@ class Config:
         if cls.REDIS_SOCKET_TIMEOUT <= 0:
             errors.append(
                 f"REDIS_SOCKET_TIMEOUT must be > 0, got {cls.REDIS_SOCKET_TIMEOUT}"
+            )
+        if cls.AUDIT_LOG_BUFFER_SIZE <= 0:
+            errors.append(
+                f"AUDIT_LOG_BUFFER_SIZE must be > 0, got {cls.AUDIT_LOG_BUFFER_SIZE}"
+            )
+        if cls.AUDIT_LOG_FLUSH_INTERVAL <= 0:
+            errors.append(
+                "AUDIT_LOG_FLUSH_INTERVAL must be > 0, "
+                f"got {cls.AUDIT_LOG_FLUSH_INTERVAL}"
+            )
+        if cls.REDIS_CONNECT_RETRIES <= 0:
+            errors.append(
+                f"REDIS_CONNECT_RETRIES must be > 0, got {cls.REDIS_CONNECT_RETRIES}"
+            )
+        if cls.REDIS_CONNECT_RETRY_DELAY <= 0:
+            errors.append(
+                "REDIS_CONNECT_RETRY_DELAY must be > 0, "
+                f"got {cls.REDIS_CONNECT_RETRY_DELAY}"
+            )
+        if cls.REDIS_CONNECT_RETRY_MAX_DELAY <= 0:
+            errors.append(
+                "REDIS_CONNECT_RETRY_MAX_DELAY must be > 0, "
+                f"got {cls.REDIS_CONNECT_RETRY_MAX_DELAY}"
             )
 
         if errors:
