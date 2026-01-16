@@ -77,7 +77,7 @@ async def test_elicitation_error_blocks(
     Validates: Invariant #6 (Fail-Safe - elicitation errors)
     """
     # Establish lease first (required by middleware)
-    await lease_for_tool("write_file")
+    await lease_for_tool("write_file", client_id="session-123")
 
     # Setup
     middleware = GovernanceMiddleware()

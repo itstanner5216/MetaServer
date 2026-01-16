@@ -70,8 +70,7 @@ class LeaseManager:
         Returns:
             Redis client instance with connection pooling
         """
-        if self._redis_client is None:
-            self._redis_client = await get_redis_client()
+        self._redis_client = await get_redis_client()
         return self._redis_client
 
     @staticmethod
@@ -154,6 +153,7 @@ class LeaseManager:
                 f"Granted lease for {client_id}:{tool_id} "
                 f"(TTL={ttl_seconds}s, calls={calls_remaining})"
             )
+            await self._emit_list_changed(client_id)
             return lease
 
         except ValueError as e:
@@ -277,6 +277,7 @@ class LeaseManager:
 
             if lease.calls_remaining <= 0:
                 logger.info(f"Lease exhausted and deleted for {client_id}:{tool_id}")
+                await self._emit_list_changed(client_id)
             else:
                 logger.info(
                     f"Consumed lease for {client_id}:{tool_id} (remaining={lease.calls_remaining})"
@@ -316,6 +317,7 @@ class LeaseManager:
 
             if deleted:
                 logger.info(f"Revoked lease for {client_id}:{tool_id}")
+                await self._emit_list_changed(client_id)
 
             return True
 
@@ -339,6 +341,7 @@ class LeaseManager:
         try:
             redis = await self._get_redis()
             expired_keys = []
+            client_ids = set()
 
             # Scan for all lease keys and collect expired ones
             async for key in redis.scan_iter("lease:*"):
@@ -352,6 +355,10 @@ class LeaseManager:
 
                     if datetime.now(timezone.utc) > expires_at:
                         expired_keys.append(key)
+                        if isinstance(key, str) and key.startswith("lease:"):
+                            parts = key.split(":", 2)
+                            if len(parts) >= 3:
+                                client_ids.add(parts[1])
                 except Exception as e:
                     logger.warning(f"Error parsing lease {key}: {e}")
                     continue
@@ -364,6 +371,8 @@ class LeaseManager:
                     f"Purged {purged} expired leases in batch "
                     f"(scanned {len(expired_keys)} keys)"
                 )
+                for client_id in client_ids:
+                    await self._emit_list_changed(client_id)
             else:
                 logger.debug("No expired leases to purge")
 

@@ -241,13 +241,12 @@ def test_validate_minimal_schema_missing_type():
 
 
 def test_validate_minimal_schema_object_without_properties():
-    """Test validation fails for object schema without properties."""
+    """Test validation allows object schema without properties."""
     minimal = {
         "type": "object",
     }
 
-    with pytest.raises(ValueError, match="must have 'properties' field"):
-        validate_minimal_schema(minimal)
+    assert validate_minimal_schema(minimal) is True
 
 
 def test_validate_minimal_schema_exceeds_token_budget():

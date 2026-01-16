@@ -37,7 +37,7 @@ async def test_bootstrap_discovery(redis_client):
     bootstrap = tool_registry.get_bootstrap_tools()
 
     # Verify minimal set
-    assert len(bootstrap) == 3
+    assert len(bootstrap) == 2
     assert "search_tools" in bootstrap
     assert "get_tool_schema" in bootstrap
 

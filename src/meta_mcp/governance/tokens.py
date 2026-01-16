@@ -142,7 +142,11 @@ def verify_token(
         payload_b64, signature = parts
 
         # Decode payload
-        payload_bytes = base64.b64decode(payload_b64)
+        payload_bytes = base64.b64decode(payload_b64, validate=True)
+        normalized_b64 = base64.b64encode(payload_bytes).decode()
+        if payload_b64 != normalized_b64:
+            logger.warning("Token verification failed: non-canonical base64 encoding")
+            return False
         payload_json = payload_bytes.decode()
         payload = json.loads(payload_json)
 

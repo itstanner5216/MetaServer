@@ -72,9 +72,6 @@ async def test_lease_grant_emits_notification(redis_client):
             mode_at_issue="PERMISSION",
         )
 
-        # Emit notification manually (since grant doesn't auto-emit yet)
-        await lease_manager._emit_list_changed("notify_test_client")
-
         # Verify callback was called
         callback.assert_called_once_with("notify_test_client")
 
@@ -112,9 +109,6 @@ async def test_lease_revocation_emits_notification(redis_client):
     try:
         # Revoke lease
         await lease_manager.revoke("revoke_notify_test", "write_file")
-
-        # Emit notification
-        await lease_manager._emit_list_changed("revoke_notify_test")
 
         # Verify callback called
         callback.assert_called_once_with("revoke_notify_test")
@@ -184,9 +178,6 @@ async def test_multiple_clients_isolated_notifications(redis_client):
             calls_remaining=5,
             mode_at_issue="PERMISSION",
         )
-
-        # Emit notification for Client A
-        await lease_manager._emit_list_changed("client_a")
 
         # Both callbacks called (they don't filter by client_id yet)
         # In real implementation, callbacks would filter
@@ -296,9 +287,6 @@ async def test_notification_on_lease_exhaustion(redis_client):
         consumed = await lease_manager.consume("exhaust_notify_test", "write_file")
         assert consumed.calls_remaining == 0
 
-        # Emit notification
-        await lease_manager._emit_list_changed("exhaust_notify_test")
-
         # Verify callback called
         callback.assert_called_once_with("exhaust_notify_test")
 
@@ -330,11 +318,9 @@ async def test_multiple_notifications_same_client(redis_client):
             calls_remaining=5,
             mode_at_issue="PERMISSION",
         )
-        await lease_manager._emit_list_changed("multi_notify_test")
 
         # Revoke
         await lease_manager.revoke("multi_notify_test", "write_file")
-        await lease_manager._emit_list_changed("multi_notify_test")
 
         # Grant again
         await lease_manager.grant(
@@ -344,7 +330,6 @@ async def test_multiple_notifications_same_client(redis_client):
             calls_remaining=3,
             mode_at_issue="PERMISSION",
         )
-        await lease_manager._emit_list_changed("multi_notify_test")
 
         # Callback called 3 times
         assert callback.call_count == 3
@@ -376,7 +361,6 @@ async def test_notification_includes_correct_client_id(redis_client):
             calls_remaining=5,
             mode_at_issue="PERMISSION",
         )
-        await lease_manager._emit_list_changed("client_alpha")
 
         # Grant to client B
         await lease_manager.grant(
@@ -386,7 +370,6 @@ async def test_notification_includes_correct_client_id(redis_client):
             calls_remaining=3,
             mode_at_issue="PERMISSION",
         )
-        await lease_manager._emit_list_changed("client_beta")
 
         # Verify correct client_ids in calls
         assert callback.call_count == 2
@@ -481,9 +464,6 @@ async def test_complete_notification_workflow(redis_client):
             mode_at_issue="PERMISSION",
         )
 
-        # Step 2: Emit notification
-        await lease_manager._emit_list_changed("complete_notify_test")
-
         # Step 3: Verify notification received
         assert len(notification_log) == 1
         assert notification_log[0] == ("list_changed", "complete_notify_test")
@@ -494,7 +474,6 @@ async def test_complete_notification_workflow(redis_client):
 
         # Step 5: Revoke lease
         await lease_manager.revoke("complete_notify_test", "write_file")
-        await lease_manager._emit_list_changed("complete_notify_test")
 
         # Step 6: Verify second notification
         assert len(notification_log) == 2

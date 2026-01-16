@@ -67,10 +67,9 @@ def batch_read_tools(
     # Audit logging if requested
     if audit and session_id:
         try:
-            from ..audit import AuditEvent, AuditLogger
+            from ..audit import AuditEvent, audit_logger
 
-            logger = AuditLogger()
-            logger.log(
+            audit_logger.log(
                 event=AuditEvent.TOOL_INVOKED,
                 operation="batch_read",
                 tool_name="batch_read_tools",
@@ -82,6 +81,7 @@ def batch_read_tools(
                     "max_risk_level": max_risk_level,
                 },
             )
+            audit_logger.flush()
         except Exception:
             # Don't fail operation if audit logging fails
             pass

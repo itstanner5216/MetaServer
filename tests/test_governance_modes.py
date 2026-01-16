@@ -165,7 +165,7 @@ async def test_permission_requires_approval(
     Validates: Invariant #4 (Tri-State Governance) + Invariant #6 (Elicitation)
     """
     # Establish lease first (required by middleware)
-    await lease_for_tool("write_file")
+    await lease_for_tool("write_file", client_id="test-session")
 
     # Setup
     middleware = GovernanceMiddleware()

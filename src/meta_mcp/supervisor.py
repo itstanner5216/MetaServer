@@ -24,6 +24,7 @@ from .governance.tokens import generate_token
 from .leases import lease_manager
 from .middleware import GovernanceMiddleware
 from .redis_client import check_redis_health
+from .registry import tool_registry
 from .state import governance_state
 from .validation import run_all_validations
 

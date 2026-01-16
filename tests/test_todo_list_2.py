@@ -465,14 +465,18 @@ async def test_supervisor_get_tool_schema_uses_session_id_for_client_id(mock_fas
                 # Mock mcp.get_tool to return a tool
                 with patch("src.meta_mcp.supervisor.mcp") as mock_mcp:
                     mock_tool = MagicMock()
-                    mock_tool.to_mcp_tool.return_value = MagicMock(
-                        name="test_tool", description="Test tool", inputSchema={"type": "object"}
-                    )
+                    mcp_tool = MagicMock()
+                    mcp_tool.name = "test_tool"
+                    mcp_tool.description = "Test tool"
+                    mcp_tool.inputSchema = {"type": "object"}
+                    mock_tool.to_mcp_tool.return_value = mcp_tool
                     mock_mcp.get_tool = AsyncMock(return_value=mock_tool)
 
                     # Execute get_tool_schema with context
                     try:
-                        result = await get_tool_schema("test_tool", expand=False, ctx=mock_context)
+                        result = await get_tool_schema.fn(
+                            tool_name="test_tool", expand=False, ctx=mock_context
+                        )
 
                         # Verify lease_manager.grant was called with client_id from session_id
                         mock_grant.assert_called_once()
@@ -523,14 +527,18 @@ async def test_supervisor_handles_missing_context_gracefully():
                 # Mock mcp.get_tool
                 with patch("src.meta_mcp.supervisor.mcp") as mock_mcp:
                     mock_tool = MagicMock()
-                    mock_tool.to_mcp_tool.return_value = MagicMock(
-                        name="test_tool", description="Test tool", inputSchema={"type": "object"}
-                    )
+                    mcp_tool = MagicMock()
+                    mcp_tool.name = "test_tool"
+                    mcp_tool.description = "Test tool"
+                    mcp_tool.inputSchema = {"type": "object"}
+                    mock_tool.to_mcp_tool.return_value = mcp_tool
                     mock_mcp.get_tool = AsyncMock(return_value=mock_tool)
 
                     # Execute with ctx=None (fail-safe scenario)
                     try:
-                        await get_tool_schema("test_tool", expand=False, ctx=None)
+                        await get_tool_schema.fn(
+                            tool_name="test_tool", expand=False, ctx=None
+                        )
 
                         # Verify lease_manager.grant was called with fail-safe client_id
                         mock_grant.assert_called_once()
@@ -582,13 +590,19 @@ async def test_supervisor_client_id_stable_across_calls():
 
                 with patch("src.meta_mcp.supervisor.mcp") as mock_mcp:
                     mock_tool = MagicMock()
-                    mock_tool.to_mcp_tool.return_value = MagicMock(
-                        name="test_tool", description="Test tool", inputSchema={"type": "object"}
-                    )
+                    mcp_tool = MagicMock()
+                    mcp_tool.name = "test_tool"
+                    mcp_tool.description = "Test tool"
+                    mcp_tool.inputSchema = {"type": "object"}
+                    mock_tool.to_mcp_tool.return_value = mcp_tool
                     mock_mcp.get_tool = AsyncMock(return_value=mock_tool)
 
-                    await get_tool_schema("test_tool", expand=False, ctx=mock_context)
-                    await get_tool_schema("test_tool", expand=False, ctx=mock_context)
+                    await get_tool_schema.fn(
+                        tool_name="test_tool", expand=False, ctx=mock_context
+                    )
+                    await get_tool_schema.fn(
+                        tool_name="test_tool", expand=False, ctx=mock_context
+                    )
 
                     client_ids = [
                         call.kwargs["client_id"] for call in mock_grant.call_args_list
@@ -630,13 +644,19 @@ async def test_supervisor_client_id_unique_across_sessions():
 
                 with patch("src.meta_mcp.supervisor.mcp") as mock_mcp:
                     mock_tool = MagicMock()
-                    mock_tool.to_mcp_tool.return_value = MagicMock(
-                        name="test_tool", description="Test tool", inputSchema={"type": "object"}
-                    )
+                    mcp_tool = MagicMock()
+                    mcp_tool.name = "test_tool"
+                    mcp_tool.description = "Test tool"
+                    mcp_tool.inputSchema = {"type": "object"}
+                    mock_tool.to_mcp_tool.return_value = mcp_tool
                     mock_mcp.get_tool = AsyncMock(return_value=mock_tool)
 
-                    await get_tool_schema("test_tool", expand=False, ctx=context_a)
-                    await get_tool_schema("test_tool", expand=False, ctx=context_b)
+                    await get_tool_schema.fn(
+                        tool_name="test_tool", expand=False, ctx=context_a
+                    )
+                    await get_tool_schema.fn(
+                        tool_name="test_tool", expand=False, ctx=context_b
+                    )
 
                     client_ids = [
                         call.kwargs["client_id"] for call in mock_grant.call_args_list
@@ -955,4 +975,3 @@ async def test_todo_list_2_integration(mock_fastmcp_context):
     assert admin_server is not None
     assert hasattr(set_governance_mode, "fn")
     assert callable(set_governance_mode.fn)
-

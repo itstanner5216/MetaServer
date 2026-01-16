@@ -84,7 +84,7 @@ def batch_update_tools(
             continue
 
         # Store original values for rollback
-        if rollback_on_error:
+        if atomic or rollback_on_error:
             original_values[tool_id] = {k: getattr(tool, k, None) for k in fields.keys()}
 
         # Apply updates

@@ -7,7 +7,7 @@ Validates:
 
 import pytest
 
-from src.meta_mcp.audit import AuditLogger
+from src.meta_mcp.audit import AuditEvent, AuditLogger
 
 
 class TestAuditLoggingFixes:
@@ -28,6 +28,7 @@ class TestAuditLoggingFixes:
             selected_scopes=["tool:write_file", "filesystem:write"],
             lease_seconds=300,
         )
+        logger.flush()
 
         # Verify log was written
         assert log_file.exists()
@@ -49,6 +50,7 @@ class TestAuditLoggingFixes:
             request_id="xyz789_delete_file_abc123_456",
             reason="missing_required_scopes: ['filesystem:delete']",
         )
+        logger.flush()
 
         content = log_file.read_text()
         assert "request_id" in content
@@ -67,6 +69,7 @@ class TestAuditLoggingFixes:
             timeout_seconds=300,
             request_id="req_timeout_12345",
         )
+        logger.flush()
 
         content = log_file.read_text()
         assert "request_id" in content
@@ -86,6 +89,7 @@ class TestAuditLoggingFixes:
             approved=True,
             elevation_ttl=300,
         )
+        logger.flush()
 
         content = log_file.read_text()
         assert "read_file" in content
@@ -104,6 +108,7 @@ class TestAuditLoggingFixes:
                 session_id=f"session_{index}",
                 mode="PERMISSION",
             )
+        logger.flush()
 
         assert log_file.exists()
         rotated_logs = list(tmp_path.glob("audit.jsonl.*"))

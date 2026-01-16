@@ -248,8 +248,6 @@ async def test_lease_lifecycle_with_notifications(redis_client):
         )
         assert lease is not None
 
-        # Emit notification
-        await lease_manager._emit_list_changed("lifecycle_test")
         assert len(notifications) == 1
 
         # Step 3: Consume lease
@@ -260,8 +258,6 @@ async def test_lease_lifecycle_with_notifications(redis_client):
         consumed = await lease_manager.consume("lifecycle_test", "write_file")
         assert consumed.calls_remaining == 0
 
-        # Emit notification
-        await lease_manager._emit_list_changed("lifecycle_test")
         assert len(notifications) == 2
 
         # Step 5: Tool no longer available

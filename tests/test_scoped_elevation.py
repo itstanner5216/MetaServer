@@ -1,7 +1,8 @@
 """Test TTL-based scoped elevation cache (Invariant #6)."""
 
 import asyncio
-from unittest.mock import AsyncMock
+import json
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -29,7 +30,7 @@ async def test_elevation_grants_on_approval(
     Validates: Invariant #6 (Scoped Elevation)
     """
     # Establish lease first (required by middleware)
-    await lease_for_tool("write_file")
+    await lease_for_tool("write_file", client_id="session-123")
 
     # Setup
     middleware = GovernanceMiddleware()
@@ -70,7 +71,7 @@ async def test_elevation_auto_approves_same_path(
     Validates: Invariant #6 (Scoped Elevation - efficiency)
     """
     # Establish lease first (required by middleware)
-    await lease_for_tool("write_file")
+    await lease_for_tool("write_file", client_id="session-123")
 
     # Setup: Pre-grant elevation
     await granted_elevation(
@@ -102,7 +103,6 @@ async def test_elevation_auto_approves_same_path(
 async def test_elevation_requires_new_approval_different_path(
     governance_in_permission,
     mock_fastmcp_context,
-    mock_elicit_approve,
     granted_elevation,
     lease_for_tool,
 ):
@@ -113,7 +113,7 @@ async def test_elevation_requires_new_approval_different_path(
     Validates: Invariant #6 (Scoped Elevation - security boundary)
     """
     # Establish lease first (required by middleware)
-    await lease_for_tool("write_file")
+    await lease_for_tool("write_file", client_id="session-123")
 
     # Setup: Grant elevation for test.txt
     await granted_elevation(
@@ -128,7 +128,22 @@ async def test_elevation_requires_new_approval_different_path(
         "content": "data",
     }
     mock_fastmcp_context.request_context.session_id = "session-123"
-    mock_fastmcp_context.elicit = mock_elicit_approve
+    required_scopes = middleware._get_required_scopes(
+        "write_file", mock_fastmcp_context.request_context.arguments
+    )
+
+    async def _approve(*args, **kwargs):
+        result = MagicMock()
+        result.data = json.dumps(
+            {
+                "decision": "approved",
+                "selected_scopes": required_scopes,
+                "lease_seconds": 300,
+            }
+        )
+        return result
+
+    mock_fastmcp_context.elicit = AsyncMock(side_effect=_approve)
 
     # Create mock call_next
     call_next = AsyncMock(return_value="Success")
@@ -161,7 +176,7 @@ async def test_elevation_expires_after_ttl(
     Validates: Invariant #6 (Scoped Elevation - TTL enforcement)
     """
     # Establish lease first (required by middleware)
-    await lease_for_tool("write_file")
+    await lease_for_tool("write_file", client_id="session-123")
 
     # Setup: Grant elevation with 1-second TTL
     await granted_elevation(
@@ -212,7 +227,7 @@ async def test_elevation_scoped_to_session(
     Validates: Invariant #6 (Scoped Elevation - session isolation)
     """
     # Establish lease first (required by middleware)
-    await lease_for_tool("write_file")
+    await lease_for_tool("write_file", client_id="session-B")
 
     # Setup: Grant elevation for session-A
     await granted_elevation(

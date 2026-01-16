@@ -25,7 +25,7 @@ async def test_permission_mode_requires_approval(redis_client, governance_in_per
     """
     Test complete flow: search → schema request → approval required.
     """
-    results = search_tools.fn(query="file operations")
+    results = search_tools.fn(query="file")
     assert "write_file" in str(results).lower()
 
     tools_before = await mcp.get_tools()

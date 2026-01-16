@@ -13,6 +13,8 @@ from redis import asyncio as aioredis
 
 from src.meta_mcp.state import ExecutionMode, governance_state
 
+REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379")
+
 
 # ============================================================================
 # PYTEST CONFIGURATION & MARKERS
@@ -39,7 +41,7 @@ def validate_test_environment():
     try:
         import redis
 
-        r = redis.Redis(host="localhost", port=6379, socket_connect_timeout=1)
+        r = redis.Redis.from_url(REDIS_URL, socket_connect_timeout=1)
         r.ping()
         redis_available = True
         r.close()
@@ -70,7 +72,7 @@ def pytest_collection_modifyitems(config, items):
     try:
         import redis
 
-        r = redis.Redis(host="localhost", port=6379, socket_connect_timeout=1)
+        r = redis.Redis.from_url(REDIS_URL, socket_connect_timeout=1)
         r.ping()
         redis_available = True
         r.close()
@@ -109,9 +111,14 @@ async def redis_client():
         Tests using this fixture should be marked with @pytest.mark.requires_redis
         to ensure they are skipped when Redis is not available.
     """
+    # Ensure shared Redis client is reset per-test to avoid cross-loop reuse.
+    from src.meta_mcp.redis_client import close_redis_client
+
+    await close_redis_client()
+
     # Create Redis client
     client = aioredis.from_url(
-        "redis://localhost:6379",
+        REDIS_URL,
         encoding="utf-8",
         decode_responses=True,
         socket_connect_timeout=2,
@@ -128,6 +135,7 @@ async def redis_client():
         # Flush database after test for isolation
         await client.flushdb()
         await client.aclose()
+        await close_redis_client()
 
 
 # ============================================================================
@@ -264,6 +272,7 @@ def mock_elicit_approve():
                 "decision": "approved",
                 "selected_scopes": [
                     "tool:write_file",
+                    "filesystem:write",
                     "resource:path:test.txt",
                 ],
                 "lease_seconds": 300,
@@ -415,6 +424,13 @@ def audit_log_path(tmp_path):
     original_path = os.environ.get("AUDIT_LOG_PATH")
     os.environ["AUDIT_LOG_PATH"] = str(log_path)
 
+    from src.meta_mcp.audit import audit_logger
+
+    original_logger_path = audit_logger.log_path
+    audit_logger.log_path = log_path
+    audit_logger._configure_handler()
+    audit_logger._buffer = []
+
     yield log_path
 
     # Restore original environment variable
@@ -422,6 +438,9 @@ def audit_log_path(tmp_path):
         os.environ["AUDIT_LOG_PATH"] = original_path
     else:
         os.environ.pop("AUDIT_LOG_PATH", None)
+
+    audit_logger.log_path = original_logger_path
+    audit_logger._configure_handler()
 
 
 # ============================================================================

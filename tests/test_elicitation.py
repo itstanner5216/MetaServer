@@ -256,7 +256,7 @@ async def test_malformed_response_blocks(
     # Create mock elicit that returns malformed response
     async def _malformed(*args, **kwargs):
         result = MagicMock()
-        result.data = "approve"  # Invalid response (missing required fields)
+        result.data = "maybe"  # Invalid response (missing required fields)
         return result
 
     mock_fastmcp_context.elicit = AsyncMock(side_effect=_malformed)
@@ -415,11 +415,6 @@ async def test_approval_creates_audit_log(
 
 @pytest.mark.asyncio
 async def test_json_response_parsing():
-@pytest.mark.requires_redis
-async def test_substring_attacks_denied(
-    governance_in_permission,
-    mock_fastmcp_context,
-):
     """
     Test JSON parsing for structured approval responses.
     """
@@ -427,6 +422,19 @@ async def test_substring_attacks_denied(
 
     payload = '{"decision":"approved","selected_scopes":["tool:write_file","resource:path:test.txt"],"lease_seconds":120}'
     parsed = FastMCPElicitProvider._parse_structured_response(payload)
+
+    assert parsed["decision"] == "approved"
+    assert parsed["selected_scopes"] == ["tool:write_file", "resource:path:test.txt"]
+    assert parsed["lease_seconds"] == 120
+
+
+@pytest.mark.asyncio
+async def test_substring_attacks_denied():
+    """
+    Ensure substring matches do not count as approvals.
+    """
+    from src.meta_mcp.middleware import GovernanceMiddleware
+
     middleware = GovernanceMiddleware()
 
     # Test various substring attack attempts
@@ -438,9 +446,9 @@ async def test_substring_attacks_denied(
         "acceptreject",  # contains "accept" but not standalone
     ]
 
-    assert parsed["decision"] == "approved"
-    assert parsed["selected_scopes"] == ["tool:write_file", "resource:path:test.txt"]
-    assert parsed["lease_seconds"] == 120
+    for attack in substring_attacks:
+        result = middleware._parse_approval_response(attack)
+        assert result is False, f"Substring attack '{attack}' was incorrectly approved"
 
 
 @pytest.mark.asyncio

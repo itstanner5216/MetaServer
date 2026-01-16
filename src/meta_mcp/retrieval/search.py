@@ -62,6 +62,25 @@ class SemanticSearch:
     def _vector_magnitude(vector: list[float]) -> float:
         return math.sqrt(sum(x * x for x in vector))
 
+    @staticmethod
+    def _cosine_similarity(vector_a: list[float], vector_b: list[float]) -> float:
+        """
+        Compute cosine similarity between two vectors.
+
+        Returns 0.0 for empty or mismatched vectors.
+        """
+        if not vector_a or not vector_b or len(vector_a) != len(vector_b):
+            return 0.0
+
+        mag_a = SemanticSearch._vector_magnitude(vector_a)
+        mag_b = SemanticSearch._vector_magnitude(vector_b)
+        if mag_a == 0.0 or mag_b == 0.0:
+            return 0.0
+
+        dot_product = sum(a * b for a, b in zip(vector_a, vector_b))
+        score = dot_product / (mag_a * mag_b)
+        return max(0.0, min(1.0, score))
+
     def _cosine_similarity_with_query(
         self, query_vector: list[float], query_magnitude: float, tool_vector: list[float]
     ) -> float:

@@ -70,8 +70,7 @@ class GovernanceState:
         Returns:
             Redis client instance with connection pooling
         """
-        if self._redis_client is None:
-            self._redis_client = await get_redis_client()
+        self._redis_client = await get_redis_client()
         return self._redis_client
 
     async def get_mode(self) -> ExecutionMode:

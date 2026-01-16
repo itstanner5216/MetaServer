@@ -1,6 +1,7 @@
 """FastMCP middleware for tri-state governance with scoped elevation and elicitation."""
 
 import hashlib
+import re
 import time
 from typing import Any
 
@@ -360,6 +361,30 @@ class GovernanceMiddleware(Middleware):
 
         return "\n".join(lines)
 
+    @staticmethod
+    def _parse_approval_response(response: str | None) -> bool:
+        """
+        Parse a free-text approval response.
+
+        Returns True if any approval keyword is present, False otherwise.
+        Approval keywords take precedence over denial keywords.
+        """
+        if response is None:
+            return False
+
+        normalized = str(response).strip().lower()
+        if not normalized:
+            return False
+
+        approval_pattern = re.compile(r"\b(approved?|yes|y|ok|okay|accept|allow)\b")
+        denial_pattern = re.compile(r"\b(denied?|no|n|reject|never|cancel|nope|nah)\b")
+
+        if approval_pattern.search(normalized):
+            return True
+        if denial_pattern.search(normalized):
+            return False
+        return False
+
     async def _elicit_approval(
         self, ctx: Context, tool_name: str, arguments: dict[str, Any]
     ) -> tuple[bool, int, list[str]]:
@@ -685,6 +710,9 @@ class GovernanceMiddleware(Middleware):
 
                 logger.debug(f"Capability token verified for {tool_name} (client: {client_id})")
 
+        elif not Config.ENABLE_LEASE_MANAGEMENT:
+            logger.debug(f"Lease management disabled, skipping validation for {tool_name}")
+
         async def _consume_lease_after_success() -> None:
             if not should_consume_lease:
                 return
@@ -701,8 +729,6 @@ class GovernanceMiddleware(Middleware):
                 f"Lease consumed for {tool_name} "
                 f"(client: {client_id}, remaining={consumed_lease.calls_remaining})"
             )
-        elif not Config.ENABLE_LEASE_MANAGEMENT:
-            logger.debug(f"Lease management disabled, skipping validation for {tool_name}")
 
         # Get current governance mode
         mode = await governance_state.get_mode()

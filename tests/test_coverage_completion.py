@@ -1,11 +1,27 @@
 """Additional tests to achieve >90% coverage on middleware.py"""
 
+import json
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from fastmcp.exceptions import ToolError
 
 from src.meta_mcp.middleware import GovernanceMiddleware
+
+
+def _mock_elicit_with_scopes(required_scopes):
+    async def _approve(*args, **kwargs):
+        result = MagicMock()
+        result.data = json.dumps(
+            {
+                "decision": "approved",
+                "selected_scopes": required_scopes,
+                "lease_seconds": 300,
+            }
+        )
+        return result
+
+    return AsyncMock(side_effect=_approve)
 
 # ============================================================================
 # CONTEXT KEY EXTRACTION TESTS (Lines 76-97)
@@ -17,7 +33,7 @@ from src.meta_mcp.middleware import GovernanceMiddleware
 async def test_execute_command_context_key_truncation(
     governance_in_permission,
     mock_fastmcp_context,
-    mock_elicit_approve,
+    grant_lease,
 ):
     """
     Test that execute_command context key is truncated to 50 chars.
@@ -32,7 +48,11 @@ async def test_execute_command_context_key_truncation(
     mock_fastmcp_context.request_context.tool_name = "execute_command"
     mock_fastmcp_context.request_context.arguments = {"command": long_command}
     mock_fastmcp_context.request_context.session_id = "test-session"
-    mock_fastmcp_context.elicit = mock_elicit_approve
+    await grant_lease(client_id="test-session", tool_name="execute_command")
+    required_scopes = middleware._get_required_scopes(
+        "execute_command", mock_fastmcp_context.request_context.arguments
+    )
+    mock_fastmcp_context.elicit = _mock_elicit_with_scopes(required_scopes)
 
     call_next = AsyncMock(return_value="Command executed")
 
@@ -48,7 +68,7 @@ async def test_execute_command_context_key_truncation(
 async def test_directory_operations_context_key(
     governance_in_permission,
     mock_fastmcp_context,
-    mock_elicit_approve,
+    grant_lease,
 ):
     """
     Test that directory operations use path as context key.
@@ -62,7 +82,11 @@ async def test_directory_operations_context_key(
     mock_fastmcp_context.request_context.tool_name = "create_directory"
     mock_fastmcp_context.request_context.arguments = {"path": "/test/directory"}
     mock_fastmcp_context.request_context.session_id = "test-session"
-    mock_fastmcp_context.elicit = mock_elicit_approve
+    await grant_lease(client_id="test-session", tool_name="create_directory")
+    required_scopes = middleware._get_required_scopes(
+        "create_directory", mock_fastmcp_context.request_context.arguments
+    )
+    mock_fastmcp_context.elicit = _mock_elicit_with_scopes(required_scopes)
 
     call_next = AsyncMock(return_value="Directory created")
 
@@ -78,7 +102,7 @@ async def test_directory_operations_context_key(
 async def test_git_operations_context_key(
     governance_in_permission,
     mock_fastmcp_context,
-    mock_elicit_approve,
+    grant_lease,
 ):
     """
     Test that git operations use cwd as context key.
@@ -92,7 +116,11 @@ async def test_git_operations_context_key(
     mock_fastmcp_context.request_context.tool_name = "git_commit"
     mock_fastmcp_context.request_context.arguments = {"message": "test", "cwd": "/repo"}
     mock_fastmcp_context.request_context.session_id = "test-session"
-    mock_fastmcp_context.elicit = mock_elicit_approve
+    await grant_lease(client_id="test-session", tool_name="git_commit")
+    required_scopes = middleware._get_required_scopes(
+        "git_commit", mock_fastmcp_context.request_context.arguments
+    )
+    mock_fastmcp_context.elicit = _mock_elicit_with_scopes(required_scopes)
 
     call_next = AsyncMock(return_value="Committed")
 
@@ -108,7 +136,7 @@ async def test_git_operations_context_key(
 async def test_admin_operations_context_key(
     governance_in_permission,
     mock_fastmcp_context,
-    mock_elicit_approve,
+    grant_lease,
 ):
     """
     Test that admin operations use tool name as context key.
@@ -122,7 +150,11 @@ async def test_admin_operations_context_key(
     mock_fastmcp_context.request_context.tool_name = "set_governance_mode"
     mock_fastmcp_context.request_context.arguments = {"mode": "READ_ONLY"}
     mock_fastmcp_context.request_context.session_id = "test-session"
-    mock_fastmcp_context.elicit = mock_elicit_approve
+    await grant_lease(client_id="test-session", tool_name="set_governance_mode")
+    required_scopes = middleware._get_required_scopes(
+        "set_governance_mode", mock_fastmcp_context.request_context.arguments
+    )
+    mock_fastmcp_context.elicit = _mock_elicit_with_scopes(required_scopes)
 
     call_next = AsyncMock(return_value="Mode changed")
 
@@ -143,6 +175,7 @@ async def test_admin_operations_context_key(
 async def test_approval_request_long_argument_truncation(
     governance_in_permission,
     mock_fastmcp_context,
+    grant_lease,
 ):
     """
     Test that approval request truncates arguments >200 chars.
@@ -157,6 +190,7 @@ async def test_approval_request_long_argument_truncation(
     mock_fastmcp_context.request_context.tool_name = "write_file"
     mock_fastmcp_context.request_context.arguments = {"path": "test.txt", "content": long_content}
     mock_fastmcp_context.request_context.session_id = "test-session"
+    await grant_lease(client_id="test-session", tool_name="write_file")
 
     # Mock elicit to capture the formatted request
     captured_request = None
@@ -191,6 +225,7 @@ async def test_approval_request_long_argument_truncation(
 async def test_unknown_mode_fail_safe_denies(
     redis_client,
     mock_fastmcp_context,
+    grant_lease,
 ):
     """
     Test that unknown governance mode fails safe to denial.
@@ -211,6 +246,7 @@ async def test_unknown_mode_fail_safe_denies(
         mock_fastmcp_context.request_context.tool_name = "write_file"
         mock_fastmcp_context.request_context.arguments = {"path": "test.txt", "content": "data"}
         mock_fastmcp_context.request_context.session_id = "test-session"
+        await grant_lease(client_id="test-session", tool_name="write_file")
 
         call_next = AsyncMock()
 

@@ -12,6 +12,7 @@ from .config import Config
 
 _redis_client: Optional[aioredis.Redis] = None
 _redis_pool: Optional[aioredis.ConnectionPool] = None
+_redis_loop: Optional[asyncio.AbstractEventLoop] = None
 _redis_metrics_handler: Optional["RedisMetricsHandler"] = None
 
 _REDIS_SLOW_OPERATION_MS = 100.0
@@ -108,7 +109,16 @@ class InstrumentedRedis(aioredis.Redis):
 
 async def get_redis_client() -> aioredis.Redis:
     """Get or create a shared Redis client with connection pooling."""
-    global _redis_client, _redis_pool
+    global _redis_client, _redis_pool, _redis_loop
+
+    loop = asyncio.get_running_loop()
+    if _redis_client is not None:
+        if _redis_loop is not loop or (_redis_loop is not None and _redis_loop.is_closed()):
+            logger.debug("Redis client loop mismatch detected, recreating client")
+            await close_redis_client()
+        else:
+            _log_pool_stats("reuse")
+            return _redis_client
 
     if _redis_client is None:
         for attempt in range(1, Config.REDIS_CONNECT_RETRIES + 1):
@@ -124,6 +134,7 @@ async def get_redis_client() -> aioredis.Redis:
                     )
                 _redis_client = InstrumentedRedis(connection_pool=_redis_pool)
                 await _redis_client.ping()
+                _redis_loop = loop
                 _log_pool_stats("ready")
                 break
             except (aioredis.ConnectionError, aioredis.TimeoutError) as exc:
@@ -139,6 +150,7 @@ async def get_redis_client() -> aioredis.Redis:
                 if _redis_pool is not None:
                     await _redis_pool.disconnect()
                     _redis_pool = None
+                _redis_loop = None
                 if attempt >= Config.REDIS_CONNECT_RETRIES:
                     logger.error("Redis connection retries exhausted")
                     raise
@@ -147,8 +159,6 @@ async def get_redis_client() -> aioredis.Redis:
                     Config.REDIS_CONNECT_RETRY_MAX_DELAY,
                 )
                 await asyncio.sleep(backoff)
-    else:
-        _log_pool_stats("reuse")
     return _redis_client
 
 
@@ -169,14 +179,21 @@ def _log_pool_stats(context: str) -> None:
 
 async def close_redis_client() -> None:
     """Close the shared Redis client and connection pool."""
-    global _redis_client, _redis_pool
+    global _redis_client, _redis_pool, _redis_loop
 
     if _redis_client is not None:
-        await _redis_client.close()
+        try:
+            await _redis_client.close()
+        except RuntimeError as exc:
+            logger.warning("Redis client close skipped: {}", exc)
         _redis_client = None
     if _redis_pool is not None:
-        await _redis_pool.disconnect()
+        try:
+            await _redis_pool.disconnect()
+        except RuntimeError as exc:
+            logger.warning("Redis pool disconnect skipped: {}", exc)
         _redis_pool = None
+    _redis_loop = None
 
 
 async def check_redis_health() -> Tuple[bool, str]:

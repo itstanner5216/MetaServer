@@ -8,9 +8,12 @@ Tests:
 - Deduplication of results
 """
 
+from unittest.mock import patch
+
 import pytest
 
 from src.meta_mcp.registry.models import ToolRecord
+from src.meta_mcp.state import ExecutionMode
 
 
 class TestBatchSearch:
@@ -200,13 +203,18 @@ class TestBatchSearch:
 
         queries = ["file", "network", "email"]
 
-        # Run multiple batch searches concurrently
-        with concurrent.futures.ThreadPoolExecutor(max_workers=3) as executor:
-            futures = [
-                executor.submit(batch_search_tools, sample_registry, queries) for _ in range(5)
-            ]
+        # Avoid Redis access from worker threads by pinning governance mode.
+        with patch(
+            "src.meta_mcp.registry.registry._resolve_governance_mode",
+            return_value=ExecutionMode.PERMISSION,
+        ):
+            # Run multiple batch searches concurrently
+            with concurrent.futures.ThreadPoolExecutor(max_workers=3) as executor:
+                futures = [
+                    executor.submit(batch_search_tools, sample_registry, queries) for _ in range(5)
+                ]
 
-            results_list = [f.result() for f in futures]
+                results_list = [f.result() for f in futures]
 
         # All should succeed
         for results in results_list:

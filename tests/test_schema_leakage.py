@@ -22,7 +22,8 @@ from fastmcp.exceptions import ToolError
 
 from src.meta_mcp.config import Config
 from src.meta_mcp.leases import lease_manager
-from src.meta_mcp.supervisor import get_tool_schema, mcp, search_tools, tool_registry
+from src.meta_mcp.registry import tool_registry
+from src.meta_mcp.supervisor import get_tool_schema, mcp, search_tools
 from tests.test_utils import assert_audit_log_contains, mock_fastmcp_context
 
 
