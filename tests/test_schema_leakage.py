@@ -17,63 +17,46 @@ Security Requirements:
 
 import pytest
 
-pytestmark = pytest.mark.skip(reason="Phase 4 not yet implemented")
+from fastmcp.exceptions import ToolError
+
+from src.meta_mcp.state import ExecutionMode, governance_state
+from src.meta_mcp.supervisor import get_tool_schema, mcp
+from tests.test_utils import assert_audit_log_contains
 
 
 @pytest.mark.asyncio
-async def test_blocked_tool_no_schema():
+@pytest.mark.requires_redis
+async def test_blocked_tool_schema_not_exposed(audit_log_path, redis_client):
     """
-    CRITICAL: Blocked tools must NOT return schema.
+    Blocked tools should not expose schemas.
 
-    Security Risk: Schema leakage allows analyzing tool arguments
-    even when tool is blocked by governance.
+    Per design Section 7.1: "Governance is enforced at schema exposure time.
+    A blocked tool never has its schema revealed."
 
-    Attack Scenario:
-    1. Mode is READ_ONLY
-    2. Attacker calls get_tool_schema("write_file")
-    3. Tool is blocked by governance
-    4. Response should be error or status=blocked
-    5. Response must NOT include inputSchema field
-
-    This prevents reconnaissance attacks where attacker learns
-    tool structure even when blocked.
+    Requires: 01_CRITICAL_BUGS.md Task 4 completed (schema-time governance)
     """
-    # TODO: Implement after Phase 4
-    # from src.meta_mcp.supervisor import get_tool_schema
-    # from src.meta_mcp.state import governance_state, ExecutionMode
+    await governance_state.set_mode(ExecutionMode.READ_ONLY)
 
-    # Set mode to READ_ONLY
-    # await governance_state.set_mode(ExecutionMode.READ_ONLY)
+    tools_before = await mcp.get_tools()
+    tool_names_before = {tool.name for tool in tools_before.values()}
 
-    # Request schema for write_file (should be blocked)
-    # try:
-    #     response = await get_tool_schema.fn(tool_name="write_file")
-    #
-    #     # If response is string, parse it
-    #     if isinstance(response, str):
-    #         response_data = json.loads(response)
-    #     else:
-    #         response_data = response
-    #
-    #     # Verify response indicates blocked status
-    #     assert response_data.get("status") == "blocked" or \
-    #            "blocked" in response_data.get("error", "").lower()
-    #
-    #     # CRITICAL: Verify no schema in response
-    #     assert "inputSchema" not in response_data, \
-    #            "SECURITY BREACH: Schema leaked for blocked tool!"
-    #     assert "properties" not in response_data, \
-    #            "SECURITY BREACH: Schema properties leaked for blocked tool!"
-    #
-    # except Exception as e:
-    #     # Exception is acceptable (tool blocked)
-    #     # But verify exception message doesn't leak schema
-    #     error_msg = str(e)
-    #     assert "properties" not in error_msg.lower()
-    #     assert "inputSchema" not in error_msg
+    with pytest.raises(ToolError, match="blocked by policy"):
+        await get_tool_schema.fn(tool_name="write_file")
+
+    tools_after = await mcp.get_tools()
+    tool_names_after = {tool.name for tool in tools_after.values()}
+    if "write_file" not in tool_names_before:
+        assert "write_file" not in tool_names_after
+
+    if audit_log_path.exists() and audit_log_path.read_text().strip():
+        await assert_audit_log_contains(
+            "blocked_read_only",
+            tool_name="write_file",
+        )
 
 
 
+@pytest.mark.skip(reason="Phase 4 not yet implemented")
 @pytest.mark.asyncio
 async def test_approval_required_no_schema():
     """
@@ -125,6 +108,7 @@ async def test_approval_required_no_schema():
 
 
 
+@pytest.mark.skip(reason="Phase 4 not yet implemented")
 @pytest.mark.asyncio
 async def test_schema_only_after_lease_grant():
     """
@@ -161,6 +145,7 @@ async def test_schema_only_after_lease_grant():
 
 
 
+@pytest.mark.skip(reason="Phase 5 not yet implemented")
 @pytest.mark.asyncio
 async def test_schema_minimal_before_expansion():
     """
@@ -383,4 +368,3 @@ async def test_schema_not_in_logs():
     # TODO: Implement after Phase 4
     # This test would need to capture log output and verify
     # no schema information is logged for blocked tools
-
