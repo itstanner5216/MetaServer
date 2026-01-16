@@ -9,7 +9,9 @@ Test Coverage:
 5. Package imports - admin_tools.py imports work without sys.path mutation
 """
 
+import base64
 import importlib
+import json
 import sys
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -19,6 +21,7 @@ from fastmcp.exceptions import ToolError
 
 from src.meta_mcp.config import Config
 from src.meta_mcp.discovery_utils import format_search_results
+from src.meta_mcp.governance.tokens import generate_token, verify_token
 from src.meta_mcp.middleware import GovernanceMiddleware
 from src.meta_mcp.state import ExecutionMode
 
@@ -275,6 +278,51 @@ async def test_middleware_requires_lease_when_enabled(mock_fastmcp_context):
 
 
 @pytest.mark.asyncio
+async def test_middleware_does_not_consume_on_failed_call(mock_fastmcp_context):
+    """
+    Test that middleware only consumes leases after successful execution.
+
+    Validates: Failed tool calls do NOT consume leases.
+    """
+    original_enable = Config.ENABLE_LEASE_MANAGEMENT
+    Config.ENABLE_LEASE_MANAGEMENT = True
+
+    try:
+        middleware = GovernanceMiddleware()
+        mock_fastmcp_context.request_context.tool_name = "write_file"
+        mock_fastmcp_context.request_context.arguments = {"path": "test.txt", "content": "test"}
+        mock_fastmcp_context.session_id = "test-session-lease"
+
+        dummy_lease = MagicMock(capability_token=None, calls_remaining=1)
+
+        with (
+            patch(
+                "src.meta_mcp.middleware.lease_manager.validate", new_callable=AsyncMock
+            ) as mock_validate,
+            patch(
+                "src.meta_mcp.middleware.lease_manager.consume", new_callable=AsyncMock
+            ) as mock_consume,
+            patch(
+                "src.meta_mcp.middleware.governance_state.get_mode", new_callable=AsyncMock
+            ) as mock_mode,
+            patch("src.meta_mcp.middleware.audit_logger.log") as mock_log,
+        ):
+            mock_validate.return_value = dummy_lease
+            mock_consume.return_value = dummy_lease
+            mock_mode.return_value = ExecutionMode.BYPASS
+
+            call_next = AsyncMock(side_effect=ToolError("tool failed"))
+
+            with pytest.raises(ToolError):
+                await middleware.on_call_tool(mock_fastmcp_context, call_next)
+
+            mock_consume.assert_not_called()
+
+    finally:
+        Config.ENABLE_LEASE_MANAGEMENT = original_enable
+
+
+@pytest.mark.asyncio
 async def test_middleware_always_skips_lease_for_bootstrap_tools(mock_fastmcp_context):
     """
     Test that middleware always skips lease check for bootstrap tools.
@@ -447,7 +495,7 @@ async def test_supervisor_handles_missing_context_gracefully():
     """
     Test that supervisor uses fail-safe client_id when context is None.
 
-    Validates: Fail-safe behavior when context is unavailable (line 361-365 in supervisor.py)
+    Validates: Fail-safe behavior when context is unavailable.
     """
     from src.meta_mcp.supervisor import get_tool_schema
 
@@ -484,7 +532,7 @@ async def test_supervisor_handles_missing_context_gracefully():
 
                     # Execute with ctx=None (fail-safe scenario)
                     try:
-                        result = await get_tool_schema("test_tool", expand=False, ctx=None)
+                        await get_tool_schema("test_tool", expand=False, ctx=None)
 
                         # Verify lease_manager.grant was called with fail-safe client_id
                         mock_grant.assert_called_once()
@@ -498,6 +546,100 @@ async def test_supervisor_handles_missing_context_gracefully():
                         if mock_grant.called:
                             grant_kwargs = mock_grant.call_args[1]
                             assert grant_kwargs["client_id"] == "unknown_client"
+
+
+@pytest.mark.asyncio
+async def test_supervisor_client_id_stable_across_calls():
+    """
+    Test that supervisor uses the same client_id across calls in one session.
+    """
+    from src.meta_mcp.supervisor import get_tool_schema
+
+    mock_context = MagicMock()
+    mock_context.session_id = "stable-session-123"
+
+    with patch("src.meta_mcp.supervisor.tool_registry") as mock_registry:
+        mock_registry.is_registered.return_value = True
+        mock_registry.get.return_value = MagicMock(
+            risk_level="safe", schema_full=None, schema_min=None
+        )
+
+        with (
+            patch("src.meta_mcp.supervisor._expose_tool", new_callable=AsyncMock) as mock_expose,
+            patch(
+                "src.meta_mcp.supervisor.governance_state.get_mode", new_callable=AsyncMock
+            ) as mock_mode,
+        ):
+            mock_expose.return_value = True
+            mock_mode.return_value = ExecutionMode.PERMISSION
+
+            from src.meta_mcp.leases import lease_manager
+
+            with patch.object(lease_manager, "grant", new_callable=AsyncMock) as mock_grant:
+                mock_grant.return_value = MagicMock(tool_id="test_tool", calls_remaining=3)
+
+                with patch("src.meta_mcp.supervisor.mcp") as mock_mcp:
+                    mock_tool = MagicMock()
+                    mock_tool.to_mcp_tool.return_value = MagicMock(
+                        name="test_tool", description="Test tool", inputSchema={"type": "object"}
+                    )
+                    mock_mcp.get_tool = AsyncMock(return_value=mock_tool)
+
+                    await get_tool_schema("test_tool", expand=False, ctx=mock_context)
+                    await get_tool_schema("test_tool", expand=False, ctx=mock_context)
+
+                    client_ids = [
+                        call.kwargs["client_id"] for call in mock_grant.call_args_list
+                    ]
+                    assert client_ids == ["stable-session-123", "stable-session-123"]
+
+
+@pytest.mark.asyncio
+async def test_supervisor_client_id_unique_across_sessions():
+    """
+    Test that supervisor uses different client_id values for different sessions.
+    """
+    from src.meta_mcp.supervisor import get_tool_schema
+
+    context_a = MagicMock()
+    context_a.session_id = "session-a"
+    context_b = MagicMock()
+    context_b.session_id = "session-b"
+
+    with patch("src.meta_mcp.supervisor.tool_registry") as mock_registry:
+        mock_registry.is_registered.return_value = True
+        mock_registry.get.return_value = MagicMock(
+            risk_level="safe", schema_full=None, schema_min=None
+        )
+
+        with (
+            patch("src.meta_mcp.supervisor._expose_tool", new_callable=AsyncMock) as mock_expose,
+            patch(
+                "src.meta_mcp.supervisor.governance_state.get_mode", new_callable=AsyncMock
+            ) as mock_mode,
+        ):
+            mock_expose.return_value = True
+            mock_mode.return_value = ExecutionMode.PERMISSION
+
+            from src.meta_mcp.leases import lease_manager
+
+            with patch.object(lease_manager, "grant", new_callable=AsyncMock) as mock_grant:
+                mock_grant.return_value = MagicMock(tool_id="test_tool", calls_remaining=3)
+
+                with patch("src.meta_mcp.supervisor.mcp") as mock_mcp:
+                    mock_tool = MagicMock()
+                    mock_tool.to_mcp_tool.return_value = MagicMock(
+                        name="test_tool", description="Test tool", inputSchema={"type": "object"}
+                    )
+                    mock_mcp.get_tool = AsyncMock(return_value=mock_tool)
+
+                    await get_tool_schema("test_tool", expand=False, ctx=context_a)
+                    await get_tool_schema("test_tool", expand=False, ctx=context_b)
+
+                    client_ids = [
+                        call.kwargs["client_id"] for call in mock_grant.call_args_list
+                    ]
+                    assert client_ids == ["session-a", "session-b"]
 
 
 # ============================================================================
@@ -811,3 +953,60 @@ async def test_todo_list_2_integration(mock_fastmcp_context):
     assert admin_server is not None
     assert hasattr(set_governance_mode, "fn")
     assert callable(set_governance_mode.fn)
+
+
+# ============================================================================
+# TEST 6: token canonicalization - reject non-canonical payloads
+# ============================================================================
+
+
+@pytest.mark.asyncio
+async def test_token_rejects_non_canonical_payload():
+    """
+    Verify tokens reject reordered keys or whitespace-altered payload encodings.
+    """
+    token = generate_token(
+        client_id="test_session",
+        tool_id="write_file",
+        ttl_seconds=300,
+        secret=Config.HMAC_SECRET,
+    )
+
+    assert verify_token(
+        token=token,
+        client_id="test_session",
+        tool_id="write_file",
+        secret=Config.HMAC_SECRET,
+    )
+
+    payload_b64, signature = token.split(".")
+    payload = json.loads(base64.b64decode(payload_b64))
+
+    reordered_payload = {key: payload[key] for key in reversed(list(payload.keys()))}
+    reordered_json = json.dumps(
+        reordered_payload,
+        sort_keys=False,
+        separators=(",", ":"),
+        ensure_ascii=False,
+    )
+    reordered_token = f"{base64.b64encode(reordered_json.encode()).decode()}.{signature}"
+    assert not verify_token(
+        token=reordered_token,
+        client_id="test_session",
+        tool_id="write_file",
+        secret=Config.HMAC_SECRET,
+    )
+
+    whitespace_json = json.dumps(
+        payload,
+        sort_keys=True,
+        separators=(", ", ": "),
+        ensure_ascii=False,
+    )
+    whitespace_token = f"{base64.b64encode(whitespace_json.encode()).decode()}.{signature}"
+    assert not verify_token(
+        token=whitespace_token,
+        client_id="test_session",
+        tool_id="write_file",
+        secret=Config.HMAC_SECRET,
+    )
