@@ -16,8 +16,17 @@ Security Requirements:
 This is the #1 security critical component of Phase 4.
 """
 
+import asyncio
+import base64
+import json
+import time
 
 import pytest
+
+from src.meta_mcp.config import Config
+from src.meta_mcp.governance import tokens
+from src.meta_mcp.governance.tokens import decode_token, generate_token, verify_token
+from src.meta_mcp.leases import lease_manager
 
 
 @pytest.mark.asyncio
@@ -36,46 +45,37 @@ async def test_token_forgery_rejected():
 
     If this test fails, STOP Phase 4 implementation immediately.
     """
-    # TODO: Import after Phase 4
-    # from src.meta_mcp.governance.tokens import generate_token, verify_token
-    # from src.meta_mcp.config import Config
+    server_secret = Config.HMAC_SECRET
+    server_token = generate_token(
+        client_id="legitimate_session",
+        tool_id="write_file",
+        ttl_seconds=300,
+        secret=server_secret,
+    )
 
-    # Server generates token with correct secret
-    # server_secret = Config.HMAC_SECRET
-    # server_token = generate_token(
-    #     client_id="legitimate_session",
-    #     tool_id="write_file",
-    #     ttl_seconds=300,
-    #     secret=server_secret
-    # )
+    attacker_secret = "ATTACKER_SECRET_12345"
+    forged_token = generate_token(
+        client_id="attacker_session",
+        tool_id="write_file",
+        ttl_seconds=300,
+        secret=attacker_secret,
+    )
 
-    # Attacker tries to forge token with wrong secret
-    # attacker_secret = "ATTACKER_SECRET_12345"
-    # forged_token = generate_token(
-    #     client_id="attacker_session",
-    #     tool_id="write_file",
-    #     ttl_seconds=300,
-    #     secret=attacker_secret  # NOT the server secret
-    # )
+    forged_valid = verify_token(
+        token=forged_token,
+        client_id="attacker_session",
+        tool_id="write_file",
+        secret=server_secret,
+    )
+    assert forged_valid is False, "SECURITY BREACH: Forged token accepted!"
 
-    # Server verification must fail for forged token
-    # forged_valid = verify_token(
-    #     token=forged_token,
-    #     client_id="attacker_session",
-    #     tool_id="write_file",
-    #     secret=server_secret  # Correct server secret
-    # )
-    # assert forged_valid is False, "SECURITY BREACH: Forged token accepted!"
-
-    # Server verification must succeed for legitimate token
-    # legit_valid = verify_token(
-    #     token=server_token,
-    #     client_id="legitimate_session",
-    #     tool_id="write_file",
-    #     secret=server_secret
-    # )
-    # assert legit_valid is True, "Legitimate token should be accepted"
-
+    legit_valid = verify_token(
+        token=server_token,
+        client_id="legitimate_session",
+        tool_id="write_file",
+        secret=server_secret,
+    )
+    assert legit_valid is True, "Legitimate token should be accepted"
 
 
 @pytest.mark.asyncio
@@ -90,44 +90,35 @@ async def test_expired_token_rejected():
     2. 10 minutes later, attacker tries to reuse the token
     3. Server must reject because token is expired
     """
-    # TODO: Implement after Phase 4
-    # from src.meta_mcp.governance.tokens import generate_token, verify_token
-    # from src.meta_mcp.config import Config
-    # import asyncio
+    token = generate_token(
+        client_id="test_session",
+        tool_id="read_file",
+        ttl_seconds=1,
+        secret=Config.HMAC_SECRET,
+    )
 
-    # Generate token with 1 second TTL
-    # token = generate_token(
-    #     client_id="test_session",
-    #     tool_id="read_file",
-    #     ttl_seconds=1,
-    #     secret=Config.HMAC_SECRET
-    # )
+    valid_now = verify_token(
+        token=token,
+        client_id="test_session",
+        tool_id="read_file",
+        secret=Config.HMAC_SECRET,
+    )
+    assert valid_now is True, "Token should be valid immediately"
 
-    # Verify token is valid immediately
-    # valid_now = verify_token(
-    #     token=token,
-    #     client_id="test_session",
-    #     tool_id="read_file",
-    #     secret=Config.HMAC_SECRET
-    # )
-    # assert valid_now is True, "Token should be valid immediately"
+    await asyncio.sleep(2)
 
-    # Wait for expiration
-    # await asyncio.sleep(2)
-
-    # Verify token is now rejected
-    # valid_expired = verify_token(
-    #     token=token,
-    #     client_id="test_session",
-    #     tool_id="read_file",
-    #     secret=Config.HMAC_SECRET
-    # )
-    # assert valid_expired is False, "SECURITY BREACH: Expired token accepted!"
-
+    valid_expired = verify_token(
+        token=token,
+        client_id="test_session",
+        tool_id="read_file",
+        secret=Config.HMAC_SECRET,
+    )
+    assert valid_expired is False, "SECURITY BREACH: Expired token accepted!"
 
 
 @pytest.mark.asyncio
-async def test_token_replay_prevention():
+@pytest.mark.requires_redis
+async def test_token_replay_prevention(redis_client):
     """
     CRITICAL: Same token cannot be used multiple times.
 
@@ -143,34 +134,29 @@ async def test_token_replay_prevention():
     Note: Current design may track token usage in Redis to prevent replay.
     Verify implementation matches this requirement.
     """
-    # TODO: Implement after Phase 4
-    # from src.meta_mcp.governance.tokens import generate_token, consume_token
-    # from src.meta_mcp.config import Config
+    token = generate_token(
+        client_id="test_session",
+        tool_id="write_file",
+        ttl_seconds=300,
+        secret=Config.HMAC_SECRET,
+    )
 
-    # Generate token
-    # token = generate_token(
-    #     client_id="test_session",
-    #     tool_id="write_file",
-    #     ttl_seconds=300,
-    #     secret=Config.HMAC_SECRET
-    # )
+    lease = await lease_manager.grant(
+        client_id="test_session",
+        tool_id="write_file",
+        ttl_seconds=300,
+        calls_remaining=1,
+        mode_at_issue="PERMISSION",
+        capability_token=token,
+    )
+    assert lease is not None
 
-    # Use token successfully once
-    # first_use = await consume_token(
-    #     token=token,
-    #     client_id="test_session",
-    #     tool_id="write_file"
-    # )
-    # assert first_use is True, "First use should succeed"
+    first_use = await lease_manager.consume("test_session", "write_file")
+    assert first_use is not None
+    assert first_use.calls_remaining == 0
 
-    # Attempt to reuse same token
-    # second_use = await consume_token(
-    #     token=token,
-    #     client_id="test_session",
-    #     tool_id="write_file"
-    # )
-    # assert second_use is False, "SECURITY BREACH: Token replay succeeded!"
-
+    second_use = await lease_manager.consume("test_session", "write_file")
+    assert second_use is None, "SECURITY BREACH: Token replay succeeded!"
 
 
 @pytest.mark.asyncio
@@ -186,47 +172,34 @@ async def test_invalid_signature_rejected():
     3. Signature no longer matches payload
     4. Server must reject because HMAC verification fails
     """
-    # TODO: Implement after Phase 4
-    # from src.meta_mcp.governance.tokens import generate_token, verify_token
-    # from src.meta_mcp.config import Config
-    # import json
-    # import base64
+    token = generate_token(
+        client_id="test_session",
+        tool_id="read_file",
+        ttl_seconds=300,
+        secret=Config.HMAC_SECRET,
+    )
 
-    # Generate valid token
-    # token = generate_token(
-    #     client_id="test_session",
-    #     tool_id="read_file",
-    #     ttl_seconds=300,
-    #     secret=Config.HMAC_SECRET
-    # )
+    payload_b64, original_signature = token.split(".")
 
-    # Token format: base64(payload).signature
-    # Tamper with payload (change tool_id)
-    # parts = token.split('.')
-    # payload_b64 = parts[0]
-    # original_signature = parts[1]
+    payload = json.loads(base64.b64decode(payload_b64))
+    payload["tool_id"] = "write_file"
+    tampered_payload_b64 = base64.b64encode(
+        json.dumps(payload, separators=(",", ":")).encode()
+    ).decode()
 
-    # Decode, modify, re-encode payload
-    # payload = json.loads(base64.b64decode(payload_b64))
-    # payload['tool_id'] = 'write_file'  # Changed from read_file
-    # tampered_payload_b64 = base64.b64encode(json.dumps(payload).encode()).decode()
+    tampered_token = f"{tampered_payload_b64}.{original_signature}"
 
-    # Reconstruct token with tampered payload and original signature
-    # tampered_token = f"{tampered_payload_b64}.{original_signature}"
-
-    # Verification must fail
-    # valid = verify_token(
-    #     token=tampered_token,
-    #     client_id="test_session",
-    #     tool_id="write_file",  # Matches tampered payload
-    #     secret=Config.HMAC_SECRET
-    # )
-    # assert valid is False, "SECURITY BREACH: Tampered token accepted!"
-
+    valid = verify_token(
+        token=tampered_token,
+        client_id="test_session",
+        tool_id="write_file",
+        secret=Config.HMAC_SECRET,
+    )
+    assert valid is False, "SECURITY BREACH: Tampered token accepted!"
 
 
 @pytest.mark.asyncio
-async def test_token_canonicalization_deterministic():
+async def test_token_canonicalization_deterministic(monkeypatch):
     """
     Verify token canonicalization produces same result every time.
 
@@ -236,24 +209,20 @@ async def test_token_canonicalization_deterministic():
 
     This test ensures token generation is deterministic.
     """
-    # TODO: Implement after Phase 4
-    # from src.meta_mcp.governance.tokens import generate_token
-    # from src.meta_mcp.config import Config
+    fixed_time = 1_700_000_000
+    monkeypatch.setattr(tokens.time, "time", lambda: fixed_time)
 
-    # Generate same token multiple times
-    # tokens = []
-    # for _ in range(10):
-    #     token = generate_token(
-    #         client_id="test_session",
-    #         tool_id="write_file",
-    #         ttl_seconds=300,
-    #         secret=Config.HMAC_SECRET
-    #     )
-    #     tokens.append(token)
+    generated = [
+        generate_token(
+            client_id="test_session",
+            tool_id="write_file",
+            ttl_seconds=300,
+            secret=Config.HMAC_SECRET,
+        )
+        for _ in range(5)
+    ]
 
-    # All tokens should be identical
-    # assert len(set(tokens)) == 1, "Token generation is non-deterministic!"
-
+    assert len(set(generated)) == 1, "Token generation is non-deterministic!"
 
 
 @pytest.mark.asyncio
@@ -270,36 +239,28 @@ async def test_token_client_id_binding():
     3. Attacker tries to use token in session B
     4. Server must reject because client_id doesn't match
     """
-    # TODO: Implement after Phase 4
-    # from src.meta_mcp.governance.tokens import generate_token, verify_token
-    # from src.meta_mcp.config import Config
+    token = generate_token(
+        client_id="session_a",
+        tool_id="write_file",
+        ttl_seconds=300,
+        secret=Config.HMAC_SECRET,
+    )
 
-    # Generate token for session A
-    # token = generate_token(
-    #     client_id="session_a",
-    #     tool_id="write_file",
-    #     ttl_seconds=300,
-    #     secret=Config.HMAC_SECRET
-    # )
+    valid_a = verify_token(
+        token=token,
+        client_id="session_a",
+        tool_id="write_file",
+        secret=Config.HMAC_SECRET,
+    )
+    assert valid_a is True
 
-    # Verify token works for session A
-    # valid_a = verify_token(
-    #     token=token,
-    #     client_id="session_a",
-    #     tool_id="write_file",
-    #     secret=Config.HMAC_SECRET
-    # )
-    # assert valid_a is True
-
-    # Attempt to use token in session B
-    # valid_b = verify_token(
-    #     token=token,
-    #     client_id="session_b",  # Different client_id
-    #     tool_id="write_file",
-    #     secret=Config.HMAC_SECRET
-    # )
-    # assert valid_b is False, "SECURITY BREACH: Token used across sessions!"
-
+    valid_b = verify_token(
+        token=token,
+        client_id="session_b",
+        tool_id="write_file",
+        secret=Config.HMAC_SECRET,
+    )
+    assert valid_b is False, "SECURITY BREACH: Token used across sessions!"
 
 
 @pytest.mark.asyncio
@@ -315,36 +276,28 @@ async def test_token_tool_id_binding():
     2. Attacker tries to use same token for write_file
     3. Server must reject because tool_id doesn't match
     """
-    # TODO: Implement after Phase 4
-    # from src.meta_mcp.governance.tokens import generate_token, verify_token
-    # from src.meta_mcp.config import Config
+    token = generate_token(
+        client_id="test_session",
+        tool_id="read_file",
+        ttl_seconds=300,
+        secret=Config.HMAC_SECRET,
+    )
 
-    # Generate token for read_file
-    # token = generate_token(
-    #     client_id="test_session",
-    #     tool_id="read_file",
-    #     ttl_seconds=300,
-    #     secret=Config.HMAC_SECRET
-    # )
+    valid_read = verify_token(
+        token=token,
+        client_id="test_session",
+        tool_id="read_file",
+        secret=Config.HMAC_SECRET,
+    )
+    assert valid_read is True
 
-    # Verify token works for read_file
-    # valid_read = verify_token(
-    #     token=token,
-    #     client_id="test_session",
-    #     tool_id="read_file",
-    #     secret=Config.HMAC_SECRET
-    # )
-    # assert valid_read is True
-
-    # Attempt to use token for write_file
-    # valid_write = verify_token(
-    #     token=token,
-    #     client_id="test_session",
-    #     tool_id="write_file",  # Different tool_id
-    #     secret=Config.HMAC_SECRET
-    # )
-    # assert valid_write is False, "SECURITY BREACH: Token used for wrong tool!"
-
+    valid_write = verify_token(
+        token=token,
+        client_id="test_session",
+        tool_id="write_file",
+        secret=Config.HMAC_SECRET,
+    )
+    assert valid_write is False, "SECURITY BREACH: Token used for wrong tool!"
 
 
 @pytest.mark.asyncio
@@ -357,14 +310,9 @@ async def test_hmac_secret_not_empty():
     This test should fail during development if HMAC_SECRET not set,
     forcing developer to configure it before Phase 4 can be deployed.
     """
-    # TODO: Implement after Phase 4
-    # from src.meta_mcp.config import Config
-
-    # Verify HMAC_SECRET is set
-    # assert Config.HMAC_SECRET != "", "HMAC_SECRET must be configured"
-    # assert Config.HMAC_SECRET is not None, "HMAC_SECRET must be configured"
-    # assert len(Config.HMAC_SECRET) >= 32, "HMAC_SECRET should be at least 32 bytes"
-
+    assert Config.HMAC_SECRET != "", "HMAC_SECRET must be configured"
+    assert Config.HMAC_SECRET is not None, "HMAC_SECRET must be configured"
+    assert len(Config.HMAC_SECRET) >= 32, "HMAC_SECRET should be at least 32 bytes"
 
 
 @pytest.mark.asyncio
@@ -381,32 +329,24 @@ async def test_token_contains_required_fields():
     Optional fields:
     - context_key: Additional context (e.g., file path)
     """
-    # TODO: Implement after Phase 4
-    # from src.meta_mcp.governance.tokens import generate_token, decode_token
-    # from src.meta_mcp.config import Config
+    token = generate_token(
+        client_id="test_session",
+        tool_id="write_file",
+        ttl_seconds=300,
+        secret=Config.HMAC_SECRET,
+    )
 
-    # Generate token
-    # token = generate_token(
-    #     client_id="test_session",
-    #     tool_id="write_file",
-    #     ttl_seconds=300,
-    #     secret=Config.HMAC_SECRET
-    # )
+    payload = decode_token(token)
+    assert payload is not None
 
-    # Decode token payload (without verification)
-    # payload = decode_token(token)
+    assert "client_id" in payload
+    assert "tool_id" in payload
+    assert "exp" in payload
+    assert "iat" in payload
 
-    # Verify required fields present
-    # assert "client_id" in payload
-    # assert "tool_id" in payload
-    # assert "exp" in payload  # Expiration
-    # assert "iat" in payload  # Issued at
-
-    # Verify values match
-    # assert payload["client_id"] == "test_session"
-    # assert payload["tool_id"] == "write_file"
-    # assert payload["exp"] > payload["iat"]
-
+    assert payload["client_id"] == "test_session"
+    assert payload["tool_id"] == "write_file"
+    assert payload["exp"] > payload["iat"]
 
 
 @pytest.mark.asyncio
@@ -417,39 +357,31 @@ async def test_token_with_context_key():
     Context key example: "path=/workspace/data.txt"
     This allows token to be valid only for specific file path.
     """
-    # TODO: Implement after Phase 4
-    # from src.meta_mcp.governance.tokens import generate_token, verify_token
-    # from src.meta_mcp.config import Config
+    token = generate_token(
+        client_id="test_session",
+        tool_id="write_file",
+        context_key="path=/workspace/data.txt",
+        ttl_seconds=300,
+        secret=Config.HMAC_SECRET,
+    )
 
-    # Generate token with context key
-    # token = generate_token(
-    #     client_id="test_session",
-    #     tool_id="write_file",
-    #     context_key="path=/workspace/data.txt",
-    #     ttl_seconds=300,
-    #     secret=Config.HMAC_SECRET
-    # )
+    valid_match = verify_token(
+        token=token,
+        client_id="test_session",
+        tool_id="write_file",
+        context_key="path=/workspace/data.txt",
+        secret=Config.HMAC_SECRET,
+    )
+    assert valid_match is True
 
-    # Verify token with matching context
-    # valid_match = verify_token(
-    #     token=token,
-    #     client_id="test_session",
-    #     tool_id="write_file",
-    #     context_key="path=/workspace/data.txt",
-    #     secret=Config.HMAC_SECRET
-    # )
-    # assert valid_match is True
-
-    # Verify token rejected with different context
-    # valid_mismatch = verify_token(
-    #     token=token,
-    #     client_id="test_session",
-    #     tool_id="write_file",
-    #     context_key="path=/workspace/other.txt",  # Different path
-    #     secret=Config.HMAC_SECRET
-    # )
-    # assert valid_mismatch is False, "Token should be invalid for different context"
-
+    valid_mismatch = verify_token(
+        token=token,
+        client_id="test_session",
+        tool_id="write_file",
+        context_key="path=/workspace/other.txt",
+        secret=Config.HMAC_SECRET,
+    )
+    assert valid_mismatch is False, "Token should be invalid for different context"
 
 
 @pytest.mark.asyncio
@@ -463,25 +395,14 @@ async def test_malformed_token_rejected():
     - Token with invalid JSON payload
     - Token with wrong number of parts
     """
-    # TODO: Implement after Phase 4
-    # from src.meta_mcp.governance.tokens import verify_token
-    # from src.meta_mcp.config import Config
-
-    # Missing signature
-    # assert verify_token("payload_only", "session", "tool", Config.HMAC_SECRET) is False
-
-    # Invalid base64
-    # assert verify_token("!!!invalid!!!.signature", "session", "tool", Config.HMAC_SECRET) is False
-
-    # Too many parts
-    # assert verify_token("part1.part2.part3", "session", "tool", Config.HMAC_SECRET) is False
-
-    # Empty token
-    # assert verify_token("", "session", "tool", Config.HMAC_SECRET) is False
-
-    # None token
-    # assert verify_token(None, "session", "tool", Config.HMAC_SECRET) is False
-
+    assert verify_token("payload_only", "session", "tool", Config.HMAC_SECRET) is False
+    assert (
+        verify_token("!!!invalid!!!.signature", "session", "tool", Config.HMAC_SECRET)
+        is False
+    )
+    assert verify_token("part1.part2.part3", "session", "tool", Config.HMAC_SECRET) is False
+    assert verify_token("", "session", "tool", Config.HMAC_SECRET) is False
+    assert verify_token(None, "session", "tool", Config.HMAC_SECRET) is False  # type: ignore[arg-type]
 
 
 @pytest.mark.asyncio
@@ -495,29 +416,21 @@ async def test_token_generation_performance():
     Token operations are on the hot path for every approval,
     so performance matters.
     """
-    # TODO: Implement after Phase 4
-    # from src.meta_mcp.governance.tokens import generate_token, verify_token
-    # from src.meta_mcp.config import Config
-    # import time
+    start = time.perf_counter()
+    for _ in range(100):
+        token = generate_token(
+            client_id="test_session",
+            tool_id="write_file",
+            ttl_seconds=300,
+            secret=Config.HMAC_SECRET,
+        )
+    gen_time_ms = (time.perf_counter() - start) * 1000 / 100
 
-    # Benchmark token generation
-    # start = time.perf_counter()
-    # for _ in range(100):
-    #     token = generate_token(
-    #         client_id="test_session",
-    #         tool_id="write_file",
-    #         ttl_seconds=300,
-    #         secret=Config.HMAC_SECRET
-    #     )
-    # gen_time_ms = (time.perf_counter() - start) * 1000 / 100
+    assert gen_time_ms < 10, f"Token generation too slow: {gen_time_ms:.2f}ms"
 
-    # assert gen_time_ms < 10, f"Token generation too slow: {gen_time_ms:.2f}ms"
+    start = time.perf_counter()
+    for _ in range(100):
+        verify_token(token, "test_session", "write_file", Config.HMAC_SECRET)
+    verify_time_ms = (time.perf_counter() - start) * 1000 / 100
 
-    # Benchmark token verification
-    # start = time.perf_counter()
-    # for _ in range(100):
-    #     verify_token(token, "test_session", "write_file", Config.HMAC_SECRET)
-    # verify_time_ms = (time.perf_counter() - start) * 1000 / 100
-
-    # assert verify_time_ms < 5, f"Token verification too slow: {verify_time_ms:.2f}ms"
-
+    assert verify_time_ms < 5, f"Token verification too slow: {verify_time_ms:.2f}ms"
