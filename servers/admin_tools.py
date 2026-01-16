@@ -19,6 +19,8 @@ from loguru import logger
 # Import governance components using package-safe absolute imports
 # Note: Requires package installation via 'pip install -e .'
 from meta_mcp.audit import AuditEvent, audit_logger
+from meta_mcp.middleware import SENSITIVE_TOOLS
+from meta_mcp.registry import tool_registry
 from meta_mcp.state import ExecutionMode, governance_state
 
 # Create FastMCP server instance for admin tools
