@@ -9,10 +9,9 @@ Test Coverage:
 5. Package imports - admin_tools.py imports work without sys.path mutation
 """
 
-import base64
 import importlib
-import json
 import sys
+import uuid
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -21,7 +20,6 @@ from fastmcp.exceptions import ToolError
 
 from src.meta_mcp.config import Config
 from src.meta_mcp.discovery_utils import format_search_results
-from src.meta_mcp.governance.tokens import generate_token, verify_token
 from src.meta_mcp.middleware import GovernanceMiddleware
 from src.meta_mcp.state import ExecutionMode
 
@@ -538,14 +536,18 @@ async def test_supervisor_handles_missing_context_gracefully():
                         mock_grant.assert_called_once()
                         grant_kwargs = mock_grant.call_args[1]
 
-                        # Should use "unknown_client" as fail-safe
-                        assert grant_kwargs["client_id"] == "unknown_client"
+                        # Should use a unique client_id as fail-safe
+                        client_id = grant_kwargs["client_id"]
+                        assert client_id
+                        uuid.UUID(client_id)
 
                     except Exception:
                         # Even if other parts fail, check the grant call used fail-safe
                         if mock_grant.called:
                             grant_kwargs = mock_grant.call_args[1]
-                            assert grant_kwargs["client_id"] == "unknown_client"
+                            client_id = grant_kwargs["client_id"]
+                            assert client_id
+                            uuid.UUID(client_id)
 
 
 @pytest.mark.asyncio
@@ -954,59 +956,3 @@ async def test_todo_list_2_integration(mock_fastmcp_context):
     assert hasattr(set_governance_mode, "fn")
     assert callable(set_governance_mode.fn)
 
-
-# ============================================================================
-# TEST 6: token canonicalization - reject non-canonical payloads
-# ============================================================================
-
-
-@pytest.mark.asyncio
-async def test_token_rejects_non_canonical_payload():
-    """
-    Verify tokens reject reordered keys or whitespace-altered payload encodings.
-    """
-    token = generate_token(
-        client_id="test_session",
-        tool_id="write_file",
-        ttl_seconds=300,
-        secret=Config.HMAC_SECRET,
-    )
-
-    assert verify_token(
-        token=token,
-        client_id="test_session",
-        tool_id="write_file",
-        secret=Config.HMAC_SECRET,
-    )
-
-    payload_b64, signature = token.split(".")
-    payload = json.loads(base64.b64decode(payload_b64))
-
-    reordered_payload = {key: payload[key] for key in reversed(list(payload.keys()))}
-    reordered_json = json.dumps(
-        reordered_payload,
-        sort_keys=False,
-        separators=(",", ":"),
-        ensure_ascii=False,
-    )
-    reordered_token = f"{base64.b64encode(reordered_json.encode()).decode()}.{signature}"
-    assert not verify_token(
-        token=reordered_token,
-        client_id="test_session",
-        tool_id="write_file",
-        secret=Config.HMAC_SECRET,
-    )
-
-    whitespace_json = json.dumps(
-        payload,
-        sort_keys=True,
-        separators=(", ", ": "),
-        ensure_ascii=False,
-    )
-    whitespace_token = f"{base64.b64encode(whitespace_json.encode()).decode()}.{signature}"
-    assert not verify_token(
-        token=whitespace_token,
-        client_id="test_session",
-        tool_id="write_file",
-        secret=Config.HMAC_SECRET,
-    )

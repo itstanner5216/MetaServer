@@ -5,6 +5,7 @@ import sys
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
+from uuid import uuid4
 
 from fastmcp import Context, FastMCP
 from fastmcp.exceptions import ToolError
@@ -393,9 +394,9 @@ async def get_tool_schema(tool_name: str, expand: bool = False, ctx: Context = N
     # In FastMCP/MCP protocol, session_id is the stable client connection identifier
     if ctx is None:
         logger.warning(
-            f"No context available for get_tool_schema({tool_name}), using fallback client_id"
+            f"No context available for get_tool_schema({tool_name}), using unique client_id"
         )
-        client_id = "unknown_client"
+        client_id = str(uuid4())
     else:
         client_id = str(ctx.session_id)
 
