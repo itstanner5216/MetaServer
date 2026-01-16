@@ -9,7 +9,13 @@ Tests token operations:
 """
 
 
+import base64
+import json
+
 import pytest
+
+from src.meta_mcp.config import Config
+from src.meta_mcp.governance.tokens import generate_token, verify_token
 
 
 @pytest.mark.asyncio
@@ -219,6 +225,76 @@ async def test_token_with_context_key():
     # )
 
 
+@pytest.mark.asyncio
+async def test_reordered_payload_rejected():
+    """
+    Verify that reordered payload keys fail verification.
+    """
+    token = generate_token(
+        client_id="test_session",
+        tool_id="write_file",
+        ttl_seconds=300,
+        secret=Config.HMAC_SECRET,
+    )
+
+    payload_b64, signature = token.split(".")
+    payload = json.loads(base64.b64decode(payload_b64))
+
+    tampered_payload = {
+        "tool_id": payload["tool_id"],
+        "client_id": payload["client_id"],
+        "iat": payload["iat"],
+        "exp": payload["exp"],
+    }
+
+    if "context_key" in payload:
+        tampered_payload["context_key"] = payload["context_key"]
+
+    tampered_json = json.dumps(tampered_payload, separators=(",", ":"))
+    tampered_b64 = base64.b64encode(tampered_json.encode()).decode()
+    tampered_token = f"{tampered_b64}.{signature}"
+
+    assert (
+        verify_token(
+            token=tampered_token,
+            client_id="test_session",
+            tool_id="write_file",
+            secret=Config.HMAC_SECRET,
+        )
+        is False
+    )
+
+
+@pytest.mark.asyncio
+async def test_whitespace_payload_rejected():
+    """
+    Verify that non-canonical whitespace changes fail verification.
+    """
+    token = generate_token(
+        client_id="test_session",
+        tool_id="write_file",
+        ttl_seconds=300,
+        secret=Config.HMAC_SECRET,
+    )
+
+    payload_b64, signature = token.split(".")
+    payload = json.loads(base64.b64decode(payload_b64))
+
+    tampered_json = json.dumps(payload, separators=(", ", ": "))
+    tampered_b64 = base64.b64encode(tampered_json.encode()).decode()
+    tampered_token = f"{tampered_b64}.{signature}"
+
+    assert (
+        verify_token(
+            token=tampered_token,
+            client_id="test_session",
+            tool_id="write_file",
+            secret=Config.HMAC_SECRET,
+        )
+        is False
+    )
+
+
 
 @pytest.mark.asyncio
 async def test_hmac_sha256_algorithm():
@@ -284,4 +360,3 @@ async def test_token_canonicalization():
     # Note: Timestamps will differ, so tokens won't be identical
     # But payload structure should be consistent
     # This test documents expected non-determinism due to timestamps
-

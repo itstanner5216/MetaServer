@@ -1,7 +1,8 @@
 """Tests for tool registry."""
 
 from src.meta_mcp.registry import tool_registry
-from src.meta_mcp.registry.models import ToolCandidate, ToolRecord
+from src.meta_mcp.registry.models import AllowedInMode, ToolCandidate, ToolRecord
+from src.meta_mcp.state import ExecutionMode, governance_state
 
 
 def test_registry_loads_from_yaml():
@@ -125,3 +126,33 @@ def test_is_registered_works():
     """is_registered() should correctly identify registered tools."""
     assert tool_registry.is_registered("read_file") is True
     assert tool_registry.is_registered("nonexistent") is False
+
+
+def test_search_allowed_in_mode_blocked(monkeypatch):
+    """Search should mark sensitive tools blocked in READ_ONLY mode."""
+
+    async def _read_only_mode():
+        return ExecutionMode.READ_ONLY
+
+    monkeypatch.setattr(governance_state, "get_mode", _read_only_mode)
+
+    results = tool_registry.search("write")
+    blocked = [r for r in results if r.risk_level != "safe"]
+
+    assert blocked
+    assert all(r.allowed_in_mode == AllowedInMode.BLOCKED for r in blocked)
+
+
+def test_search_allowed_in_mode_requires_approval(monkeypatch):
+    """Search should mark sensitive tools as requiring approval in PERMISSION mode."""
+
+    async def _permission_mode():
+        return ExecutionMode.PERMISSION
+
+    monkeypatch.setattr(governance_state, "get_mode", _permission_mode)
+
+    results = tool_registry.search("write")
+    sensitive = [r for r in results if r.risk_level != "safe"]
+
+    assert sensitive
+    assert all(r.allowed_in_mode == AllowedInMode.REQUIRES_APPROVAL for r in sensitive)

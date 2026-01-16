@@ -1,11 +1,28 @@
 """Tool registry implementation."""
 
+import asyncio
 import os
 from pathlib import Path
 
 import yaml
 
-from .models import ServerRecord, ToolCandidate, ToolRecord
+from ..governance.policy import evaluate_policy
+from ..state import governance_state
+from .models import (
+    AllowedInMode,
+    ServerRecord,
+    ToolCandidate,
+    ToolRecord,
+    extract_schema_hint,
+)
+
+
+def _resolve_governance_mode():
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        return asyncio.run(governance_state.get_mode())
+    return governance_state.get_cached_mode()
 
 
 class ToolRegistry:
@@ -155,6 +172,7 @@ class ToolRegistry:
         # Fallback: Original keyword matching
         query_lower = query.lower().strip()
         results = []
+        mode = _resolve_governance_mode()
 
         for tool in self._tools.values():
             # Simple keyword matching in tool_id, description and tags
@@ -166,6 +184,14 @@ class ToolRegistry:
                 score = 0.8
 
             if score > 0:
+                policy = evaluate_policy(mode, tool.risk_level, tool.tool_id)
+                if policy.action == "allow":
+                    allowed_in_mode = AllowedInMode.ALLOWED
+                elif policy.action == "block":
+                    allowed_in_mode = AllowedInMode.BLOCKED
+                else:
+                    allowed_in_mode = AllowedInMode.REQUIRES_APPROVAL
+
                 results.append(
                     ToolCandidate(
                         tool_id=tool.tool_id,
@@ -174,6 +200,8 @@ class ToolRegistry:
                         tags=tool.tags,
                         risk_level=tool.risk_level,
                         relevance_score=score,
+                        allowed_in_mode=allowed_in_mode,
+                        schema_hint=extract_schema_hint(tool.schema_min),
                     )
                 )
 

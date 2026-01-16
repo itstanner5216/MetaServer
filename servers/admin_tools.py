@@ -1,11 +1,15 @@
-"""Governance control tools for operators (admin tools).
+"""Admin tools for MetaMCP governance control.
 
-Discovery Policy:
-- Registered in config/tools.yaml (searchable via search_tools)
-- NOT auto-exposed (require get_tool_schema for progressive discovery)
-- Approval required per-tool based on risk_level/required_scopes
-  (e.g., get_governance_status is safe; others are sensitive/dangerous)
-- NOT included in bootstrap injection (search_tools, get_tool_schema only)
+These tools ARE registered in the tool registry (config/tools.yaml) and follow
+standard governance policy based on each tool's risk_level:
+- get_governance_status is safe (allowed in READ_ONLY/PERMISSION/BYPASS)
+- set_governance_mode is sensitive (approval in PERMISSION, blocked in READ_ONLY)
+- revoke_all_elevations is dangerous (approval in PERMISSION, blocked in READ_ONLY)
+
+Tools:
+- set_governance_mode: Change execution mode
+- get_governance_status: Query current mode and state
+- revoke_all_elevations: Clear all scoped elevations
 """
 
 from fastmcp import FastMCP

@@ -283,6 +283,43 @@ class GovernanceMiddleware(Middleware):
 
         return base_scopes
 
+    async def on_list_tools(self, tools: list[str], ctx: Context) -> list[str]:
+        """
+        Filter tool list to only show meta-tools and leased tools.
+
+        Implements progressive discovery visibility rules (Design Section 6.5):
+        - Meta-tools: Always visible
+        - Leased tools: Visible only if active lease for this client_id
+        - All others: Hidden
+        """
+        if not Config.ENABLE_LEASE_MANAGEMENT:
+            logger.debug("Lease management disabled, returning full tool list")
+            return tools
+
+        bootstrap_tools = set(tool_registry.get_bootstrap_tools()) | {"expand_tool_schema"}
+        visible_tools = [tool for tool in tools if tool in bootstrap_tools]
+
+        try:
+            client_id = str(ctx.session_id)
+        except Exception:
+            logger.warning("Failed to extract client_id in on_list_tools")
+            return visible_tools
+
+        for tool_name in tools:
+            if tool_name in bootstrap_tools:
+                continue
+
+            lease = await lease_manager.validate(client_id, tool_name)
+            if lease is not None:
+                visible_tools.append(tool_name)
+
+        logger.debug(
+            f"Filtered {len(tools)} tools to {len(visible_tools)} visible "
+            f"(client: {client_id})"
+        )
+
+        return visible_tools
+
     @staticmethod
     def _format_approval_request(tool_name: str, arguments: dict[str, Any]) -> str:
         """
@@ -664,6 +701,8 @@ class GovernanceMiddleware(Middleware):
                 f"Lease consumed for {tool_name} "
                 f"(client: {client_id}, remaining={consumed_lease.calls_remaining})"
             )
+        elif not Config.ENABLE_LEASE_MANAGEMENT:
+            logger.debug(f"Lease management disabled, skipping validation for {tool_name}")
 
         # Get current governance mode
         mode = await governance_state.get_mode()

@@ -2,6 +2,7 @@
 
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
+from enum import Enum
 from typing import Any
 
 
@@ -72,6 +73,14 @@ class ToolRecord:
         return True
 
 
+class AllowedInMode(str, Enum):
+    """Indicates if tool is allowed in current mode."""
+
+    ALLOWED = "allowed"
+    BLOCKED = "blocked"
+    REQUIRES_APPROVAL = "requires_approval"
+
+
 @dataclass
 class ToolCandidate:
     """
@@ -89,6 +98,8 @@ class ToolCandidate:
     tags: list[str]
     risk_level: str
     relevance_score: float = 0.0  # Semantic similarity (Phase 2)
+    allowed_in_mode: AllowedInMode = AllowedInMode.ALLOWED
+    schema_hint: str | None = None  # Brief parameter summary
 
     # IMPORTANT: Does NOT include schema fields
     # schema_min and schema_full are intentionally omitted
@@ -120,3 +131,23 @@ class ToolCandidate:
         Provided for API compatibility with code expecting .sensitive attribute.
         """
         return self.risk_level != "safe"
+
+
+def extract_schema_hint(schema_min: dict[str, Any] | None) -> str | None:
+    """
+    Extract a brief parameter hint from minimal schema.
+
+    Args:
+        schema_min: Minimal schema dict (if available)
+
+    Returns:
+        Comma-separated parameter names, or None if unavailable
+    """
+    if not schema_min or not isinstance(schema_min, dict):
+        return None
+
+    properties = schema_min.get("properties")
+    if not isinstance(properties, dict) or not properties:
+        return None
+
+    return ", ".join(sorted(properties.keys()))
