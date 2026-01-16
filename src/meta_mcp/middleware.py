@@ -276,7 +276,7 @@ class GovernanceMiddleware(Middleware):
                 cmd_preview = command[:50] if len(command) > 50 else command
                 base_scopes.append(f"resource:command:{cmd_preview}")
 
-        elif tool_name in {"create_directory", "list_directory"}:
+        elif tool_name in {"create_directory", "list_directory", "remove_directory"}:
             path = arguments.get("path", "")
             if path:
                 base_scopes.append(f"resource:path:{path}")

@@ -186,7 +186,6 @@ uv run pytest --cov          # With coverage
 ```bash
 uv run pre-commit run --all-files  # Run all hooks
 ```
-```
 
 ## Configuration
 

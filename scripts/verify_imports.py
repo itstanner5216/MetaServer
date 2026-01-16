@@ -9,7 +9,7 @@ from pathlib import Path
 from symtable import SymbolTable, symtable
 
 
-BASE_DIRS = (Path("src") / "meta_mcp",)
+BASE_DIRS = (Path("src") / "meta_mcp", Path("servers"))
 
 
 def _builtins() -> set[str]:

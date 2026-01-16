@@ -307,8 +307,16 @@ Use lease_seconds=0 for single-use approval.
                 timeout=request.timeout_seconds,
             )
 
+            parsed_response = self._parse_approval_payload(request, response_payload)
+            if parsed_response.error_message != "Invalid approval response format":
+                return parsed_response
+
+            response_text = response_payload
+            if hasattr(response_payload, "data"):
+                response_text = response_payload.data
+
             # Parse simple yes/no response
-            normalized = response_text.strip().lower()
+            normalized = str(response_text or "").strip().lower()
             if normalized in {"yes", "y", "approve", "approved"}:
                 # Grant all required scopes on approval
                 return ApprovalResponse(
