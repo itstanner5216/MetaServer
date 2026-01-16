@@ -86,6 +86,108 @@ async def test_denial_blocks_execution(
 
 
 # ============================================================================
+# APPROVAL PROVIDER FIDELITY TESTS
+# ============================================================================
+
+
+@pytest.mark.asyncio
+async def test_approval_provider_scopes_propagate(monkeypatch, mock_fastmcp_context):
+    """
+    Ensure approval provider requests include required scopes and responses propagate.
+    """
+    from src.meta_mcp.governance.approval import (
+        ApprovalDecision,
+        ApprovalProvider,
+        ApprovalResponse,
+    )
+
+    class CapturingProvider(ApprovalProvider):
+        def __init__(self, response):
+            self.response = response
+            self.request = None
+
+        async def request_approval(self, request):
+            self.request = request
+            return self.response
+
+        async def is_available(self) -> bool:
+            return True
+
+        def get_name(self) -> str:
+            return "Capturing Provider"
+
+    response = ApprovalResponse(
+        request_id="req-1",
+        decision=ApprovalDecision.APPROVED,
+        selected_scopes=["tool:write_file", "filesystem:write", "resource:path:test.txt"],
+        lease_seconds=120,
+    )
+    provider = CapturingProvider(response)
+    monkeypatch.setattr(
+        "src.meta_mcp.middleware.get_approval_provider",
+        AsyncMock(return_value=provider),
+    )
+
+    middleware = GovernanceMiddleware()
+    approved, lease_seconds, selected_scopes = await middleware._elicit_approval(
+        mock_fastmcp_context,
+        "write_file",
+        {"path": "test.txt", "content": "data"},
+    )
+
+    assert provider.request is not None
+    expected_scopes = {"tool:write_file", "filesystem:write", "resource:path:test.txt"}
+
+    assert set(provider.request.required_scopes) == expected_scopes
+    assert approved is True
+    assert lease_seconds == 120
+    assert set(selected_scopes) == expected_scopes
+
+
+@pytest.mark.asyncio
+async def test_approval_provider_timeout_denies(monkeypatch, mock_fastmcp_context):
+    """
+    Ensure timeout responses from approval providers fail safe.
+    """
+    from src.meta_mcp.governance.approval import (
+        ApprovalDecision,
+        ApprovalProvider,
+        ApprovalResponse,
+    )
+
+    class TimeoutProvider(ApprovalProvider):
+        async def request_approval(self, request):
+            return ApprovalResponse(
+                request_id=request.request_id,
+                decision=ApprovalDecision.TIMEOUT,
+                selected_scopes=[],
+            )
+
+        async def is_available(self) -> bool:
+            return True
+
+        def get_name(self) -> str:
+            return "Timeout Provider"
+
+    provider = TimeoutProvider()
+    monkeypatch.setattr(
+        "src.meta_mcp.middleware.get_approval_provider",
+        AsyncMock(return_value=provider),
+    )
+
+    middleware = GovernanceMiddleware()
+    approved, lease_seconds, selected_scopes = await middleware._elicit_approval(
+        mock_fastmcp_context,
+        "write_file",
+        {"path": "test.txt", "content": "data"},
+    )
+
+    assert approved is False
+    assert lease_seconds == 0
+    assert selected_scopes == []
+
+
+# ============================================================================
 # TIMEOUT TESTS
 # ============================================================================
 

@@ -559,16 +559,23 @@ async def grant_all_leases(redis_client):
 @pytest.fixture
 def fresh_registry():
     """Provide a fresh registry for testing with cleanup."""
-    from src.meta_mcp.registry.registry import ToolRegistry
+    import copy
 
-    registry = ToolRegistry()
-    original_tools = registry._tools.copy()
-    original_by_server = registry._tools_by_server.copy()
+    from src.meta_mcp.registry import tool_registry
 
-    yield registry
+    original_tools = copy.deepcopy(tool_registry._tools)
+    original_servers = copy.deepcopy(tool_registry._servers)
+    original_by_server = copy.deepcopy(tool_registry._tools_by_server)
 
-    registry._tools = original_tools
-    registry._tools_by_server = original_by_server
+    tool_registry._tools = {}
+    tool_registry._servers = {}
+    tool_registry._tools_by_server = {}
+
+    yield tool_registry
+
+    tool_registry._tools = original_tools
+    tool_registry._servers = original_servers
+    tool_registry._tools_by_server = original_by_server
 
 
 # ============================================================================
