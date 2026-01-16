@@ -76,6 +76,9 @@ jobs:
       - name: Type check with Pyright
         run: uv run pyright
         continue-on-error: true
+
+      - name: Verify imports
+        run: uv run python scripts/verify_imports.py
       
       - name: Run tests with pytest
         env:
