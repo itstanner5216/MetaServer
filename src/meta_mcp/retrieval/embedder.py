@@ -240,4 +240,4 @@ class ToolEmbedder:
     def clear_cache(self) -> None:
         """Clear embedding cache."""
         self._cache.clear()
-        self._vocab_list.clear()  # Clear cached sorted vocabulary (PERF-001)
+        # Keep _vocab_list in sync with _vocabulary/_idf_scores; rebuild via build_index().
