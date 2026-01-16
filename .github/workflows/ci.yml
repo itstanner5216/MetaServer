@@ -11,6 +11,7 @@ permissions:
 
 env:
   UV_CACHE_DIR: ~/.cache/uv
+  RUN_BENCHMARKS: "false"
 
 jobs:
   test:
@@ -91,6 +92,11 @@ jobs:
             --cov-report=term-missing \
             --cov-report=xml \
             --cov-report=html
+
+      - name: Run performance benchmarks (opt-in)
+        if: env.RUN_BENCHMARKS == 'true'
+        run: uv run bash benchmarks/run_all_benchmarks.sh
+        continue-on-error: true
       
       - name: Upload coverage to Codecov
         if: matrix.python-version == '3.11'

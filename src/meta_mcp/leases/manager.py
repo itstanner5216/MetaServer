@@ -3,6 +3,7 @@
 import asyncio
 import json
 from datetime import datetime, timezone
+from typing import Optional
 
 from loguru import logger
 from redis import asyncio as aioredis
@@ -10,6 +11,32 @@ from redis import asyncio as aioredis
 from ..redis_client import close_redis_client, get_redis_client
 from ..state import governance_state
 from .models import ToolLease
+
+_CONSUME_LEASE_LUA = """
+local key = KEYS[1]
+local lease_json = redis.call("GET", key)
+if not lease_json then
+    return {0}
+end
+local lease = cjson.decode(lease_json)
+local calls_remaining = tonumber(lease["calls_remaining"]) or 0
+if calls_remaining <= 0 then
+    return {0}
+end
+calls_remaining = calls_remaining - 1
+lease["calls_remaining"] = calls_remaining
+if calls_remaining <= 0 then
+    redis.call("DEL", key)
+    return {1, cjson.encode(lease), 0}
+end
+local ttl = redis.call("TTL", key)
+if ttl <= 0 then
+    redis.call("DEL", key)
+    return {0}
+end
+redis.call("SETEX", key, ttl, cjson.encode(lease))
+return {1, cjson.encode(lease), ttl}
+"""
 
 
 class LeaseManager:
@@ -230,44 +257,31 @@ class LeaseManager:
             redis = await self._get_redis()
             key = self._lease_key(client_id, tool_id)
 
-            # Get current lease
-            lease = await self.validate(client_id, tool_id)
-            if lease is None:
+            result = await redis.eval(_CONSUME_LEASE_LUA, numkeys=1, keys=[key])
+            if not result or result[0] != 1:
                 return None
 
-            # Decrement calls
-            lease.calls_remaining -= 1
+            lease_json = result[1]
+            if not lease_json:
+                return None
+
+            lease_dict = json.loads(lease_json)
+            lease = ToolLease(
+                client_id=lease_dict["client_id"],
+                tool_id=lease_dict["tool_id"],
+                granted_at=datetime.fromisoformat(lease_dict["granted_at"]),
+                expires_at=datetime.fromisoformat(lease_dict["expires_at"]),
+                calls_remaining=lease_dict["calls_remaining"],
+                mode_at_issue=lease_dict["mode_at_issue"],
+                capability_token=lease_dict.get("capability_token"),
+            )
 
             if lease.calls_remaining <= 0:
-                # Lease exhausted, delete from Redis
-                await redis.delete(key)
                 logger.info(f"Lease exhausted and deleted for {client_id}:{tool_id}")
-                # Return lease with 0 calls to indicate exhaustion
-                return lease
-            # Update lease in Redis
-            lease_dict = {
-                "client_id": lease.client_id,
-                "tool_id": lease.tool_id,
-                "granted_at": lease.granted_at.isoformat(),
-                "expires_at": lease.expires_at.isoformat(),
-                "calls_remaining": lease.calls_remaining,
-                "mode_at_issue": lease.mode_at_issue,
-                "capability_token": lease.capability_token,
-            }
-            lease_json = json.dumps(lease_dict)
-
-            # Get remaining TTL
-            ttl = await redis.ttl(key)
-            if ttl > 0:
-                await redis.setex(key, ttl, lease_json)
             else:
-                # TTL expired, delete
-                await redis.delete(key)
-                return None
-
-            logger.info(
-                f"Consumed lease for {client_id}:{tool_id} (remaining={lease.calls_remaining})"
-            )
+                logger.info(
+                    f"Consumed lease for {client_id}:{tool_id} (remaining={lease.calls_remaining})"
+                )
             return lease
 
         except (aioredis.ConnectionError, aioredis.TimeoutError) as e:
