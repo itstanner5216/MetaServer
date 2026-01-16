@@ -10,19 +10,17 @@ Tests:
 
 import pytest
 
-from src.meta_mcp.registry.models import ToolRecord
+from tests.test_utils import create_test_registry, create_test_tool
 
 
 class TestBatchWrite:
     """Test suite for batch write operations."""
 
     @pytest.fixture
-    def sample_registry(self, fresh_registry):
+    def sample_registry(self):
         """Create registry with sample tools."""
-        registry = fresh_registry
-
         tools = [
-            ToolRecord(
+            create_test_tool(
                 tool_id="read_file",
                 server_id="core",
                 description_1line="Read files from disk",
@@ -30,7 +28,7 @@ class TestBatchWrite:
                 tags=["file", "read"],
                 risk_level="safe",
             ),
-            ToolRecord(
+            create_test_tool(
                 tool_id="write_file",
                 server_id="core",
                 description_1line="Write files to disk",
@@ -40,10 +38,7 @@ class TestBatchWrite:
             ),
         ]
 
-        for tool in tools:
-            registry.add_for_testing(tool)
-
-        return registry
+        return create_test_registry(tools)
 
     def test_batch_write_update_tools(self, sample_registry):
         """Test batch update of existing tools."""
@@ -138,3 +133,123 @@ class TestBatchWrite:
         assert "success" in result
         assert "updated" in result
         assert isinstance(result["updated"], int)
+
+
+class TestBatchWriteAtomicity:
+    """Test atomicity strategy for batch tool updates (rollback_on_error)."""
+
+    def test_all_succeed(self):
+        """All updates succeed - all tools updated."""
+        from src.meta_mcp.macros.batch_write import batch_update_tools
+
+        registry = create_test_registry(
+            [
+                create_test_tool(tool_id="read_file", risk_level="safe"),
+                create_test_tool(tool_id="write_file", risk_level="sensitive"),
+            ]
+        )
+
+        updates = {
+            "read_file": {"description_1line": "Read files from storage"},
+            "write_file": {"description_1line": "Write files to storage"},
+        }
+
+        result = batch_update_tools(
+            registry,
+            updates,
+            atomic=True,
+            rollback_on_error=True,
+        )
+
+        assert result["success"] is True
+        assert result["updated"] == 2
+        assert registry.get("read_file").description_1line == "Read files from storage"
+        assert registry.get("write_file").description_1line == "Write files to storage"
+
+    def test_one_fails_all_rollback(self):
+        """One update fails - all changes rolled back."""
+        from src.meta_mcp.macros.batch_write import batch_update_tools
+
+        registry = create_test_registry(
+            [
+                create_test_tool(tool_id="read_file", risk_level="safe"),
+                create_test_tool(tool_id="write_file", risk_level="sensitive"),
+            ]
+        )
+
+        original_read_desc = registry.get("read_file").description_1line
+        original_write_risk = registry.get("write_file").risk_level
+
+        updates = {
+            "read_file": {"description_1line": "Updated description"},
+            "write_file": {"risk_level": "invalid_level"},
+        }
+
+        result = batch_update_tools(
+            registry,
+            updates,
+            atomic=True,
+            rollback_on_error=True,
+        )
+
+        assert result["success"] is False
+        assert result.get("rolled_back") is True
+        assert registry.get("read_file").description_1line == original_read_desc
+        assert registry.get("write_file").risk_level == original_write_risk
+
+    def test_permission_denied_rollback(self):
+        """Permission denied on dangerous tool - no changes applied."""
+        from src.meta_mcp.macros.batch_write import batch_update_tools
+
+        registry = create_test_registry(
+            [
+                create_test_tool(tool_id="read_file", risk_level="safe"),
+                create_test_tool(tool_id="delete_file", risk_level="dangerous"),
+            ]
+        )
+
+        updates = {
+            "read_file": {"description_1line": "Updated description"},
+            "delete_file": {"description_1line": "Should not update"},
+        }
+
+        result = batch_update_tools(
+            registry,
+            updates,
+            atomic=True,
+            rollback_on_error=True,
+            check_permissions=True,
+        )
+
+        assert result["success"] is False
+        assert "error" in result
+        assert registry.get("read_file").description_1line == "Test tool: read_file"
+        assert registry.get("delete_file").description_1line == "Test tool: delete_file"
+
+    def test_partial_success_handling(self):
+        """Partial success allowed when atomicity is disabled."""
+        from src.meta_mcp.macros.batch_write import batch_update_tools
+
+        registry = create_test_registry(
+            [
+                create_test_tool(tool_id="read_file", risk_level="safe"),
+                create_test_tool(tool_id="write_file", risk_level="sensitive"),
+            ]
+        )
+
+        updates = {
+            "read_file": {"description_1line": "Updated description"},
+            "write_file": {"risk_level": "invalid_level"},
+        }
+
+        result = batch_update_tools(
+            registry,
+            updates,
+            atomic=False,
+            rollback_on_error=False,
+        )
+
+        assert result["updated"] == 1
+        assert result["errors"]
+        assert registry.get("read_file").description_1line == "Updated description"
+        assert registry.get("write_file").risk_level == "sensitive"
