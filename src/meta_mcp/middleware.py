@@ -24,6 +24,11 @@ from .registry import tool_registry
 from .state import ExecutionMode, governance_state
 from .toon import encode_output
 
+# Agent hooks (opt-in only when config/agents.yaml exists with bindings)
+from .agent_detector import detect_agent_id
+from .hooks import PolicyViolation, hook_manager
+
+
 # Constants
 SENSITIVE_TOOLS = {
     # File operations
@@ -713,6 +718,38 @@ class GovernanceMiddleware(Middleware):
         elif not Config.ENABLE_LEASE_MANAGEMENT:
             logger.debug(f"Lease management disabled, skipping validation for {tool_name}")
 
+        # AGENT HOOKS INTEGRATION: Run before_tool_call hooks if in agent mode
+        # This is opt-in only - hooks only run when agent binding exists in config/agents.yaml
+        hook_receipt = None
+        agent_id = detect_agent_id(context)
+
+        if hook_manager.is_agent_mode(agent_id):
+            violation, hook_receipt = await hook_manager.run_before_tool_call(
+                session_id, tool_name, arguments
+            )
+            if violation:
+                logger.warning(
+                    f"Agent hook blocked {tool_name}: {violation} "
+                    f"(agent: {agent_id}, session: {session_id})"
+                )
+                audit_logger.log_blocked(
+                    tool_name=tool_name,
+                    arguments=arguments,
+                    session_id=session_id,
+                    reason=f"agent_hook:{violation.gate_type.value}",
+                )
+                raise ToolError(
+                    f"Policy violation: {violation.reason}",
+                    details=violation.to_dict(),
+                )
+
+        async def _run_after_hooks(result, error=None):
+            """Run after_tool_result hooks if in agent mode."""
+            if hook_manager.is_agent_mode(agent_id) and hook_receipt:
+                await hook_manager.run_after_tool_result(
+                    session_id, tool_name, result, hook_receipt, error
+                )
+
         async def _consume_lease_after_success() -> None:
             if not should_consume_lease:
                 return
@@ -753,6 +790,7 @@ class GovernanceMiddleware(Middleware):
             )
             result = await call_next()
             await _consume_lease_after_success()
+            await _run_after_hooks(result)
             return self._apply_toon_encoding(result)
 
         # Path 2: Non-sensitive tools - pass through
@@ -760,6 +798,7 @@ class GovernanceMiddleware(Middleware):
             logger.debug(f"Non-sensitive tool {tool_name}, passing through")
             result = await call_next()
             await _consume_lease_after_success()
+            await _run_after_hooks(result)
             return self._apply_toon_encoding(result)
 
         # Path 3: READ_ONLY mode - block sensitive operations
@@ -791,6 +830,7 @@ class GovernanceMiddleware(Middleware):
                 )
                 result = await call_next()
                 await _consume_lease_after_success()
+                await _run_after_hooks(result)
                 return self._apply_toon_encoding(result)
 
             # No elevation, elicit approval
@@ -819,6 +859,7 @@ class GovernanceMiddleware(Middleware):
                 # Execute tool
                 result = await call_next()
                 await _consume_lease_after_success()
+                await _run_after_hooks(result)
                 return self._apply_toon_encoding(result)
             # Denied - audit already logged in _elicit_approval
             logger.warning(f"Approval denied for {tool_name} (session: {session_id})")

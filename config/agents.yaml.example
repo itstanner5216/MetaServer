@@ -1,0 +1,108 @@
+# Agent Control Hooks Configuration
+# ===================================
+#
+# This file defines agent↔model bindings for the hook system.
+# When this file exists and has at least one enabled agent binding,
+# the hook system activates for runs using those agent IDs.
+#
+# When this file is missing, empty, or disabled, the hook system
+# is completely disabled and existing behavior is unchanged.
+#
+# Usage:
+#   - To enable agent mode: Copy this to config/agents.yaml and customize
+#   - To disable agent mode: Delete config/agents.yaml or set enabled: false
+#
+# Model IDs use LiteLLM format (e.g., "openai/gpt-4", "anthropic/claude-3-opus")
+
+# Global enable flag - set to false to disable all hooks
+enabled: true
+
+agents:
+  # Example: Coding assistant agent with restricted file access
+  - agent_id: coding_assistant
+    role_id: developer
+    model_id: anthropic/claude-sonnet-4-20250514
+
+    # Tool access control
+    # - If allowed_tools is empty, all tools are allowed (except denied)
+    # - If allowed_tools has entries, only those tools are allowed
+    allowed_tools:
+      - read_file
+      - write_file
+      - list_directory
+      - create_directory
+      - execute_command
+      - search_tools
+      - get_tool_schema
+    denied_tools:
+      - delete_file
+      - remove_directory
+      - git_reset
+
+    # Path fence - restrict file access to workspace
+    # Supports glob patterns: *, **, ?
+    allowed_paths:
+      - ./workspace/**
+      - /tmp/**
+    denied_paths:
+      - /etc/**
+      - /root/**
+      - ~/.ssh/**
+
+    # Budget limits
+    max_tool_calls: 100
+    max_tool_calls_per_tool:
+      execute_command: 20
+      write_file: 50
+
+    enabled: true
+    metadata:
+      description: "Coding assistant with workspace-restricted access"
+
+  # Example: Read-only research agent
+  - agent_id: research_agent
+    role_id: researcher
+    model_id: openai/gpt-4-turbo
+
+    allowed_tools:
+      - read_file
+      - list_directory
+      - search_tools
+      - get_tool_schema
+    denied_tools: []
+
+    allowed_paths:
+      - ./workspace/**
+      - ./docs/**
+    denied_paths: []
+
+    max_tool_calls: 50
+    max_tool_calls_per_tool: {}
+
+    enabled: true
+    metadata:
+      description: "Read-only research agent"
+
+  # Example: Admin agent with elevated access (disabled by default)
+  - agent_id: admin_agent
+    role_id: administrator
+    model_id: anthropic/claude-sonnet-4-20250514
+
+    # Empty = all tools allowed
+    allowed_tools: []
+    denied_tools: []
+
+    # Empty = all paths allowed
+    allowed_paths: []
+    denied_paths:
+      - /etc/passwd
+      - /etc/shadow
+
+    max_tool_calls: 200
+    max_tool_calls_per_tool:
+      git_reset: 5
+
+    # Disabled by default - enable for admin operations
+    enabled: false
+    metadata:
+      description: "Admin agent with elevated privileges"
