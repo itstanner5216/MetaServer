@@ -46,7 +46,7 @@ class ToolRegistry:
         self._tools: dict[str, ToolRecord] = {}
         self._servers: dict[str, ServerRecord] = {}
         self._tools_by_server: dict[str, list[ToolRecord]] = {}
-        self._bootstrap_tools = {"search_tools", "get_tool_schema", "expand_tool_schema"}
+        self._bootstrap_tools = {"search_tools", "get_tool_schema"}
 
 
     @classmethod
@@ -244,12 +244,10 @@ class ToolRegistry:
         Bootstrap tools are:
         - search_tools: Entry point for discovery
         - get_tool_schema: Triggers tool exposure
-        - expand_tool_schema: Progressive schema expansion
-
         These tools are auto-exposed at startup and always available.
 
         Returns:
-            Set of 3 bootstrap tool names
+            Set of 2 bootstrap tool names
         """
         return self._bootstrap_tools
 

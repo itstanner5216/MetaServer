@@ -30,7 +30,7 @@ async def test_bootstrap_discovery(redis_client):
 
     Flow:
     1. System starts with minimal bootstrap set
-    2. Only search_tools, get_tool_schema, and expand_tool_schema are visible
+    2. Only search_tools and get_tool_schema are visible
     3. All other tools are hidden until explicitly requested
     """
     # Get bootstrap tools
@@ -40,7 +40,6 @@ async def test_bootstrap_discovery(redis_client):
     assert len(bootstrap) == 3
     assert "search_tools" in bootstrap
     assert "get_tool_schema" in bootstrap
-    assert "expand_tool_schema" in bootstrap
 
     # Verify other tools are registered but not exposed
     assert tool_registry.is_registered("read_file")
@@ -131,7 +130,6 @@ async def test_progressive_schema_delivery(redis_client):
     bootstrap_tools = tool_registry.get_bootstrap_tools()
     assert "search_tools" in bootstrap_tools
     assert "get_tool_schema" in bootstrap_tools
-    assert "expand_tool_schema" in bootstrap_tools
 
 
 @pytest.mark.asyncio

@@ -2,7 +2,7 @@
 Progressive Discovery Verification Tests
 
 Validates that the progressive discovery implementation meets all success criteria:
-- Initial exposure limited to 3 bootstrap tools
+- Initial exposure limited to 2 bootstrap tools
 - search_tools does not trigger exposure
 - get_tool_schema triggers exposure
 - Exposed tools persist
@@ -24,19 +24,17 @@ async def test_initial_exposure_minimal():
     At startup, only bootstrap tools should be exposed:
     - search_tools
     - get_tool_schema
-    - expand_tool_schema
     """
     # Get initial tool list
     tools = await mcp.get_tools()
     tool_names = sorted([t.name for t in tools.values()])
 
-    # Verify exactly 3 tools (Phase 5 adds expand_tool_schema)
-    assert len(tool_names) == 3, f"Expected 3 tools, got {len(tool_names)}: {tool_names}"
+    # Verify exactly 2 tools
+    assert len(tool_names) == 2, f"Expected 2 tools, got {len(tool_names)}: {tool_names}"
 
     # Verify correct tools
     assert "search_tools" in tool_names, "search_tools missing from bootstrap"
     assert "get_tool_schema" in tool_names, "get_tool_schema missing from bootstrap"
-    assert "expand_tool_schema" in tool_names, "expand_tool_schema missing from bootstrap"
 
     # Verify no other tools exposed
     assert "read_file" not in tool_names, "read_file should not be auto-exposed"
@@ -228,7 +226,7 @@ async def test_context_reduction_calculation():
     # Verify metrics
     assert total_registered >= 13, f"Expected at least 13 total tools, got {total_registered}"
 
-    assert initially_exposed == 3, f"Expected 3 bootstrap tools, got {initially_exposed}"
+    assert initially_exposed == 2, f"Expected 2 bootstrap tools, got {initially_exposed}"
 
     assert reduction_percentage >= 75, (
         f"Context reduction is {reduction_percentage:.1f}%, expected >= 75%"
@@ -329,7 +327,6 @@ async def test_bootstrap_tools_always_available():
 
     assert "search_tools" in tool_names, "search_tools must be available at startup"
     assert "get_tool_schema" in tool_names, "get_tool_schema must be available at startup"
-    assert "expand_tool_schema" in tool_names, "expand_tool_schema must be available at startup"
 
     # Both should be immediately callable
     search_result = search_tools.fn(query="test")

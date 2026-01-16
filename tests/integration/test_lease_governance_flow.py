@@ -126,9 +126,6 @@ async def test_bootstrap_tools_always_allowed(redis_client):
         decision = evaluate_policy(mode=mode, tool_risk="safe", tool_id="get_tool_schema")
         assert decision.action == "allow"
 
-        # expand_tool_schema always allowed (Phase 5)
-        decision = evaluate_policy(mode=mode, tool_risk="safe", tool_id="expand_tool_schema")
-        assert decision.action == "allow"
 
 
 @pytest.mark.asyncio
