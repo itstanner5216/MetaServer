@@ -605,7 +605,10 @@ class GovernanceMiddleware(Middleware):
         # CRITICAL: Skip lease checks if ENABLE_LEASE_MANAGEMENT is False
         bootstrap_tools = {"search_tools", "get_tool_schema"}
 
-        if Config.ENABLE_LEASE_MANAGEMENT and tool_name not in bootstrap_tools:
+        should_consume_lease = Config.ENABLE_LEASE_MANAGEMENT and tool_name not in bootstrap_tools
+        client_id = None
+
+        if should_consume_lease:
             # Extract client_id from FastMCP session context
             # In FastMCP/MCP protocol, session_id is the stable client connection identifier
             client_id = str(context.session_id)
@@ -645,17 +648,17 @@ class GovernanceMiddleware(Middleware):
 
                 logger.debug(f"Capability token verified for {tool_name} (client: {client_id})")
 
-            # Consume lease (decrement calls_remaining)
+        async def _consume_lease_after_success() -> None:
+            if not should_consume_lease:
+                return
+
             consumed_lease = await lease_manager.consume(client_id, tool_name)
             if consumed_lease is None:
                 logger.warning(
                     f"Failed to consume lease for {tool_name} "
                     f"(client: {client_id}, session: {session_id})"
                 )
-                raise ToolError(
-                    f"Lease exhausted for tool '{tool_name}'. "
-                    f"Please request a new lease via get_tool_schema('{tool_name}')."
-                )
+                return
 
             logger.info(
                 f"Lease consumed for {tool_name} "
@@ -684,12 +687,14 @@ class GovernanceMiddleware(Middleware):
                 session_id=session_id,
             )
             result = await call_next()
+            await _consume_lease_after_success()
             return self._apply_toon_encoding(result)
 
         # Path 2: Non-sensitive tools - pass through
         if tool_name not in SENSITIVE_TOOLS:
             logger.debug(f"Non-sensitive tool {tool_name}, passing through")
             result = await call_next()
+            await _consume_lease_after_success()
             return self._apply_toon_encoding(result)
 
         # Path 3: READ_ONLY mode - block sensitive operations
@@ -720,6 +725,7 @@ class GovernanceMiddleware(Middleware):
                     session_id=session_id,
                 )
                 result = await call_next()
+                await _consume_lease_after_success()
                 return self._apply_toon_encoding(result)
 
             # No elevation, elicit approval
@@ -747,6 +753,7 @@ class GovernanceMiddleware(Middleware):
 
                 # Execute tool
                 result = await call_next()
+                await _consume_lease_after_success()
                 return self._apply_toon_encoding(result)
             # Denied - audit already logged in _elicit_approval
             logger.warning(f"Approval denied for {tool_name} (session: {session_id})")

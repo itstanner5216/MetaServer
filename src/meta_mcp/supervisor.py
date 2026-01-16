@@ -5,6 +5,7 @@ import sys
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
+from uuid import uuid4
 
 from fastmcp import Context, FastMCP
 from fastmcp.exceptions import ToolError
@@ -350,37 +351,15 @@ async def get_tool_schema(tool_name: str, expand: bool = False, ctx: Context = N
     if not tool_registry.is_registered(tool_name):
         raise ToolError(f"Tool '{tool_name}' is not registered")
 
-    # Step 2: PROGRESSIVE DISCOVERY TRIGGER - Expose tool to MCP clients
-    # This adds the tool to tools/list and makes it available for invocation
-    if not await _expose_tool(tool_name):
-        raise ToolError(
-            f"Failed to expose tool '{tool_name}'. "
-            "Tool may not exist in core_server or admin_server."
-        )
-
-    # Step 2.5: PHASE 3+4 INTEGRATION - Evaluate policy and grant lease
-    # Extract client_id from FastMCP session context
-    # In FastMCP/MCP protocol, session_id is the stable client connection identifier
-    # If context is not available (shouldn't happen), use a unique ID to avoid collisions
-    if ctx is None:
-        logger.warning(
-            f"No context available for get_tool_schema({tool_name}), using unique client_id"
-        )
-        client_id = str(uuid4())
-    else:
-        client_id = str(ctx.session_id)
-
-    # Get tool metadata from registry to determine risk level
+    # Step 2: Fetch tool metadata for policy evaluation
     tool_record = tool_registry.get(tool_name)
     if not tool_record:
         raise ToolError(f"Tool '{tool_name}' not found in registry")
 
     risk_level = tool_record.risk_level
 
-    # Get current governance mode
+    # Step 3: Evaluate governance policy BEFORE exposure
     current_mode = await governance_state.get_mode()
-
-    # PHASE 4: Evaluate governance policy
     policy_decision = evaluate_policy(
         mode=current_mode,
         tool_risk=risk_level,
@@ -389,9 +368,13 @@ async def get_tool_schema(tool_name: str, expand: bool = False, ctx: Context = N
 
     # Handle policy decision
     if policy_decision.action == "block":
-        # Policy blocks access - deny immediately
-        logger.warning(f"Policy blocked access to '{tool_name}': {policy_decision.reason}")
-        raise ToolError(f"Access to '{tool_name}' blocked by policy: {policy_decision.reason}")
+        # Policy blocks schema access - deny immediately
+        logger.warning(
+            f"Policy blocked schema access to '{tool_name}': {policy_decision.reason}"
+        )
+        raise ToolError(
+            f"Access to '{tool_name}' blocked by policy: {policy_decision.reason}"
+        )
 
     if policy_decision.action == "require_approval":
         # Policy requires approval - trigger elicitation
@@ -406,6 +389,24 @@ async def get_tool_schema(tool_name: str, expand: bool = False, ctx: Context = N
 
     # Policy allows access - proceed with lease grant
     logger.info(f"Policy allows access to '{tool_name}': {policy_decision.reason}")
+
+    # Step 4: Extract client_id from FastMCP session context
+    # In FastMCP/MCP protocol, session_id is the stable client connection identifier
+    if ctx is None:
+        logger.warning(
+            f"No context available for get_tool_schema({tool_name}), using unique client_id"
+        )
+        client_id = str(uuid4())
+    else:
+        client_id = str(ctx.session_id)
+
+    # Step 5: PROGRESSIVE DISCOVERY TRIGGER - Expose tool to MCP clients
+    # This adds the tool to tools/list and makes it available for invocation
+    if not await _expose_tool(tool_name):
+        raise ToolError(
+            f"Failed to expose tool '{tool_name}'. "
+            "Tool may not exist in core_server or admin_server."
+        )
 
     # Determine TTL and calls based on risk level
     ttl_seconds = Config.LEASE_TTL_BY_RISK.get(risk_level, 300)
