@@ -87,11 +87,14 @@ jobs:
         run: |
           uv run pytest tests/ \
             -v \
-            --cov=src \
-            --cov=MetaServer \
+            --cov=src/meta_mcp/governance \
+            --cov=src/meta_mcp/leases \
+            --cov=src/meta_mcp/validation \
+            --cov=src/meta_mcp/middleware \
             --cov-report=term-missing \
             --cov-report=xml \
-            --cov-report=html
+            --cov-report=html \
+            --cov-fail-under=85
 
       - name: Run performance benchmarks (opt-in)
         if: env.RUN_BENCHMARKS == 'true'
