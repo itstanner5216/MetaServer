@@ -1,12 +1,12 @@
 """Integration tests for failure mode handling (Gap 9)."""
 
-import asyncio
 from unittest.mock import AsyncMock, patch
 
 import pytest
 from fastmcp.exceptions import ToolError
 from redis import asyncio as aioredis
 
+from src.meta_mcp.audit import audit_logger
 from src.meta_mcp.governance.approval import (
     ApprovalDecision,
     ApprovalProvider,
@@ -98,7 +98,7 @@ async def test_elicitation_timeout_denies_and_audits(
     assert "denied" in str(exc_info.value).lower()
     call_next.assert_not_called()
 
-    await asyncio.sleep(0.2)
+    audit_logger.flush()
     entries = read_audit_log(audit_log_path)
     timeout_entries = [
         entry
