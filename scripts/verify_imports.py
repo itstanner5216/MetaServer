@@ -1,101 +1,114 @@
+"""Verify modules reference only imported globals."""
+
+from __future__ import annotations
+
 import ast
+import builtins
 import sys
 from pathlib import Path
+from symtable import SymbolTable, symtable
+
+
+BASE_DIRS = (Path("src") / "meta_mcp",)
 
 
 def _builtins() -> set[str]:
-    builtins_obj = __builtins__
-    if isinstance(builtins_obj, dict):
-        builtins_set = set(builtins_obj.keys())
-    else:
-        builtins_set = set(dir(builtins_obj))
-    return builtins_set | {"__file__"}
+    return set(dir(builtins)) | {"__file__"}
 
 
-class ImportChecker(ast.NodeVisitor):
-    def __init__(self) -> None:
-        self.imported: set[str] = set()
-        self.defined: set[str] = set()
-        self.used: set[str] = set()
-        self.scope_depth = 0
-
-    def visit_Import(self, node: ast.Import) -> None:
-        if self.scope_depth == 0:
-            for name in node.names:
-                self.imported.add((name.asname or name.name).split(".")[0])
-
-    def visit_ImportFrom(self, node: ast.ImportFrom) -> None:
-        if self.scope_depth == 0:
-            if node.module:
-                self.imported.add(node.module.split(".")[0])
-            for name in node.names:
-                self.imported.add((name.asname or name.name).split(".")[0])
-
-    def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
-        if self.scope_depth == 0:
-            self.defined.add(node.name)
-        self.scope_depth += 1
-        self.generic_visit(node)
-        self.scope_depth -= 1
-
-    def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef) -> None:
-        if self.scope_depth == 0:
-            self.defined.add(node.name)
-        self.scope_depth += 1
-        self.generic_visit(node)
-        self.scope_depth -= 1
-
-    def visit_ClassDef(self, node: ast.ClassDef) -> None:
-        if self.scope_depth == 0:
-            self.defined.add(node.name)
-        self.scope_depth += 1
-        self.generic_visit(node)
-        self.scope_depth -= 1
-
-    def visit_Name(self, node: ast.Name) -> None:
-        if self.scope_depth == 0:
-            if isinstance(node.ctx, ast.Store):
-                self.defined.add(node.id)
-            elif isinstance(node.ctx, ast.Load):
-                self.used.add(node.id)
+def _module_defined(symbols: list) -> set[str]:
+    defined: set[str] = set()
+    for symbol in symbols:
+        if symbol.is_assigned() or symbol.is_imported() or symbol.is_parameter():
+            defined.add(symbol.get_name())
+    return defined
 
 
-def check_file(filepath: Path) -> set[str]:
-    tree = ast.parse(filepath.read_text(), str(filepath))
-    checker = ImportChecker()
-    checker.visit(tree)
-    missing = checker.used - checker.imported - checker.defined - _builtins()
+def _find_missing_globals(table: SymbolTable, module_defined: set[str]) -> set[str]:
+    missing: set[str] = set()
+    for symbol in table.get_symbols():
+        if not symbol.is_referenced():
+            continue
+        name = symbol.get_name()
+        if name in module_defined or name in _builtins():
+            continue
+        if symbol.is_assigned() or symbol.is_imported() or symbol.is_parameter():
+            continue
+        if table.get_type() == "module" or symbol.is_global():
+            missing.add(name)
     return missing
 
 
+def _walk_tables(table: SymbolTable) -> list[SymbolTable]:
+    pending = [table]
+    tables: list[SymbolTable] = []
+    while pending:
+        current = pending.pop()
+        tables.append(current)
+        pending.extend(current.get_children())
+    return tables
+
+
+def _annotation_names(source: str) -> set[str]:
+    try:
+        tree = ast.parse(source)
+    except SyntaxError:
+        return set()
+    names: set[str] = set()
+
+    def record(node: ast.AST | None) -> None:
+        if node is None:
+            return
+        for child in ast.walk(node):
+            if isinstance(child, ast.Name):
+                names.add(child.id)
+
+    for node in ast.walk(tree):
+        if isinstance(node, ast.AnnAssign):
+            record(node.annotation)
+        elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            record(node.returns)
+            for arg in (*node.args.args, *node.args.kwonlyargs):
+                record(arg.annotation)
+            if node.args.vararg:
+                record(node.args.vararg.annotation)
+            if node.args.kwarg:
+                record(node.args.kwarg.annotation)
+    return names
+
+
+def _check_file(path: Path) -> set[str]:
+    source = path.read_text(encoding="utf-8")
+    annotation_names = _annotation_names(source)
+    try:
+        table = symtable(source, str(path), "exec")
+    except SyntaxError as exc:
+        print(f"Skipping {path} due to syntax error: {exc}", file=sys.stderr)
+        return set()
+    module_defined = _module_defined(table.get_symbols())
+    missing: set[str] = set()
+    for child in _walk_tables(table):
+        missing.update(_find_missing_globals(child, module_defined))
+    return missing - annotation_names
+
+
 def main() -> int:
-    src_root = Path("src/meta_mcp")
-    issues: dict[Path, set[str]] = {}
-    syntax_errors: dict[Path, SyntaxError] = {}
+    failures: dict[Path, set[str]] = {}
+    for base_dir in BASE_DIRS:
+        for path in sorted(base_dir.rglob("*.py")):
+            missing = _check_file(path)
+            if missing:
+                failures[path] = missing
 
-    for file in src_root.rglob("*.py"):
-        try:
-            missing = check_file(file)
-        except SyntaxError as exc:
-            syntax_errors[file] = exc
-            continue
-        if missing:
-            issues[file] = missing
+    if not failures:
+        print("No missing imports detected.")
+        return 0
 
-    if syntax_errors:
-        print("Skipped files with syntax errors:")
-        for file, exc in sorted(syntax_errors.items()):
-            print(f"  {file}: {exc.msg} (line {exc.lineno})")
-
-    if issues:
-        print("Missing imports found:")
-        for file, missing in sorted(issues.items()):
-            missing_list = ", ".join(sorted(missing))
-            print(f"  {file}: {missing_list}")
-        return 1
-
-    print("No missing imports found.")
-    return 0
+    print("Missing imports detected:")
+    for path, missing in sorted(failures.items()):
+        missing_list = ", ".join(sorted(missing))
+        print(f"- {path}: {missing_list}")
+    return 1
 
 
 if __name__ == "__main__":
