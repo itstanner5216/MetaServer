@@ -127,12 +127,12 @@ class SemanticSearch:
 
         mode = self._resolve_governance_mode()
         top_k = max(limit, 0)
-        adjusted_tools: list[tuple[float, object, AllowedInMode]] = []
+        adjusted_tools: list[tuple[float, str, object, AllowedInMode]] = []
 
         def _push_top_k(tool, score: float, allowed_in_mode: AllowedInMode) -> None:
             if top_k == 0:
                 return
-            entry = (score, tool, allowed_in_mode)
+            entry = (score, tool.tool_id, tool, allowed_in_mode)
             if len(adjusted_tools) < top_k:
                 heapq.heappush(adjusted_tools, entry)
             elif score > adjusted_tools[0][0]:
@@ -191,7 +191,7 @@ class SemanticSearch:
         # Convert to ToolCandidate objects
         results = []
         adjusted_tools.sort(key=lambda x: x[0], reverse=True)
-        for score, tool, allowed_in_mode in adjusted_tools[:limit]:
+        for score, _tool_id, tool, allowed_in_mode in adjusted_tools[:limit]:
             results.append(
                 ToolCandidate(
                     tool_id=tool.tool_id,
