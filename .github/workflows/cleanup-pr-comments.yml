@@ -20,7 +20,7 @@ jobs:
     steps:
       - name: Get Target PRs
         id: get-prs
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         with:
           script: |
             const input = '${{ inputs.pr_numbers }}';
@@ -50,7 +50,7 @@ jobs:
             core.setOutput('pr_numbers', JSON.stringify(prNumbers));
       
       - name: Delete AI Comments
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         with:
           script: |
             const prNumbers = JSON.parse('${{ steps.get-prs.outputs.pr_numbers }}');
