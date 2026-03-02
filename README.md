@@ -134,7 +134,7 @@ Batch primitives for high-throughput agent workflows:
 - `batch_search` — Multi-query search with deduplication
 
 ### 🤖 Agent Runtime (In Progress)
-MetaServer is being extended into a full **multi-agent runtime** powered by LiteLLM:
+MetaServer is being extended into a full **multi-agent runtime**:
 - **YAML-driven agent↔model bindings** — each agent role locked to a specific model, no mid-run switching
 - **Hook system** — pluggable gates at `before_tool_call`, `after_tool_result`, and `on_error` stages
 - **Budget enforcement** — agent runs backed by leases, token budget tracked per run
@@ -488,16 +488,32 @@ Macros respect the same governance and risk-level constraints as individual tool
 
 ## AI Agent Pipeline
 
-MetaServer includes a **multi-agent PR validation system** powered by LiteLLM that plugs into GitHub Actions:
+MetaServer includes a **multi-agent PR validation system** that plugs into GitHub Actions. Each agent role is bound to a model via `config/models.yaml` — no code changes required to swap providers or models.
 
 ### Agents
 
-| Agent | Model | Role |
-|-------|-------|------|
-| **Validator** | Azure OpenAI | Validates PRs with tests, security scans, architectural checks |
-| **Remediator** | GitHub Models | Auto-fixes imports, conflicts, simple test failures |
-| **Architectural Guardian** | Moonshot | Rejects breaking changes or structural violations |
-| **Functional Verifier** | OpenRouter (proxy — routes to configured underlying model) | Validates end-to-end functionality of meta-PRs |
+| Agent | Role |
+|-------|------|
+| **Validator** | Reviews PRs for code quality, security patterns, and architectural checks |
+| **Remediator** | Auto-fixes common issues (imports, conflicts, simple test failures) |
+| **Architectural Guardian** | Rejects breaking changes or structural violations |
+| **Functional Verifier** | Validates end-to-end functionality of meta-PRs |
+
+### Supported Providers
+
+Agent↔model bindings are fully configurable. MetaServer connects to any provider that exposes an **OpenAI-compatible chat completions endpoint**. The following providers are pre-configured out of the box:
+
+| Provider | Compatibility | Examples |
+|----------|--------------|---------|
+| **Azure OpenAI** | OpenAI API (Azure-hosted) | GPT-4o, o4-mini, etc. |
+| **OpenAI** | OpenAI API (direct) | GPT-4o, o3-mini, etc. |
+| **Anthropic** | Anthropic Messages API | Claude Sonnet, Opus, etc. |
+| **GitHub Models** | OpenAI-compatible (Azure inference) | DeepSeek-V3, Llama, Phi, etc. |
+| **Moonshot** | OpenAI-compatible | Kimi K2, Moonshot v1, etc. |
+| **OpenRouter** | OpenAI-compatible (multi-model proxy) | Any model on OpenRouter's catalog |
+| **Ollama** | OpenAI-compatible (local) | Llama, Mistral, Qwen, etc. |
+
+> **Any endpoint that implements the OpenAI `/v1/chat/completions` contract works.** To add a new provider, add its auth configuration to the `providers:` section in `config/models.yaml` and reference it in an agent binding.
 
 ### Running the Pipeline
 
