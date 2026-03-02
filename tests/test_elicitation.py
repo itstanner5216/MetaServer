@@ -1,10 +1,12 @@
 """Test human-in-the-loop approval flows (Invariant #6, Task 15)."""
 
+import asyncio
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from fastmcp.exceptions import ToolError
 
+from src.meta_mcp.audit import audit_logger
 from src.meta_mcp.middleware import GovernanceMiddleware
 from tests.conftest import read_audit_log
 

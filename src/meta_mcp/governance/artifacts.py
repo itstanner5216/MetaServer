@@ -7,7 +7,7 @@ All artifacts are stored under a safe root directory with path validation.
 import html
 import json
 import os
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -64,21 +64,21 @@ class ApprovalArtifactGenerator:
             Path("/root"),
         }
 
+        resolved_root = self.artifacts_root.resolve()
         for unsafe in unsafe_roots:
             try:
-                if self.artifacts_root.resolve() == unsafe.resolve():
+                unsafe_resolved = unsafe.resolve()
+                if unsafe == Path("/") and resolved_root != unsafe_resolved:
+                    continue
+                if resolved_root == unsafe_resolved:
                     raise ArtifactGenerationError(
                         f"Artifacts root cannot be system directory: {unsafe}"
                     )
-                if self.artifacts_root.resolve().is_relative_to(unsafe.resolve()):
-                    if unsafe == Path("/"):
-                        # Skip: every absolute path is relative to "/",
-                        # and exact root "/" is already rejected by the equality check above.
-                        continue
-                    elif unsafe == Path("/var"):
+                if resolved_root.is_relative_to(unsafe_resolved):
+                    if unsafe == Path("/var"):
                         # Allow /var/tmp and similar
-                        if not self.artifacts_root.resolve().is_relative_to(Path("/var/tmp")):
-                            if not self.artifacts_root.resolve().is_relative_to(Path("/var/log")):
+                        if not resolved_root.is_relative_to(Path("/var/tmp")):
+                            if not resolved_root.is_relative_to(Path("/var/log")):
                                 raise ArtifactGenerationError(
                                     f"Artifacts root cannot be under {unsafe} (except /var/tmp, /var/log)"
                                 )
@@ -245,7 +245,7 @@ class ApprovalArtifactGenerator:
                 "required_scopes": required_scopes,
                 "arguments": arguments,
                 "context_metadata": context_metadata,
-                "generated_at": datetime.utcnow().isoformat(),
+                "generated_at": datetime.now(timezone.utc).isoformat(),
             }
 
             json_content = json.dumps(json_data, indent=2, ensure_ascii=False)
@@ -323,7 +323,7 @@ class ApprovalArtifactGenerator:
         # Generate metadata
         session_id = html.escape(str(context_metadata.get("session_id", "unknown")))
         context_key = html.escape(str(context_metadata.get("context_key", "unknown")))
-        timestamp = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC")
+        timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
 
         html_template = f"""<!DOCTYPE html>
 <html lang="en">

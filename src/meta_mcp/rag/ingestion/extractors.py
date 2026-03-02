@@ -9,13 +9,13 @@ from abc import ABC, abstractmethod
 from pathlib import Path
 
 try:
-    import pypdf
+    import pypdf  # type: ignore[reportMissingImports]
     _HAS_PYPDF = True
 except ImportError:
     _HAS_PYPDF = False
 
 try:
-    from docx import Document as DOCXDocument
+    from docx import Document as DOCXDocument  # type: ignore[reportMissingImports]
     _HAS_DOCX = True
 except ImportError:
     _HAS_DOCX = False

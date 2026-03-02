@@ -142,7 +142,7 @@ class DBusGUIProvider(ApprovalProvider):
 
         try:
             # Import dasbus only when needed (optional dependency)
-            from dasbus.connection import SessionMessageBus
+            from dasbus.connection import SessionMessageBus  # type: ignore[reportMissingImports]
 
             bus = SessionMessageBus()
             proxy = bus.get_proxy(self._bus_name, self._object_path)
@@ -173,7 +173,7 @@ class DBusGUIProvider(ApprovalProvider):
             User's approval response
         """
         try:
-            from dasbus.connection import SessionMessageBus
+            from dasbus.connection import SessionMessageBus  # type: ignore[reportMissingImports]
 
             bus = SessionMessageBus()
             proxy = bus.get_proxy(self._bus_name, self._object_path)
