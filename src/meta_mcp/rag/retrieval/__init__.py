@@ -10,7 +10,7 @@ Components:
 - RetrievalCandidate: Result dataclass with scoring and governance info
 
 Architecture:
-1. Embed query via Gemini
+1. Embed query via configured provider
 2. Search Qdrant for semantic matches
 3. Optionally combine with BM25 lexical scores
 4. Apply governance penalties based on mode

@@ -15,6 +15,8 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
+from ...config import Config
+
 logger = logging.getLogger(__name__)
 
 
@@ -200,7 +202,7 @@ class ContextPackBuilder:
             selected_chunks=selected,
             explainer_output=explainer_result.to_dict(),
             chunk_texts={"chunk-1": "Full text..."},
-            embedding_config={"model": "gemini", "version": "1.0", "topN": 30},
+            embedding_config={"model": Config.EMBEDDING_MODEL, "version": "1.0", "topN": 30},
             retrieval_config={"hybrid": True, "rerank": True}
         )
 

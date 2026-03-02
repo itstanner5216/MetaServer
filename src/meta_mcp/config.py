@@ -178,6 +178,25 @@ class Config:
     ENABLE_PROGRESSIVE_SCHEMAS: bool = False  # Phase 5
     ENABLE_MACROS: bool = True  # Phase 7
 
+    # ========================================================================
+    # LLM Configuration
+    # ========================================================================
+    LLM_MODEL: str = os.getenv("LLM_MODEL", "gpt-4o-mini")
+    LLM_BASE_URL: str = os.getenv("LLM_BASE_URL", "")
+    LLM_API_KEY: str = os.getenv("LLM_API_KEY", "")
+
+    # ========================================================================
+    # Embedding Configuration
+    # ========================================================================
+    EMBEDDING_PROVIDER: str = os.getenv("EMBEDDING_PROVIDER", "openai-compatible")
+    EMBEDDING_BASE_URL: str = os.getenv("EMBEDDING_BASE_URL", "https://api.openai.com/v1")
+    EMBEDDING_API_KEY: str = os.getenv("EMBEDDING_API_KEY", "")
+    EMBEDDING_MODEL: str = os.getenv("EMBEDDING_MODEL", "text-embedding-3-small")
+    EMBEDDING_DIMENSION: int = _parse_non_negative_int.__func__(
+        os.getenv("EMBEDDING_DIMENSION", "1536"),
+        "EMBEDDING_DIMENSION",
+    )
+
     @classmethod
     def validate(cls) -> bool:
         """

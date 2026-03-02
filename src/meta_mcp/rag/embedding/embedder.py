@@ -1,15 +1,19 @@
 # embedding/embedder.py
 """
-Gemini API embedding adapter with batching, retry, and rate limiting.
+Provider-agnostic embedding adapters with batching, retry, and rate limiting.
 """
 
 import logging
 import time
+from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from threading import Lock
 
+import httpx
+
 try:
     import google.generativeai as genai  # type: ignore[import-untyped]
+
     _HAS_GENAI = True
 except ImportError:
     _HAS_GENAI = False
@@ -25,6 +29,22 @@ class EmbeddingResult:
     token_count: int
     model: str
     model_version: str
+
+
+class EmbedderAdapter(ABC):
+    """Abstract base class for embedding adapters."""
+
+    @abstractmethod
+    def embed_batch(self, texts: list[str]) -> list[EmbeddingResult]:
+        """Embed a batch of texts."""
+
+    @abstractmethod
+    def embed_query(self, query: str) -> EmbeddingResult:
+        """Embed a single query."""
+
+    @abstractmethod
+    def get_usage(self) -> dict:
+        """Return usage metrics for adapter calls."""
 
 
 class RateLimiter:
@@ -48,16 +68,115 @@ class RateLimiter:
             self.last_call = time.time()
 
 
-class GeminiEmbedderAdapter:
-    """
-    Adapter for Gemini embedding API with production features.
+class OpenAICompatibleEmbedderAdapter(EmbedderAdapter):
+    """Adapter for OpenAI-compatible `/v1/embeddings` APIs."""
 
-    Features:
-    - Batch embedding (up to 100 texts per call)
-    - Automatic retry with exponential backoff
-    - Rate limiting
-    - Usage tracking for quota management
-    """
+    def __init__(
+        self,
+        base_url: str = "https://api.openai.com/v1",
+        api_key: str = "",
+        model: str = "text-embedding-3-small",
+        model_version: str = "1.0",
+        batch_size: int = 100,
+        max_retries: int = 3,
+        retry_base_delay: int = 5,
+        calls_per_minute: int = 60,
+        timeout: float = 30.0,
+    ):
+        self.base_url = base_url.rstrip("/")
+        self.api_key = api_key
+        self.model = model
+        self.model_version = model_version
+        self.batch_size = batch_size
+        self.max_retries = max_retries
+        self.retry_base_delay = retry_base_delay
+        self.timeout = timeout
+
+        self.rate_limiter = RateLimiter(calls_per_minute)
+        self.call_count = 0
+        self.token_count = 0
+        self.error_count = 0
+
+    def embed_batch(self, texts: list[str]) -> list[EmbeddingResult]:
+        """Batch embed texts with retry handling."""
+        results: list[EmbeddingResult] = []
+        for i in range(0, len(texts), self.batch_size):
+            batch = texts[i : i + self.batch_size]
+            results.extend(self._embed_with_retry(batch))
+        return results
+
+    def _embed_with_retry(self, texts: list[str]) -> list[EmbeddingResult]:
+        retry_count = 0
+        last_error: Exception = RuntimeError("No embedding attempts made")
+
+        while retry_count < self.max_retries:
+            try:
+                self.rate_limiter.wait()
+                payload = {
+                    "model": self.model,
+                    "input": texts,
+                }
+                headers = {"Content-Type": "application/json"}
+                if self.api_key:
+                    headers["Authorization"] = f"Bearer {self.api_key}"
+
+                response = httpx.post(
+                    f"{self.base_url}/embeddings",
+                    json=payload,
+                    headers=headers,
+                    timeout=self.timeout,
+                )
+                response.raise_for_status()
+                data = response.json()
+
+                embeddings_data = data.get("data", [])
+                if not embeddings_data:
+                    raise RuntimeError("No embeddings returned from provider")
+
+                results = []
+                for text, item in zip(texts, embeddings_data):
+                    vector = item.get("embedding", [])
+                    results.append(
+                        EmbeddingResult(
+                            vector=vector,
+                            token_count=len(text.split()),
+                            model=self.model,
+                            model_version=self.model_version,
+                        )
+                    )
+
+                self.call_count += 1
+                self.token_count += sum(len(t.split()) for t in texts)
+                return results
+
+            except Exception as e:
+                last_error = e
+                self.error_count += 1
+                wait_time = self.retry_base_delay * (2**retry_count)
+                logger.warning(f"Embedding error: {e}. Retrying in {wait_time}s")
+                time.sleep(wait_time)
+                retry_count += 1
+
+        raise last_error
+
+    def embed_query(self, query: str) -> EmbeddingResult:
+        """Embed a single query for retrieval."""
+        return self.embed_batch([query])[0]
+
+    def get_usage(self) -> dict:
+        """Get usage statistics."""
+        return {
+            "call_count": self.call_count,
+            "token_count": self.token_count,
+            "error_count": self.error_count,
+            "model": self.model,
+            "model_version": self.model_version,
+            "base_url": self.base_url,
+        }
+
+
+class GeminiEmbedderAdapter(EmbedderAdapter):
+    """Gemini embedding adapter implementation."""
 
     def __init__(
         self,
@@ -81,24 +200,13 @@ class GeminiEmbedderAdapter:
         self.max_retries = max_retries
         self.retry_base_delay = retry_base_delay
 
-        # Rate limiter
         self.rate_limiter = RateLimiter(calls_per_minute)
-
-        # Usage tracking
         self.call_count = 0
         self.token_count = 0
         self.error_count = 0
 
     def embed_batch(self, texts: list[str]) -> list[EmbeddingResult]:
-        """
-        Batch embed texts via Gemini API with retry.
-
-        Args:
-            texts: List of texts to embed
-
-        Returns:
-            List of EmbeddingResult objects
-        """
+        """Batch embed texts via Gemini API with retry."""
         results = []
 
         for i in range(0, len(texts), self.batch_size):
@@ -116,23 +224,16 @@ class GeminiEmbedderAdapter:
 
         while retry_count < self.max_retries:
             try:
-                # Rate limiting
                 self.rate_limiter.wait()
-
-                # Make API call
                 response = genai.embed_content(
                     model=self.model, content=texts, task_type="retrieval_document"
                 )
 
-                # Track usage
                 self.call_count += 1
-                batch_tokens = sum(len(t.split()) for t in texts)  # Approximate
+                batch_tokens = sum(len(t.split()) for t in texts)
                 self.token_count += batch_tokens
 
-                # Parse response
                 embeddings = response["embedding"]
-
-                # Handle single vs batch response
                 if not isinstance(embeddings[0], list):
                     embeddings = [embeddings]
 
@@ -141,7 +242,7 @@ class GeminiEmbedderAdapter:
                     results.append(
                         EmbeddingResult(
                             vector=embedding,
-                            token_count=len(text.split()),  # Approximate
+                            token_count=len(text.split()),
                             model=self.model,
                             model_version=self.model_version,
                         )
@@ -154,7 +255,6 @@ class GeminiEmbedderAdapter:
                 error_str = str(e)
                 last_error = e
 
-                # Check for rate limit errors
                 if (
                     "429" in error_str
                     or "quota" in error_str.lower()
@@ -168,27 +268,20 @@ class GeminiEmbedderAdapter:
                     retry_count += 1
                     self.error_count += 1
                 elif "400" in error_str or "invalid" in error_str.lower():
-                    # Bad request - don't retry
                     logger.warning(f"Invalid request: {e}")
                     raise
                 else:
-                    # Other errors - retry with shorter delay
                     wait_time = 5 * (2**retry_count)
                     logger.warning(f"Embedding error: {e}. Retrying in {wait_time}s")
                     time.sleep(wait_time)
                     retry_count += 1
                     self.error_count += 1
 
-        # All retries exhausted
         logger.warning("All retries exhausted for batch embedding")
         raise last_error
 
     def embed_query(self, query: str) -> EmbeddingResult:
-        """
-        Embed a single query for retrieval.
-
-        Uses "retrieval_query" task type for asymmetric search.
-        """
+        """Embed a single query for retrieval."""
         self.rate_limiter.wait()
 
         try:
