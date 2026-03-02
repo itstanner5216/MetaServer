@@ -7,9 +7,18 @@ Each extractor is versioned for reproducibility.
 import logging
 from abc import ABC, abstractmethod
 from pathlib import Path
+from typing import TYPE_CHECKING
 
-import pypdf
-from docx import Document as DOCXDocument
+if TYPE_CHECKING:
+    import pypdf
+    from docx import Document as DOCXDocument
+
+try:
+    import pypdf  # type: ignore[assignment]
+    from docx import Document as DOCXDocument  # type: ignore[assignment]
+    _HAS_EXTRACT_DEPS = True
+except ImportError:
+    _HAS_EXTRACT_DEPS = False
 
 logger = logging.getLogger(__name__)
 

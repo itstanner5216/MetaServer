@@ -364,13 +364,14 @@ async def test_approval_creates_audit_log(
     mock_fastmcp_context,
     mock_elicit_approve,
     grant_lease,
+    audit_log_path,
 ):
     """
     Test that approval decision is logged to audit.jsonl.
 
     Expected: Audit log should contain approval event
     Validates: Invariant #6 (Elicitation - audit requirement)
-    Note: Uses default audit.jsonl file location
+    Note: Uses tmp_path-based audit log via audit_log_path fixture
     """
     # Setup
     middleware = GovernanceMiddleware()
@@ -386,16 +387,13 @@ async def test_approval_creates_audit_log(
     # Execute
     await middleware.on_call_tool(mock_fastmcp_context, call_next)
 
-    # Small delay to allow async logging to complete
-    import asyncio
+    # Flush buffered audit entries to disk before reading
+    from src.meta_mcp.audit import audit_logger
 
-    await asyncio.sleep(0.2)
+    audit_logger.flush()
 
-    # Read audit log from default location
-    from pathlib import Path
-
-    audit_log_default = Path("./audit.jsonl")
-    entries = read_audit_log(audit_log_default)
+    # Read audit log from the tmp_path location provided by the fixture
+    entries = read_audit_log(audit_log_path)
 
     # Filter to only our test session
     test_entries = [e for e in entries if e.get("session_id") == "session-audit-test"]

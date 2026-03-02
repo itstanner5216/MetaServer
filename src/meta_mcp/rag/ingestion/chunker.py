@@ -8,8 +8,16 @@ import hashlib
 import logging
 import re
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
-import tiktoken
+if TYPE_CHECKING:
+    import tiktoken
+
+try:
+    import tiktoken  # type: ignore[no-redef]
+    _HAS_TIKTOKEN = True
+except ImportError:
+    _HAS_TIKTOKEN = False
 
 logger = logging.getLogger(__name__)
 

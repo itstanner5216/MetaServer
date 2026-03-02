@@ -70,6 +70,10 @@ class ApprovalArtifactGenerator:
                     raise ArtifactGenerationError(
                         f"Artifacts root cannot be system directory: {unsafe}"
                     )
+                # Skip is_relative_to check for "/" since every absolute path
+                # is relative to "/" — exact equality is already checked above.
+                if unsafe == Path("/"):
+                    continue
                 if self.artifacts_root.resolve().is_relative_to(unsafe.resolve()):
                     if unsafe == Path("/var"):
                         # Allow /var/tmp and similar

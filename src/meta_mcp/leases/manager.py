@@ -3,6 +3,7 @@
 import asyncio
 import json
 from datetime import datetime, timezone
+from typing import Optional
 
 from loguru import logger
 from redis import asyncio as aioredis

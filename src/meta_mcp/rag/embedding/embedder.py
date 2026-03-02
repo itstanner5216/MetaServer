@@ -7,8 +7,16 @@ import logging
 import time
 from dataclasses import dataclass
 from threading import Lock
+from typing import TYPE_CHECKING
 
-import google.generativeai as genai
+if TYPE_CHECKING:
+    import google.generativeai as genai
+
+try:
+    import google.generativeai as genai  # type: ignore[import-untyped,no-redef]
+    _HAS_GENAI = True
+except ImportError:
+    _HAS_GENAI = False
 
 logger = logging.getLogger(__name__)
 

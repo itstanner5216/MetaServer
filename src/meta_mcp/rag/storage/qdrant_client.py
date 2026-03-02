@@ -4,17 +4,32 @@ High-level Qdrant client for chunk storage and retrieval.
 """
 
 import logging
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from qdrant_client import QdrantClient
-from qdrant_client.models import (
-    FieldCondition,
-    Filter,
-    MatchValue,
-    PointStruct,
-    Range,
-    UpdateStatus,
-)
+if TYPE_CHECKING:
+    from qdrant_client import QdrantClient
+    from qdrant_client.models import (
+        FieldCondition,
+        Filter,
+        MatchValue,
+        PointStruct,
+        Range,
+        UpdateStatus,
+    )
+
+try:
+    from qdrant_client import QdrantClient  # type: ignore[no-redef]
+    from qdrant_client.models import (  # type: ignore[no-redef]
+        FieldCondition,
+        Filter,
+        MatchValue,
+        PointStruct,
+        Range,
+        UpdateStatus,
+    )
+    _HAS_QDRANT = True
+except ImportError:
+    _HAS_QDRANT = False
 
 logger = logging.getLogger(__name__)
 
