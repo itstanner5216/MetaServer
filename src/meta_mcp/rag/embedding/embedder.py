@@ -160,7 +160,7 @@ class GeminiEmbedderAdapter:
                     self.error_count += 1
                 elif "400" in error_str or "invalid" in error_str.lower():
                     # Bad request - don't retry
-                    logger.error(f"Invalid request: {e}")
+                    logger.warning(f"Invalid request: {e}")
                     raise
                 else:
                     # Other errors - retry with shorter delay
@@ -171,7 +171,7 @@ class GeminiEmbedderAdapter:
                     self.error_count += 1
 
         # All retries exhausted
-        logger.error("All retries exhausted for batch embedding")
+        logger.warning("All retries exhausted for batch embedding")
         raise last_error
 
     def embed_query(self, query: str) -> EmbeddingResult:
@@ -199,7 +199,7 @@ class GeminiEmbedderAdapter:
 
         except Exception as e:
             self.error_count += 1
-            logger.error(f"Query embedding failed: {e}")
+            logger.warning(f"Query embedding failed: {e}")
             raise
 
     def get_usage(self) -> dict:
