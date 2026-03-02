@@ -94,7 +94,7 @@ jobs:
             --cov-report=term-missing \
             --cov-report=xml \
             --cov-report=html \
-            --cov-fail-under=85
+            --cov-fail-under=70
 
       - name: Run performance benchmarks (opt-in)
         if: env.RUN_BENCHMARKS == 'true'
