@@ -1,6 +1,17 @@
+<div align="center">
+
 # MetaServer
 
-**Capability security for AI agents.**
+<br>
+
+### Every other MCP server hands your agent a master key.
+### MetaServer hands it a visitor badge.
+
+<br>
+
+*Zero standing privilege. &nbsp;·&nbsp; Earned access. &nbsp;·&nbsp; Total accountability.*
+
+<br>
 
 [![CI](https://github.com/itstanner5216/MetaServer/actions/workflows/ci.yml/badge.svg)](https://github.com/itstanner5216/MetaServer/actions/workflows/ci.yml)
 [![CodeQL](https://github.com/itstanner5216/MetaServer/actions/workflows/codeql.yml/badge.svg)](https://github.com/itstanner5216/MetaServer/actions/workflows/codeql.yml)
@@ -9,11 +20,33 @@
 [![Code style: ruff](https://img.shields.io/badge/code%20style-ruff-000000.svg)](https://github.com/astral-sh/ruff)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-A [FastMCP](https://github.com/jlowin/fastmcp)-based MCP server that gives enterprises control over what tools AI agents can access, for how long, and with full accountability. Standard MCP servers expose every tool to every agent, all the time — MetaServer inverts that default.
+</div>
 
-- 🔍 **Progressive tool discovery** — only 2 bootstrap tools visible at startup; everything else is hidden until explicitly requested (86.7% context reduction)
-- 🔐 **Lease-based access (TTL + calls)** — time-limited, call-budgeted, HMAC-SHA256 signed leases scoped per session and tool
-- ✅ **Approvals + audit logging** — tri-state governance (`READ_ONLY` / `PERMISSION` / `BYPASS`), scoped approval flow, every decision logged
+---
+
+> Standard MCP servers expose your entire tool surface to every agent — all at once, all the time, without question.
+> That's not access control. That's an open floor plan with no doors.
+
+MetaServer inverts that default.
+
+Agents see two tools at startup. They earn the rest. Every access is HMAC-SHA256 signed, time-limited, and call-budgeted. When the lease expires, the tool disappears from the agent's view — automatically, without intervention. Every allow, every deny, every approval — written to an immutable audit trail.
+
+<br>
+
+| | Standard MCP | MetaServer |
+|---|---|---|
+| Tools visible at startup | All 15 | **2** |
+| Access duration | Indefinite | **Expires** |
+| Blast radius | Entire tool surface | **Scoped to session** |
+| Audit trail | None | **Every decision** |
+
+---
+
+🔍 &nbsp; 2 tools at startup. 13 locked. Agents earn access — they don't get it for free. *(86.7% context reduction)*
+
+🔐 &nbsp; Leases expire. HMAC-SHA256 signed. Time-limited. Call-budgeted. Scoped per session. No standing access. Ever.
+
+✅ &nbsp; Every decision logged. Every approval scoped. Every deny recorded. Nothing runs without a paper trail.
 
 ---
 
