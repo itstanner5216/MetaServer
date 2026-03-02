@@ -10,7 +10,8 @@ import time
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 
-from ..embedding import GeminiEmbedderAdapter
+from ...config import Config
+from ..embedding import EmbedderAdapter
 from ..storage import QdrantStorageClient
 from .bm25 import BM25Index
 
@@ -163,7 +164,7 @@ class SemanticRetriever:
     Hybrid semantic + lexical retriever with governance-aware ranking.
 
     Architecture:
-    1. Embed query via Gemini
+    1. Embed query via configured embedding provider
     2. Search Qdrant for semantic matches
     3. Optionally combine with BM25 lexical scores
     4. Apply governance penalties based on mode
@@ -187,7 +188,7 @@ class SemanticRetriever:
     def __init__(
         self,
         qdrant_client: QdrantStorageClient,
-        embedder: GeminiEmbedderAdapter,
+        embedder: EmbedderAdapter,
         enable_bm25: bool = True,
         bm25_weight: float = 0.4,
         semantic_weight: float = 0.6,
@@ -198,7 +199,7 @@ class SemanticRetriever:
 
         Args:
             qdrant_client: Client for Qdrant vector database
-            embedder: Gemini embedding adapter
+            embedder: Embedding adapter implementation
             enable_bm25: Whether to enable BM25 hybrid search
             bm25_weight: Weight for BM25 scores (0-1)
             semantic_weight: Weight for semantic scores (0-1)
@@ -465,7 +466,7 @@ class SemanticRetriever:
 
             # Use a dummy vector to get all chunks in scope
             # This is a workaround - ideally we'd have a scroll/iterate API
-            dummy_vector = [0.0] * 768  # Gemini embedding dimension
+            dummy_vector = [0.0] * Config.EMBEDDING_DIMENSION
 
             results = self.qdrant_client.search(
                 vector=dummy_vector,

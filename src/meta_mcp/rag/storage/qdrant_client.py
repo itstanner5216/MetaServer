@@ -4,6 +4,7 @@ High-level Qdrant client for chunk storage and retrieval.
 """
 
 import logging
+import os
 from typing import Any
 
 try:
@@ -30,7 +31,7 @@ class QdrantStorageClient:
         self,
         url: str = "http://localhost:6333",
         api_key: str | None = None,
-        collection: str = "chunks_gemini_v1",
+        collection: str = os.getenv("QDRANT_COLLECTION", "chunks_v1"),
         timeout: int = 30,
     ):
         if not _HAS_QDRANT:
@@ -50,7 +51,7 @@ class QdrantStorageClient:
 
         Args:
             chunk_id: Unique identifier for the chunk
-            vector: Embedding vector (768-dim for Gemini)
+            vector: Embedding vector
             payload: Metadata to store with the vector
 
         Returns:

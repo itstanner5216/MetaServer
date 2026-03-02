@@ -9,15 +9,17 @@ retrieval candidates, providing rationales for auditability.
 
 import json
 import logging
+import os
 import re
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any
+from typing import Any, Protocol
 
-try:
-    import litellm
-except ImportError:
-    litellm = None
+
+class LLMClient(Protocol):
+    """Any object with a completion() method (litellm, openai, or custom)."""
+
+    def completion(self, model: str, messages: list[dict], **kwargs) -> Any: ...
 
 from ..retrieval import RetrievalCandidate
 
@@ -165,7 +167,7 @@ class RetrievalExplainer:
 
     Example:
         explainer = RetrievalExplainer(
-            llm_client=litellm,
+            llm_client=client,
             model="gpt-4o-mini",
             temperature=0.3
         )
@@ -179,8 +181,8 @@ class RetrievalExplainer:
 
     def __init__(
         self,
-        llm_client: Any = None,
-        model: str = "gpt-4o-mini",
+        llm_client: LLMClient | Any = None,
+        model: str | None = None,
         temperature: float = 0.3,
         max_selected: int = 8,
         min_selected: int = 3,
@@ -190,7 +192,7 @@ class RetrievalExplainer:
         Initialize the Retrieval Explainer.
 
         Args:
-            llm_client: LLM client (litellm or compatible). If None, uses litellm.
+            llm_client: LLM client (OpenAI-compatible). If None, auto-detects litellm or openai.
             model: Model identifier for LLM calls (e.g., "gpt-4o-mini", "claude-3-haiku-20240307")
             temperature: Sampling temperature (0.3 for determinism)
             max_selected: Maximum chunks to select (default 8)
@@ -198,15 +200,42 @@ class RetrievalExplainer:
             max_retries: Number of retries on invalid JSON response
         """
         if llm_client is None:
-            if litellm is None:
-                raise ImportError(
-                    "litellm is required for RetrievalExplainer. Install with: pip install litellm"
-                )
-            self.llm_client = litellm
+            try:
+                import litellm  # type: ignore[import-not-found]
+
+                self.llm_client = litellm
+            except ImportError:
+                try:
+                    import openai  # type: ignore[import-not-found]
+
+                    self.llm_client = openai
+                except ImportError as exc:
+                    raise RuntimeError(
+                        "An OpenAI-compatible LLM client is required. "
+                        "Install one with: pip install openai  OR  pip install litellm"
+                    ) from exc
         else:
             self.llm_client = llm_client
 
-        self.model = model
+        if not hasattr(self.llm_client, "completion") and not hasattr(self.llm_client, "chat"):
+            raise TypeError(
+                "llm_client must provide completion() or chat.completions.create()"
+            )
+
+        self.model = model or os.getenv("LLM_MODEL", "gpt-4o-mini")
+        self.base_url = os.getenv("LLM_BASE_URL", "")
+        self.api_key = os.getenv("LLM_API_KEY", "")
+
+        openai_factory = getattr(self.llm_client, "OpenAI", None)
+        if openai_factory and not hasattr(self.llm_client, "completion") and self.api_key:
+            client_kwargs = {"api_key": self.api_key}
+            if self.base_url:
+                client_kwargs["base_url"] = self.base_url
+            try:
+                self.llm_client = openai_factory(**client_kwargs)
+            except Exception:
+                logger.debug("Failed to initialize OpenAI client with base_url/api_key", exc_info=True)
+
         self.temperature = temperature
         self.max_selected = max_selected
         self.min_selected = min_selected
@@ -264,7 +293,7 @@ class RetrievalExplainer:
         user_prompt = self._build_prompt(query, candidates)
 
         # Try LLM call with retries
-        last_error = None
+        last_error = "Unknown error"
         for attempt in range(self.max_retries + 1):
             try:
                 # Use retry prompt after first attempt
@@ -406,11 +435,18 @@ class RetrievalExplainer:
             if "gpt" in self.model.lower() or "o1" in self.model.lower():
                 kwargs["response_format"] = {"type": "json_object"}
 
-            # Call LLM via litellm
-            response = self.llm_client.completion(**kwargs)
-
-            # Extract content
-            content = response.choices[0].message.content
+            if hasattr(self.llm_client, "completion"):
+                response = self.llm_client.completion(**kwargs)
+                content = response.choices[0].message.content
+            else:
+                chat_interface = getattr(self.llm_client, "chat", None)
+                completions_api = getattr(chat_interface, "completions", None)
+                if completions_api is None:
+                    raise RuntimeError(
+                        "LLM client does not support completion() or chat.completions.create()"
+                    )
+                response = completions_api.create(**kwargs)
+                content = response.choices[0].message.content
             return content
 
         except Exception as e:
