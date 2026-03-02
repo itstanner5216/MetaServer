@@ -73,7 +73,7 @@ class ApprovalArtifactGenerator:
                 if self.artifacts_root.resolve().is_relative_to(unsafe.resolve()):
                     if unsafe == Path("/"):
                         # Skip: every absolute path is relative to "/",
-                        # exact equality is already checked above.
+                        # and exact root "/" is already rejected by the equality check above.
                         continue
                     elif unsafe == Path("/var"):
                         # Allow /var/tmp and similar

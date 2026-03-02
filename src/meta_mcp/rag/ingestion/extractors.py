@@ -82,7 +82,7 @@ class PDFExtractor(Extractor):
                     pages.append(f"[Page {i + 1}]\n{text}")
             return "\n\n".join(pages)
         except Exception as e:
-            logger.error(f"PDF extraction failed for {path}: {e}")
+            logger.warning(f"PDF extraction failed for {path}: {e}")
             raise
 
     def can_extract(self, path: str) -> bool:
@@ -114,7 +114,7 @@ class DOCXExtractor(Extractor):
                         paragraphs.append(para.text)
             return "\n\n".join(paragraphs)
         except Exception as e:
-            logger.error(f"DOCX extraction failed for {path}: {e}")
+            logger.warning(f"DOCX extraction failed for {path}: {e}")
             raise
 
     def can_extract(self, path: str) -> bool:
