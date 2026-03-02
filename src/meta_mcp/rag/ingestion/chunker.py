@@ -55,6 +55,11 @@ class SemanticChunker:
         self.overlap_tokens = overlap_tokens
         self.min_tokens = min_tokens
         self.max_tokens = max_tokens
+        if not _HAS_TIKTOKEN:
+            raise RuntimeError(
+                "tiktoken is required for SemanticChunker. "
+                "Install it with: pip install tiktoken"
+            )
         # Use cl100k_base encoding (same as GPT-4, close to Gemini tokenization)
         self.encoder = tiktoken.get_encoding("cl100k_base")
 
