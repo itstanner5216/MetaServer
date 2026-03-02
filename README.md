@@ -1,5 +1,7 @@
 # MetaServer
 
+**Capability security for AI agents.**
+
 [![CI](https://github.com/itstanner5216/MetaServer/actions/workflows/ci.yml/badge.svg)](https://github.com/itstanner5216/MetaServer/actions/workflows/ci.yml)
 [![CodeQL](https://github.com/itstanner5216/MetaServer/actions/workflows/codeql.yml/badge.svg)](https://github.com/itstanner5216/MetaServer/actions/workflows/codeql.yml)
 [![codecov](https://codecov.io/gh/itstanner5216/MetaServer/branch/main/graph/badge.svg)](https://codecov.io/gh/itstanner5216/MetaServer)
@@ -7,31 +9,11 @@
 [![Code style: ruff](https://img.shields.io/badge/code%20style-ruff-000000.svg)](https://github.com/astral-sh/ruff)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-> **Capability security for AI agents. Progressive tool discovery, cryptographic leases, tri-state governance, and full audit trails — so enterprises can deploy MCP agents they actually trust.**
+A [FastMCP](https://github.com/jlowin/fastmcp)-based MCP server that gives enterprises control over what tools AI agents can access, for how long, and with full accountability. Standard MCP servers expose every tool to every agent, all the time — MetaServer inverts that default.
 
----
-
-## The Problem
-
-Standard MCP servers expose every tool to every agent, all the time. For enterprises, that means:
-
-- **Token waste** — agents drown in irrelevant tool schemas, burning context window on tools they will never call
-- **Zero access control** — sensitive operations (file deletion, `git reset`, shell execution) sit one accidental tool call away
-- **No audit trail** — no approval gate, no lease, no way to revoke access after the fact
-
-If you are deploying AI agents against internal systems, you cannot ship this. You need **capability security**: agents get the minimum tools, for the minimum time, with full accountability.
-
-## How MetaServer Solves It
-
-MetaServer is a [FastMCP](https://github.com/jlowin/fastmcp)-based **Model Context Protocol (MCP) server** that inverts the default. Tools are **hidden by default** and only surfaced when the agent explicitly searches for them. Every sensitive operation passes through a governance policy, scoped approval, and a time-limited cryptographic lease — all fully audited.
-
-| Layer | What it does |
-|-------|-------------|
-| **Progressive Discovery** | Only 2 bootstrap tools visible at startup; everything else is hidden until requested |
-| **Tri-State Governance** | Every call evaluated against a `READ_ONLY` / `PERMISSION` / `BYPASS` policy matrix; fails closed |
-| **Ephemeral Leases** | Time-limited, call-budgeted, Redis-backed leases scoped to `(client_id, tool_id)` |
-| **Capability Tokens** | HMAC-SHA256 signed tokens bound per session and tool; constant-time verification |
-| **Audit Trail** | Every governance decision written to rotating JSON Lines with ISO 8601 timestamps |
+- 🔍 **Progressive tool discovery** — only 2 bootstrap tools visible at startup; everything else is hidden until explicitly requested (86.7% context reduction)
+- 🔐 **Lease-based access (TTL + calls)** — time-limited, call-budgeted, HMAC-SHA256 signed leases scoped per session and tool
+- ✅ **Approvals + audit logging** — tri-state governance (`READ_ONLY` / `PERMISSION` / `BYPASS`), scoped approval flow, every decision logged
 
 ---
 
@@ -461,7 +443,9 @@ Macros respect the same governance and risk-level constraints as individual tool
 
 ---
 
-## AI Agent Pipeline *(Optional)*
+## Developer Tooling
+
+### AI Agent Pipeline *(Optional)*
 
 > **This is an optional add-on.** The core MetaServer (progressive discovery, governance, leases, capability tokens, audit) requires no AI model API keys. The agent pipeline below is a separate feature for teams that want automated PR validation on top of MetaServer.
 
@@ -474,7 +458,7 @@ MetaServer includes a **multi-agent PR validation system** that plugs into GitHu
 | **Architectural Guardian** | Rejects breaking changes or structural violations |
 | **Functional Verifier** | Validates end-to-end functionality of meta-PRs |
 
-### Running the Pipeline
+#### Running the Pipeline
 
 Via GitHub Actions:
 1. Go to **Actions** → **🤖 Intelligent PR Validation & Auto-Remediation**
@@ -491,11 +475,7 @@ Remove `--dry-run` to post actual GitHub comments and create PRs.
 
 See [`docs/AI_AGENT_PIPELINE.md`](docs/AI_AGENT_PIPELINE.md) and [`examples/ai_agent_quick_start.py`](examples/ai_agent_quick_start.py) for full usage.
 
----
-
-## Development
-
-### Setup
+### Development Setup
 
 ```bash
 git clone https://github.com/itstanner5216/MetaServer.git
@@ -535,9 +515,7 @@ pip install -e ".[gui-approval]"
 
 Automatic fallback to `ctx.elicit()` → `systemd-ask-password` when not available.
 
----
-
-## Testing
+### Testing
 
 ```bash
 # Full test suite
