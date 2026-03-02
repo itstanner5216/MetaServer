@@ -89,6 +89,29 @@ class Config:
     )
 
     # ========================================================================
+    # AI Provider Configuration
+    # ========================================================================
+    # Embedding provider (any OpenAI-compatible endpoint, or "gemini" for Google AI)
+    EMBEDDING_PROVIDER: str = os.getenv("EMBEDDING_PROVIDER", "openai-compatible")
+    EMBEDDING_BASE_URL: str = os.getenv("EMBEDDING_BASE_URL", "https://api.openai.com/v1")
+    EMBEDDING_API_KEY: str = os.getenv("EMBEDDING_API_KEY", "")
+    EMBEDDING_MODEL: str = os.getenv("EMBEDDING_MODEL", "text-embedding-3-small")
+    EMBEDDING_DIMENSION: int = int(os.getenv("EMBEDDING_DIMENSION", "1536"))
+
+    # LLM provider (any OpenAI-compatible endpoint, or litellm for multi-provider routing)
+    LLM_BASE_URL: str = os.getenv("LLM_BASE_URL", "")
+    LLM_API_KEY: str = os.getenv("LLM_API_KEY", "")
+    LLM_MODEL: str = os.getenv("LLM_MODEL", "gpt-4o-mini")
+
+    # Vector store
+    QDRANT_URL: str = os.getenv("QDRANT_URL", "http://localhost:6333")
+    QDRANT_API_KEY: str = os.getenv("QDRANT_API_KEY", "")
+    QDRANT_COLLECTION: str = os.getenv("QDRANT_COLLECTION", "chunks_v1")
+
+    # Tokenizer
+    CHUNKER_ENCODING: str = os.getenv("CHUNKER_ENCODING", "cl100k_base")
+
+    # ========================================================================
     # Redis Configuration
     # ========================================================================
     REDIS_URL: str = os.getenv("REDIS_URL", "redis://localhost:6379")

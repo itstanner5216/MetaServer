@@ -145,7 +145,7 @@ async def get_redis_client() -> aioredis.Redis:
                     exc,
                 )
                 if _redis_client is not None:
-                    await _redis_client.close()
+                    await _redis_client.aclose()
                     _redis_client = None
                 if _redis_pool is not None:
                     await _redis_pool.disconnect()
@@ -183,7 +183,7 @@ async def close_redis_client() -> None:
 
     if _redis_client is not None:
         try:
-            await _redis_client.close()
+            await _redis_client.aclose()
         except RuntimeError as exc:
             logger.warning("Redis client close skipped: {}", exc)
         _redis_client = None

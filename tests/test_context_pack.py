@@ -1,6 +1,6 @@
 """Tests for ContextPack builder and validator modules."""
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from unittest.mock import patch
 
 import pytest
@@ -64,8 +64,8 @@ class TestContextPack:
             explainer_output={"explanation": "test"},
             token_budget={"total_budget": 8000, "used_by_selection": 100, "available_for_generation": 7900},
             signature="abcd1234",
-            created_at=datetime.utcnow(),
-            expires_at=datetime.utcnow() + timedelta(minutes=5),
+            created_at=datetime.now(timezone.utc),
+            expires_at=datetime.now(timezone.utc) + timedelta(minutes=5),
         )
 
     def test_to_dict(self):
@@ -112,8 +112,8 @@ class TestContextPack:
             explainer_output={},
             token_budget={},
             signature="sig",
-            created_at=datetime.utcnow() - timedelta(hours=1),
-            expires_at=datetime.utcnow() - timedelta(minutes=5),
+            created_at=datetime.now(timezone.utc) - timedelta(hours=1),
+            expires_at=datetime.now(timezone.utc) - timedelta(minutes=5),
         )
         
         assert pack.is_expired is True
@@ -428,7 +428,7 @@ class TestValidationResult:
             is_valid=True,
             status=ValidationStatus.VALID,
             error_message="",
-            validated_at=datetime.utcnow(),
+            validated_at=datetime.now(timezone.utc),
         )
         
         result_dict = result.to_dict()

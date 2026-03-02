@@ -6,6 +6,7 @@ Splits on document structure first, then by token count with overlap.
 
 import hashlib
 import logging
+import os
 import re
 from dataclasses import dataclass
 
@@ -46,6 +47,7 @@ class SemanticChunker:
         overlap_tokens: int = 50,
         min_tokens: int = 100,
         max_tokens: int = 2000,
+        encoding_name: str | None = None,
     ):
         self.target_tokens = target_tokens
         self.overlap_tokens = overlap_tokens
@@ -56,8 +58,9 @@ class SemanticChunker:
                 "tiktoken is required for SemanticChunker. "
                 "Install it with: pip install tiktoken"
             )
-        # Use cl100k_base encoding (same as GPT-4, close to Gemini tokenization)
-        self.encoder = tiktoken.get_encoding("cl100k_base")
+        # Default encoding; override via CHUNKER_ENCODING env var to match your model
+        encoding = encoding_name or os.getenv("CHUNKER_ENCODING", "cl100k_base")
+        self.encoder = tiktoken.get_encoding(encoding)
 
     def chunk(self, text: str, mime_type: str = "text/plain") -> list[Chunk]:
         """

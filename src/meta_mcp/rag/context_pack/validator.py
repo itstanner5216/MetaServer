@@ -11,7 +11,7 @@ import hmac
 import json
 import logging
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 
 from .builder import ContextPack
@@ -128,7 +128,7 @@ class ContextPackValidator:
             ValidationResult with validation status and any error message
         """
         self._validations_performed += 1
-        validated_at = datetime.utcnow()
+        validated_at = datetime.now(timezone.utc)
 
         logger.debug(f"Validating ContextPack: pack_id={pack.pack_id}")
 
@@ -239,7 +239,7 @@ class ContextPackValidator:
         Returns:
             True if current time is past expires_at, False otherwise
         """
-        return datetime.utcnow() > pack.expires_at
+        return datetime.now(timezone.utc) > pack.expires_at
 
     def time_until_expiration(self, pack: ContextPack) -> float | None:
         """
@@ -251,7 +251,7 @@ class ContextPackValidator:
         Returns:
             Seconds until expiration, or None if already expired
         """
-        remaining = (pack.expires_at - datetime.utcnow()).total_seconds()
+        remaining = (pack.expires_at - datetime.now(timezone.utc)).total_seconds()
         return remaining if remaining > 0 else None
 
     def get_metrics(self) -> dict:
