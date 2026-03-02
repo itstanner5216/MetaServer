@@ -146,9 +146,10 @@ class DBusGUIProvider(ApprovalProvider):
 
             bus = SessionMessageBus()
             proxy = bus.get_proxy(self._bus_name, self._object_path)
+            proxy_any: Any = proxy
 
             # Test if proxy is accessible
-            await asyncio.get_event_loop().run_in_executor(None, lambda: proxy.Introspect())
+            await asyncio.get_event_loop().run_in_executor(None, lambda: proxy_any.Introspect())
             self._available = True
             logger.info("DBus GUI approval provider is available")
             return True
@@ -176,12 +177,13 @@ class DBusGUIProvider(ApprovalProvider):
 
             bus = SessionMessageBus()
             proxy = bus.get_proxy(self._bus_name, self._object_path)
+            proxy_any: Any = proxy
 
             # Call DBus method with timeout
             result = await asyncio.wait_for(
                 asyncio.get_event_loop().run_in_executor(
                     None,
-                    lambda: proxy.RequestApproval(
+                    lambda: proxy_any.RequestApproval(
                         request.request_id,
                         request.tool_name,
                         request.message,

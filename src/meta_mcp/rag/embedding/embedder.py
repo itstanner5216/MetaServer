@@ -208,7 +208,7 @@ class GeminiEmbedderAdapter:
 
         except Exception as e:
             self.error_count += 1
-            logger.error(f"Query embedding failed: {e}")
+            logger.warning(f"Query embedding failed: {e}")
             raise
 
     def get_usage(self) -> dict:

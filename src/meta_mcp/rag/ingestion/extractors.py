@@ -10,10 +10,15 @@ from pathlib import Path
 
 try:
     import pypdf
-    from docx import Document as DOCXDocument
-    _HAS_EXTRACT_DEPS = True
+    _HAS_PYPDF = True
 except ImportError:
-    _HAS_EXTRACT_DEPS = False
+    _HAS_PYPDF = False
+
+try:
+    from docx import Document as DOCXDocument
+    _HAS_DOCX = True
+except ImportError:
+    _HAS_DOCX = False
 
 logger = logging.getLogger(__name__)
 
@@ -64,7 +69,7 @@ class PDFExtractor(Extractor):
     version = "1.0"
 
     def extract(self, path: str) -> str:
-        if not _HAS_EXTRACT_DEPS:
+        if not _HAS_PYPDF:
             raise RuntimeError(
                 "pypdf is required for PDFExtractor. Install it with: pip install pypdf"
             )
@@ -91,7 +96,7 @@ class DOCXExtractor(Extractor):
     version = "1.0"
 
     def extract(self, path: str) -> str:
-        if not _HAS_EXTRACT_DEPS:
+        if not _HAS_DOCX:
             raise RuntimeError(
                 "python-docx is required for DOCXExtractor. "
                 "Install it with: pip install python-docx"

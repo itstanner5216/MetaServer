@@ -135,7 +135,8 @@ class TestParseScopes:
     def test_invalid_json_list_string_falls_back_to_csv(self):
         from src.meta_mcp.governance.approval import FastMCPElicitProvider
         result = FastMCPElicitProvider._parse_scopes("[not valid json")
-        assert "not valid json" in result[0] or len(result) > 0
+        assert len(result) > 0
+        assert "not valid json" in result[0]
 
     def test_csv_string(self):
         from src.meta_mcp.governance.approval import FastMCPElicitProvider
@@ -324,9 +325,13 @@ async def test_dbus_provider_is_available_false_without_dasbus():
     """Test DBusGUIProvider.is_available() returns False when dasbus not installed."""
     from src.meta_mcp.governance.approval import DBusGUIProvider
     provider = DBusGUIProvider()
-    # dasbus is not installed in test env, so should return False
     result = await provider.is_available()
-    assert result is False
+    # Environment-independent: verify bool contract, assert False only when dasbus is absent
+    import importlib.util
+    if importlib.util.find_spec("dasbus") is None:
+        assert result is False
+    else:
+        assert isinstance(result, bool)
 
 
 @pytest.mark.asyncio
@@ -467,12 +472,17 @@ def test_get_artifact_generator_singleton(tmp_path, monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_factory_auto_selects_fastmcp_elicit():
+async def test_factory_auto_selects_fastmcp_elicit(monkeypatch):
     """ApprovalProviderFactory.create_provider() auto-selects FastMCPElicitProvider with context."""
     from src.meta_mcp.governance.approval import (
         ApprovalProviderFactory,
+        DBusGUIProvider,
         FastMCPElicitProvider,
     )
+    # Mock DBus as unavailable so auto-selection is deterministic
+    async def _dbus_unavailable(self):
+        return False
+    monkeypatch.setattr(DBusGUIProvider, "is_available", _dbus_unavailable)
     ctx = MagicMock()
     ctx.elicit = MagicMock()
     provider = await ApprovalProviderFactory.create_provider(context=ctx)
@@ -532,12 +542,14 @@ async def test_get_approval_provider_singleton(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_dbus_provider_is_available_cached():
-    """DBusGUIProvider.is_available() returns cached False on second call."""
+    """DBusGUIProvider.is_available() caches result on second call."""
     from src.meta_mcp.governance.approval import DBusGUIProvider
     provider = DBusGUIProvider()
     r1 = await provider.is_available()
     r2 = await provider.is_available()
-    assert not r1 and not r2  # Cached False (no dasbus)
+    # Verify caching: both calls return the same value
+    assert r1 == r2
+    assert provider._available == r1
 
 
 # ============================================================================
@@ -552,11 +564,11 @@ def test_verify_token_non_canonical_base64():
     token = generate_token("client", "tool", 300, "secret_32_bytes_minimum_length!!")
     # Split and corrupt
     parts = token.split(".")
-    if len(parts) == 2:
-        # Try with a corrupted signature (should fail)
-        bad_token = parts[0] + ".badsignature"
-        result = verify_token(bad_token, "client", "tool", "secret_32_bytes_minimum_length!!")
-        assert result is False
+    assert len(parts) == 2, f"Expected token with exactly 2 parts, got {len(parts)}"
+    # Try with a corrupted signature (should fail)
+    bad_token = parts[0] + ".badsignature"
+    result = verify_token(bad_token, "client", "tool", "secret_32_bytes_minimum_length!!")
+    assert result is False
 
 
 def test_verify_token_valid_roundtrip():
