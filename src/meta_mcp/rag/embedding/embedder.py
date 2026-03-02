@@ -73,6 +73,11 @@ class GeminiEmbedderAdapter:
         retry_base_delay: int = 60,
         calls_per_minute: int = 60,
     ):
+        if not _HAS_GENAI:
+            raise RuntimeError(
+                "google-generativeai is required for GeminiEmbedderAdapter. "
+                "Install it with: pip install google-generativeai"
+            )
         genai.configure(api_key=api_key)
         self.model = model
         self.model_version = model_version
@@ -111,7 +116,7 @@ class GeminiEmbedderAdapter:
         """Embed a single batch with retry logic."""
 
         retry_count = 0
-        last_error = None
+        last_error: Exception = RuntimeError("No embedding attempts made")
 
         while retry_count < self.max_retries:
             try:

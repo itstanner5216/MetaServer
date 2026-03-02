@@ -44,6 +44,11 @@ class QdrantStorageClient:
         collection: str = "chunks_gemini_v1",
         timeout: int = 30,
     ):
+        if not _HAS_QDRANT:
+            raise RuntimeError(
+                "qdrant-client is required for QdrantStorageClient. "
+                "Install it with: pip install qdrant-client"
+            )
         if api_key:
             self.client = QdrantClient(url=url, api_key=api_key, timeout=timeout)
         else:
@@ -214,7 +219,7 @@ class QdrantStorageClient:
             {"name": s.name, "creation_time": s.creation_time, "size": s.size} for s in snapshots
         ]
 
-    def restore_snapshot(self, snapshot_name: str, snapshot_location: str = None) -> bool:
+    def restore_snapshot(self, snapshot_name: str, snapshot_location: str | None = None) -> bool:
         """
         Restore collection from a snapshot.
 

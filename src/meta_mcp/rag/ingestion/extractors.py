@@ -69,6 +69,10 @@ class PDFExtractor(Extractor):
     version = "1.0"
 
     def extract(self, path: str) -> str:
+        if not _HAS_EXTRACT_DEPS:
+            raise RuntimeError(
+                "pypdf is required for PDFExtractor. Install it with: pip install pypdf"
+            )
         try:
             reader = pypdf.PdfReader(path)
             pages = []
@@ -92,6 +96,11 @@ class DOCXExtractor(Extractor):
     version = "1.0"
 
     def extract(self, path: str) -> str:
+        if not _HAS_EXTRACT_DEPS:
+            raise RuntimeError(
+                "python-docx is required for DOCXExtractor. "
+                "Install it with: pip install python-docx"
+            )
         try:
             doc = DOCXDocument(path)
             paragraphs = []
