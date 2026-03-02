@@ -539,7 +539,7 @@ async def test_dbus_provider_is_available_cached():
     provider = DBusGUIProvider()
     r1 = await provider.is_available()
     r2 = await provider.is_available()
-    assert r1 == r2 == False  # Cached False (no dasbus)
+    assert not r1 and not r2  # Cached False (no dasbus)
 
 
 # ============================================================================

@@ -176,8 +176,7 @@ class DBusGUIProvider(ApprovalProvider):
 
             bus = SessionMessageBus()
             proxy = bus.get_proxy(self._bus_name, self._object_path)
-            from typing import Any as _Any
-            proxy_any: _Any = proxy
+            proxy_any: Any = proxy
 
             # Call DBus method with timeout
             result = await asyncio.wait_for(
