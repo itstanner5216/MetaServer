@@ -368,7 +368,11 @@ class TestLeaseManagerPurgeExpired:
     async def test_purge_expired_redis_error(self):
         manager = LeaseManager()
         mock_redis = AsyncMock()
-        mock_redis.scan_iter = AsyncMock(side_effect=Exception("connection lost"))
+        async def failing_scan_iter(*args, **kwargs):
+            raise Exception("connection lost")
+            yield
+
+        mock_redis.scan_iter = failing_scan_iter
 
         with patch.object(manager, "_get_redis", return_value=mock_redis):
             count = await manager.purge_expired()
