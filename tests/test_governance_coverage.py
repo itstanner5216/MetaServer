@@ -557,8 +557,8 @@ async def test_dbus_provider_is_available_cached():
 # ============================================================================
 
 
-def test_verify_token_non_canonical_base64():
-    """verify_token() rejects non-canonical base64."""
+def test_verify_token_bad_signature():
+    """verify_token() rejects tokens with invalid signatures."""
     from src.meta_mcp.governance.tokens import generate_token, verify_token
     # Generate a valid token then tamper with base64
     token = generate_token("client", "tool", 300, "secret_32_bytes_minimum_length!!")
