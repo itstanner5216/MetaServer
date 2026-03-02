@@ -4,18 +4,21 @@ High-level Qdrant client for chunk storage and retrieval.
 """
 
 import logging
-import os
 from typing import Any
+
+from meta_mcp.config import Config
 
 try:
     from qdrant_client import QdrantClient
     from qdrant_client.models import (
+        Distance,
         FieldCondition,
         Filter,
         MatchValue,
         PointStruct,
         Range,
         UpdateStatus,
+        VectorParams,
     )
     _HAS_QDRANT = True
 except ImportError:
@@ -29,9 +32,9 @@ class QdrantStorageClient:
 
     def __init__(
         self,
-        url: str = "http://localhost:6333",
+        url: str | None = None,
         api_key: str | None = None,
-        collection: str = os.getenv("QDRANT_COLLECTION", "chunks_v1"),
+        collection: str | None = None,
         timeout: int = 30,
     ):
         if not _HAS_QDRANT:
@@ -39,11 +42,27 @@ class QdrantStorageClient:
                 "qdrant-client is required for QdrantStorageClient. "
                 "Install it with: pip install qdrant-client"
             )
-        if api_key:
-            self.client = QdrantClient(url=url, api_key=api_key, timeout=timeout)
+        self.url = url or Config.QDRANT_URL
+        self.api_key = api_key or Config.QDRANT_API_KEY
+
+        if self.api_key:
+            self.client = QdrantClient(url=self.url, api_key=self.api_key, timeout=timeout)
         else:
-            self.client = QdrantClient(url=url, timeout=timeout)
-        self.collection = collection
+            self.client = QdrantClient(url=self.url, timeout=timeout)
+        self.collection = collection or Config.QDRANT_COLLECTION
+
+    def ensure_collection(self, dimension: int | None = None) -> bool:
+        """Create collection if it doesn't exist, using configured vector dimension."""
+        dim = dimension or Config.EMBEDDING_DIMENSION
+
+        if self.client.collection_exists(self.collection):
+            return False
+
+        self.client.create_collection(
+            collection_name=self.collection,
+            vectors_config=VectorParams(size=dim, distance=Distance.COSINE),
+        )
+        return True
 
     def upsert_chunk(self, chunk_id: str, vector: list[float], payload: dict[str, Any]) -> bool:
         """
