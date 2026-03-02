@@ -6,7 +6,6 @@ Splits on document structure first, then by token count with overlap.
 
 import hashlib
 import logging
-import os
 import re
 from dataclasses import dataclass
 
@@ -15,6 +14,8 @@ try:
     _HAS_TIKTOKEN = True
 except ImportError:
     _HAS_TIKTOKEN = False
+
+from meta_mcp.config import Config
 
 logger = logging.getLogger(__name__)
 
@@ -58,8 +59,7 @@ class SemanticChunker:
                 "tiktoken is required for SemanticChunker. "
                 "Install it with: pip install tiktoken"
             )
-        # Default encoding; override via CHUNKER_ENCODING env var to match your model
-        encoding = encoding_name or os.getenv("CHUNKER_ENCODING", "cl100k_base")
+        encoding = encoding_name or Config.CHUNKER_ENCODING
         self.encoder = tiktoken.get_encoding(encoding)
 
     def chunk(self, text: str, mime_type: str = "text/plain") -> list[Chunk]:

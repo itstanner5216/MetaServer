@@ -29,7 +29,7 @@ def _count_tokens(text: str) -> int:
     """
     Count tokens in text using tiktoken if available, otherwise approximate.
 
-    Uses cl100k_base encoding (GPT-4, Claude compatible).
+    Uses cl100k_base encoding by default.
     Falls back to word-based approximation if tiktoken unavailable.
 
     Args:

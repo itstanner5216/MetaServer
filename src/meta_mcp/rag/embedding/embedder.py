@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from threading import Lock
 
 import httpx
+from meta_mcp.config import Config
 
 try:
     import google.generativeai as genai  # type: ignore[import-untyped]
@@ -176,7 +177,7 @@ class OpenAICompatibleEmbedderAdapter(EmbedderAdapter):
 
 
 class GeminiEmbedderAdapter(EmbedderAdapter):
-    """Gemini embedding adapter implementation."""
+    """Provider-specific embedding adapter retained for backward compatibility."""
 
     def __init__(
         self,
@@ -206,7 +207,7 @@ class GeminiEmbedderAdapter(EmbedderAdapter):
         self.error_count = 0
 
     def embed_batch(self, texts: list[str]) -> list[EmbeddingResult]:
-        """Batch embed texts via Gemini API with retry."""
+        """Batch embed texts via provider API with retry."""
         results = []
 
         for i in range(0, len(texts), self.batch_size):
@@ -319,3 +320,18 @@ class GeminiEmbedderAdapter(EmbedderAdapter):
         self.call_count = 0
         self.token_count = 0
         self.error_count = 0
+
+
+def get_embedder() -> EmbedderAdapter:
+    """Create an embedding adapter from centralized configuration."""
+    if Config.EMBEDDING_PROVIDER == "gemini":
+        return GeminiEmbedderAdapter(
+            api_key=Config.EMBEDDING_API_KEY,
+            model=Config.EMBEDDING_MODEL,
+        )
+
+    return OpenAICompatibleEmbedderAdapter(
+        base_url=Config.EMBEDDING_BASE_URL,
+        api_key=Config.EMBEDDING_API_KEY,
+        model=Config.EMBEDDING_MODEL,
+    )
