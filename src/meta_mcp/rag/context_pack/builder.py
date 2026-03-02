@@ -12,7 +12,7 @@ import json
 import logging
 import uuid
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 logger = logging.getLogger(__name__)
@@ -154,7 +154,7 @@ class ContextPack:
     @property
     def is_expired(self) -> bool:
         """Check if the pack has expired."""
-        return datetime.utcnow() > self.expires_at
+        return datetime.now(timezone.utc) > self.expires_at
 
     @property
     def selected_count(self) -> int:
@@ -286,7 +286,7 @@ class ContextPackBuilder:
 
         # Generate pack ID and timestamps
         pack_id = str(uuid.uuid4())
-        created_at = datetime.utcnow()
+        created_at = datetime.now(timezone.utc)
         ttl = ttl_seconds if ttl_seconds is not None else self._default_ttl_seconds
         expires_at = created_at + timedelta(seconds=ttl)
 
