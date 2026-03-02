@@ -64,17 +64,21 @@ class ApprovalArtifactGenerator:
             Path("/root"),
         }
 
+        resolved_root = self.artifacts_root.resolve()
         for unsafe in unsafe_roots:
             try:
-                if self.artifacts_root.resolve() == unsafe.resolve():
+                unsafe_resolved = unsafe.resolve()
+                if unsafe == Path("/") and resolved_root != unsafe_resolved:
+                    continue
+                if resolved_root == unsafe_resolved:
                     raise ArtifactGenerationError(
                         f"Artifacts root cannot be system directory: {unsafe}"
                     )
-                if self.artifacts_root.resolve().is_relative_to(unsafe.resolve()):
+                if resolved_root.is_relative_to(unsafe_resolved):
                     if unsafe == Path("/var"):
                         # Allow /var/tmp and similar
-                        if not self.artifacts_root.resolve().is_relative_to(Path("/var/tmp")):
-                            if not self.artifacts_root.resolve().is_relative_to(Path("/var/log")):
+                        if not resolved_root.is_relative_to(Path("/var/tmp")):
+                            if not resolved_root.is_relative_to(Path("/var/log")):
                                 raise ArtifactGenerationError(
                                     f"Artifacts root cannot be under {unsafe} (except /var/tmp, /var/log)"
                                 )

@@ -8,8 +8,17 @@ import logging
 from abc import ABC, abstractmethod
 from pathlib import Path
 
-import pypdf
-from docx import Document as DOCXDocument
+try:
+    import pypdf  # type: ignore[reportMissingImports]
+    _HAS_PYPDF = True
+except ImportError:
+    _HAS_PYPDF = False
+
+try:
+    from docx import Document as DOCXDocument  # type: ignore[reportMissingImports]
+    _HAS_DOCX = True
+except ImportError:
+    _HAS_DOCX = False
 
 logger = logging.getLogger(__name__)
 
@@ -60,6 +69,8 @@ class PDFExtractor(Extractor):
     version = "1.0"
 
     def extract(self, path: str) -> str:
+        if not _HAS_PYPDF:
+            raise RuntimeError("pypdf is required for PDF extraction. Install with: pip install pypdf")
         try:
             reader = pypdf.PdfReader(path)
             pages = []
@@ -69,7 +80,7 @@ class PDFExtractor(Extractor):
                     pages.append(f"[Page {i + 1}]\n{text}")
             return "\n\n".join(pages)
         except Exception as e:
-            logger.error(f"PDF extraction failed for {path}: {e}")
+            logger.warning(f"PDF extraction failed for {path}: {e}")
             raise
 
     def can_extract(self, path: str) -> bool:
@@ -83,6 +94,10 @@ class DOCXExtractor(Extractor):
     version = "1.0"
 
     def extract(self, path: str) -> str:
+        if not _HAS_DOCX:
+            raise RuntimeError(
+                "python-docx is required for DOCX extraction. Install with: pip install python-docx"
+            )
         try:
             doc = DOCXDocument(path)
             paragraphs = []
@@ -96,7 +111,7 @@ class DOCXExtractor(Extractor):
                         paragraphs.append(para.text)
             return "\n\n".join(paragraphs)
         except Exception as e:
-            logger.error(f"DOCX extraction failed for {path}: {e}")
+            logger.warning(f"DOCX extraction failed for {path}: {e}")
             raise
 
     def can_extract(self, path: str) -> bool:
