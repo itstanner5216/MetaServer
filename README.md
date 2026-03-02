@@ -5,228 +5,112 @@
 [![codecov](https://codecov.io/gh/itstanner5216/MetaServer/branch/main/graph/badge.svg)](https://codecov.io/gh/itstanner5216/MetaServer)
 [![Python Version](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/downloads/)
 [![Code style: ruff](https://img.shields.io/badge/code%20style-ruff-000000.svg)](https://github.com/astral-sh/ruff)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-> **Enterprise-grade MCP server with progressive tool discovery, tri-state governance, cryptographic capability tokens, and a built-in RAG pipeline — purpose-built to give AI agents the right tools at the right time, with complete auditability.**
-
----
-
-## What is MetaServer?
-
-MetaServer is a [FastMCP](https://github.com/jlowin/fastmcp)-based **Model Context Protocol (MCP) server** that solves a real problem enterprise teams run into when deploying AI agents: **tool sprawl and ungoverned access**.
-
-Standard MCP servers expose every tool to every agent all the time. That means:
-- Agents drown in irrelevant tools, wasting context window tokens
-- Sensitive operations (file deletion, git reset, shell execution) sit one accidental tool call away
-- There is no audit trail, no approval gate, no way to revoke access
-
-MetaServer inverts this. Tools are **hidden by default** and only revealed when the agent specifically searches for them. Every sensitive operation is gated behind a governance policy, scoped approval, and a time-limited lease — all cryptographically signed and fully audited.
-
-It is not finished — it is being built toward a complete enterprise agent runtime — but what is already here is deeply considered and production-ready at its core.
+> **Capability security for AI agents. Progressive tool discovery, cryptographic leases, tri-state governance, and full audit trails — so enterprises can deploy MCP agents they actually trust.**
 
 ---
 
-## Table of Contents
+## The Problem
 
-- [Core Concepts](#core-concepts)
-- [Key Features](#key-features)
-- [Architecture Overview](#architecture-overview)
-- [Quick Start](#quick-start)
-- [Configuration](#configuration)
-- [Tools](#tools)
-- [Governance System](#governance-system)
-- [Lease Management](#lease-management)
-- [Capability Tokens](#capability-tokens)
-- [RAG Pipeline](#rag-pipeline)
-- [TOON Output Encoding](#toon-output-encoding)
-- [Macro Operations](#macro-operations)
-- [AI Agent Pipeline](#ai-agent-pipeline)
-- [Security](#security)
-- [Development](#development)
-- [Testing](#testing)
-- [Documentation](#documentation)
+Standard MCP servers expose every tool to every agent, all the time. For enterprises, that means:
 
----
+- **Token waste** — agents drown in irrelevant tool schemas, burning context window on tools they will never call
+- **Zero access control** — sensitive operations (file deletion, `git reset`, shell execution) sit one accidental tool call away
+- **No audit trail** — no approval gate, no lease, no way to revoke access after the fact
 
-## Core Concepts
+If you are deploying AI agents against internal systems, you cannot ship this. You need **capability security**: agents get the minimum tools, for the minimum time, with full accountability.
 
-### Cognitive Sparsity
-AI agents have a limited context window. Flooding an agent with 50 tool schemas at startup wastes tokens on tools it will never use. MetaServer exposes only **two bootstrap tools** at startup (`search_tools`, `get_tool_schema`). Every other tool is invisible until the agent explicitly requests it. This achieves **86.7% context reduction** in tool visibility.
+## How MetaServer Solves It
 
-### Tri-State Governance
-Every tool call passes through a governance layer with three modes:
+MetaServer is a [FastMCP](https://github.com/jlowin/fastmcp)-based **Model Context Protocol (MCP) server** that inverts the default. Tools are **hidden by default** and only surfaced when the agent explicitly searches for them. Every sensitive operation passes through a governance policy, scoped approval, and a time-limited cryptographic lease — all fully audited.
 
-| Mode | Safe Tools | Sensitive Tools | Dangerous Tools |
-|------|-----------|-----------------|-----------------|
-| `READ_ONLY` | ✅ Allowed | 🚫 Blocked | 🚫 Blocked |
-| `PERMISSION` | ✅ Allowed | ⏳ Approval required | ⏳ Approval required |
-| `BYPASS` | ✅ Allowed | ✅ Allowed | ✅ Allowed |
-
-The default mode is `PERMISSION`. The system **fails closed** — any unknown mode, failed lease, or missing elevation defaults to denial.
-
-### Ephemeral Leases
-Tool access is granted through time-limited leases stored in Redis. A lease encodes the client session, tool, TTL, and call budget. When the lease expires or the call budget is exhausted, access is automatically revoked. Leases are scoped per `(client_id, tool_id)` and can never be shared across sessions.
+| Layer | What it does |
+|-------|-------------|
+| **Progressive Discovery** | Only 2 bootstrap tools visible at startup; everything else is hidden until requested |
+| **Tri-State Governance** | Every call evaluated against a `READ_ONLY` / `PERMISSION` / `BYPASS` policy matrix; fails closed |
+| **Ephemeral Leases** | Time-limited, call-budgeted, Redis-backed leases scoped to `(client_id, tool_id)` |
+| **Capability Tokens** | HMAC-SHA256 signed tokens bound per session and tool; constant-time verification |
+| **Audit Trail** | Every governance decision written to rotating JSON Lines with ISO 8601 timestamps |
 
 ---
 
-## Key Features
+## 60-Second Proof: Progressive Discovery in Action
 
-### 🔍 Progressive Tool Discovery
-- Only `search_tools` and `get_tool_schema` are visible at startup
-- Calling `get_tool_schema(tool_name)` triggers tool exposure + lease grant in one step
-- Tools disappear from `tools/list` when leases expire — no stale tool lists
-- Minimal schema mode reduces initial schema tokens further; agents can expand on demand with `get_tool_schema(expand=True)`
-
-### 🛡️ Tri-State Governance Middleware
-- `READ_ONLY` / `PERMISSION` / `BYPASS` modes switchable at runtime
-- `GovernanceMiddleware` intercepts every tool call before execution
-- Scoped elevations cached in Redis with TTL — per-tool, per-resource, per-session
-- Full policy matrix evaluated deterministically before any execution
-
-### 🔐 Cryptographic Capability Tokens
-- Every lease is backed by an **HMAC-SHA256 signed capability token**
-- Token payload: `{client_id, tool_id, exp, iat}` in RFC 8785 canonical JSON
-- Constant-time comparison prevents timing attacks
-- Tokens are bound to `(client_id, tool_id)` — cannot be reused across sessions or tools
-
-### ⏱️ Redis-Backed Lease Manager
-- Leases stored in Redis with native TTL for automatic expiration
-- Atomic call-count decrement via Lua script (no race conditions)
-- Risk-based TTL and call budgets:
-  - `safe`: 5 minutes, 3 calls
-  - `sensitive`: 5 minutes, 1 call
-  - `dangerous`: 2 minutes, 1 call
-- `list_changed` notifications emitted to clients on lease grant/revoke
-
-### 📋 Structured Audit Trail
-- Every governance decision logged to a rotating JSON Lines file (`audit.jsonl`)
-- Events: `tool_invoked`, `approval_requested`, `approval_granted`, `approval_denied`, `approval_timeout`, `scoped_elevation_used`, `mode_changed`, `bypass_executed`, `blocked_read_only`
-- Buffered async writes with configurable flush interval
-- ISO 8601 UTC timestamps on every entry
-
-### 🏗️ Multi-Provider Approval System
-Sensitive operations trigger an approval flow. Three providers are supported, with automatic fallback:
-1. **GNOME DBus GUI** — Desktop notification with scope selection (Wayland/GNOME Shell)
-2. **FastMCP `ctx.elicit()`** — In-client approval prompt with structured response parsing
-3. **systemd-ask-password** — Terminal fallback for headless environments
-
-Approval responses select specific scopes and a lease duration. The middleware enforces that all required scopes are granted and rejects any extra scopes.
-
-### 📦 TOON Output Encoding
-**T**hreshold-**O**ptimized **O**utput **N**otation compresses large arrays in tool responses to prevent context overflow:
-- Arrays longer than the threshold (default: 5) are replaced with `{__toon: true, count: N, sample: [first 3 items]}`
-- Recursive — works on nested objects and tuples
-- Configurable threshold per deployment
-- Fails safely: returns the original output if encoding fails
-
-### 🔎 Hybrid RAG Pipeline
-A full retrieval-augmented generation system for tool documentation and context:
-- **Ingestion**: Structure-aware chunking (Markdown headings, paragraph boundaries) with tiktoken-based token counting and SHA-256 chunk hashing
-- **Embedding**: Gemini embedding adapter (768-dimension vectors), with TTL-based query embedding cache
-- **Storage**: Qdrant vector database client with scope-filtered search
-- **Retrieval**: Hybrid **semantic + BM25 lexical** search, weighted combination (default 60% semantic / 40% BM25)
-- **Governance-aware ranking**: Score multipliers applied per governance mode — dangerous tools are penalized in `READ_ONLY` mode and ranked to zero in the results
-- **Latency target**: 170 ms end-to-end retrieval
-
-### ⚡ Macro Operations
-Batch primitives for high-throughput agent workflows:
-- `batch_read_tools` — Retrieve multiple tool records in a single call with risk-level filtering
-- `batch_write` — Bulk write operations
-- `batch_search` — Multi-query search with deduplication
-
-### 🤖 Agent Runtime (In Progress)
-MetaServer is being extended into a full **multi-agent runtime**:
-- **YAML-driven agent↔model bindings** — each agent role locked to a specific model, no mid-run switching
-- **Hook system** — pluggable gates at `before_tool_call`, `after_tool_result`, and `on_error` stages
-- **Budget enforcement** — agent runs backed by leases, token budget tracked per run
-- **4 specialized subagents**:
-  - **Validator** — Tests, security scans, architectural review of PRs
-  - **Remediator** — Auto-fixes common issues (imports, conflicts, test failures)
-  - **Architectural Guardian** — Rejects breaking changes or structural violations
-  - **Functional Verifier** — Validates end-to-end functionality of bundled PRs
-- **Meta-PR creation** — Groups validated PRs by functional area into reviewable bundles
-
-### 🔒 Workspace Sandboxing
-All file and command operations are validated against `WORKSPACE_ROOT` using `path.relative_to()`. Path traversal attempts (`../../etc/passwd`) are rejected before execution.
-
----
-
-## Architecture Overview
+An agent connects and sees **only two tools**. Here is the full flow to discover, unlock, and use a tool:
 
 ```
-┌─────────────────────────────────────────────────────────┐
-│                    MCP Client (AI Agent)                 │
-└────────────────────────┬────────────────────────────────┘
-                         │ MCP over HTTP/SSE
-┌────────────────────────▼────────────────────────────────┐
-│                  MetaSupervisor (FastMCP)                │
-│                                                         │
-│  Bootstrap Tools (always visible):                      │
-│    search_tools()  ──→  ToolRegistry (YAML)             │
-│    get_tool_schema() ─→  Expose tool + Grant Lease      │
-│                                                         │
-│  GovernanceMiddleware (every tool call):                │
-│    ├─ Lease validation (Redis)                          │
-│    ├─ Elevation check (Redis)                           │
-│    ├─ Policy evaluation (tri-state matrix)              │
-│    ├─ Approval elicitation (if needed)                  │
-│    ├─ Capability token verification (HMAC-SHA256)       │
-│    ├─ Tool execution                                    │
-│    ├─ TOON output encoding                              │
-│    └─ Audit logging (JSON Lines)                        │
-│                                                         │
-│  Mounted Servers:                                       │
-│    CoreTools  (file, directory, shell, git)             │
-│    AdminTools (governance mode, elevations)             │
-└────────────────────────┬────────────────────────────────┘
-                         │
-              ┌──────────┴───────────┐
-              │                      │
-    ┌─────────▼──────────┐  ┌───────▼────────┐
-    │   Redis             │  │  Qdrant         │
-    │   - Leases (TTL)    │  │  - RAG chunks   │
-    │   - Elevations      │  │  - Embeddings   │
-    │   - Gov. mode       │  └────────────────┘
-    └────────────────────┘
+┌─ 1. LIST TOOLS ──────────────────────────────────────────────────┐
+│  Agent calls tools/list                                          │
+│  → Only sees: search_tools, get_tool_schema                     │
+│  → 13 other tools are hidden (86.7% context reduction¹)         │
+└──────────────────────────────────────────────────────────────────┘
+
+┌─ 2. SEARCH ──────────────────────────────────────────────────────┐
+│  agent → search_tools("read file")                               │
+│       ← [{ tool: "read_file",                                    │
+│             description: "Read file contents from workspace",    │
+│             risk: "safe" }]                                      │
+│  → Metadata only — tool is still NOT in tools/list               │
+└──────────────────────────────────────────────────────────────────┘
+
+┌─ 3. GET SCHEMA → TOOL EXPOSED + LEASE ISSUED ───────────────────┐
+│  agent → get_tool_schema("read_file")                            │
+│       ← { name, description, inputSchema }                      │
+│  → Tool is now visible in tools/list                             │
+│  → Lease granted: TTL 5 min, 3 calls, HMAC-SHA256 token issued  │
+└──────────────────────────────────────────────────────────────────┘
+
+┌─ 4. CALL TOOL → LEASE CONSUMED + AUDIT LOGGED ──────────────────┐
+│  agent → read_file(path="data.txt")                              │
+│       ← file contents                                            │
+│  → Lease call count decremented atomically (Redis Lua script)    │
+│  → Audit entry written: tool_invoked, client, timestamp          │
+└──────────────────────────────────────────────────────────────────┘
+
+┌─ 5. LEASE EXPIRES → TOOL DISAPPEARS ────────────────────────────┐
+│  → After TTL or call budget exhausted, tool removed from         │
+│    tools/list automatically — no stale tool lists                │
+└──────────────────────────────────────────────────────────────────┘
 ```
+
+> ¹ **86.7% context reduction**: 2 bootstrap tools visible out of 15 total registered tools (defined in [`config/tools.yaml`](config/tools.yaml)). Calculated as `(15 − 2) / 15 = 86.7%` tools hidden at startup.
 
 ---
 
 ## Quick Start
 
 ### Prerequisites
-- Python 3.10 or higher
+- Python 3.10+
 - Redis (for lease management and governance state)
 - [UV](https://github.com/astral-sh/uv) package manager (recommended)
 
-### Setup
+> **Note:** No AI model API keys are required. MetaServer is an MCP server — it governs tool access for agents, it does not run models itself.
+
+### Install
 
 ```bash
-# Clone the repository
 git clone https://github.com/itstanner5216/MetaServer.git
 cd MetaServer
 
-# Automated setup (installs deps, pre-commit hooks, etc.)
+# Automated setup (deps, pre-commit hooks, validation)
 bash scripts/setup.sh
 
 # Or manual install
 uv sync --all-extras
 ```
 
-### Run the Server
+### Run
 
 ```bash
-# Start with UV (recommended)
 uv run python -m meta_mcp
-
-# Or with standard Python
-python -m meta_mcp
 ```
 
 The server starts on `http://localhost:8001` (SSE transport, Docker-compatible).
 
 ### Connect an Agent
 
-Once running, point any MCP-compatible client at `http://localhost:8001/sse`. The agent will see only two tools: `search_tools` and `get_tool_schema`. From there, it can discover and access any tool through the progressive discovery flow:
+Point any MCP-compatible client at `http://localhost:8001/sse`. The agent sees only `search_tools` and `get_tool_schema` — everything else is discovered on demand:
 
 ```
 agent → search_tools("read file")
@@ -238,6 +122,42 @@ agent → get_tool_schema("read_file")
 agent → read_file(path="data.txt")
      ← file contents
 ```
+
+---
+
+## Security
+
+### Production Checklist
+
+1. **Generate a strong HMAC secret:**
+   ```bash
+   python -c "import os; print(os.urandom(64).hex())"
+   ```
+2. **Secure Redis:** password-protect and network-isolate your Redis instance
+3. **Set governance mode:** use `PERMISSION` (default) or `READ_ONLY` in production; never `BYPASS`
+4. **Review audit logs:** `audit.jsonl` contains every governance decision
+5. **Restrict workspace:** ensure `WORKSPACE_ROOT` permissions are locked down to the server process
+
+### Security Properties
+
+| Property | Implementation |
+|----------|---------------|
+| Path traversal prevention | `path.relative_to(workspace)` — raises before any I/O |
+| Token forgery prevention | HMAC-SHA256 with constant-time comparison |
+| Cross-session token reuse | Tokens bound to `(client_id, tool_id)` |
+| Replay attack prevention | Token expiration enforced on every verify |
+| Lease race conditions | Atomic Lua script for consume (no TOCTOU) |
+| Fail-closed defaults | Unknown mode/risk → `require_approval`; lease errors → deny |
+| Scoped permissions | Elevations are `SHA256(tool+path+session)`, not global |
+
+### Approval Scope Format
+
+Scopes follow a `type:value` pattern:
+- `tool:write_file` — permission to call a specific tool
+- `filesystem:write` — permission category
+- `resource:path:/workspace/data.txt` — permission for a specific resource
+
+The middleware enforces that **all required scopes are selected** and **no extra scopes are granted** (preventing privilege escalation via approval).
 
 ---
 
@@ -286,9 +206,51 @@ ENABLE_PROGRESSIVE_SCHEMAS=false     # minimal schema delivery
 
 ---
 
-## Tools
+## Architecture Overview
 
-MetaServer ships with two tool groups:
+```
+┌─────────────────────────────────────────────────────────┐
+│                    MCP Client (AI Agent)                 │
+└────────────────────────┬────────────────────────────────┘
+                         │ MCP over HTTP/SSE
+┌────────────────────────▼────────────────────────────────┐
+│                  MetaSupervisor (FastMCP)                │
+│                                                         │
+│  Bootstrap Tools (always visible):                      │
+│    search_tools()  ──→  ToolRegistry (YAML)             │
+│    get_tool_schema() ─→  Expose tool + Grant Lease      │
+│                                                         │
+│  GovernanceMiddleware (every tool call):                │
+│    ├─ Lease validation (Redis)                          │
+│    ├─ Elevation check (Redis)                           │
+│    ├─ Policy evaluation (tri-state matrix)              │
+│    ├─ Approval elicitation (if needed)                  │
+│    ├─ Capability token verification (HMAC-SHA256)       │
+│    ├─ Tool execution                                    │
+│    ├─ TOON output encoding                              │
+│    └─ Audit logging (JSON Lines)                        │
+│                                                         │
+│  Mounted Servers:                                       │
+│    CoreTools  (file, directory, shell, git)             │
+│    AdminTools (governance mode, elevations)             │
+└────────────────────────┬────────────────────────────────┘
+                         │
+              ┌──────────┴───────────┐
+              │                      │
+    ┌─────────▼──────────┐  ┌───────▼────────┐
+    │   Redis             │  │  Qdrant         │
+    │   - Leases (TTL)    │  │  - RAG chunks   │
+    │   - Elevations      │  │  - Embeddings   │
+    │   - Gov. mode       │  └────────────────┘
+    └────────────────────┘
+```
+
+---
+
+## Deep Dive
+
+<details>
+<summary><strong>Tools</strong> — 15 tools across 2 servers, risk-classified</summary>
 
 ### Core Tools (`core_tools` server)
 
@@ -314,9 +276,12 @@ MetaServer ships with two tool groups:
 | `set_governance_mode` | sensitive | Switch governance mode at runtime |
 | `revoke_all_elevations` | dangerous | Clear all active permission elevations |
 
----
+Plus **2 bootstrap tools** (`search_tools`, `get_tool_schema`) always visible. Full definitions in [`config/tools.yaml`](config/tools.yaml).
 
-## Governance System
+</details>
+
+<details>
+<summary><strong>Governance System</strong> — tri-state policy matrix + scoped approvals</summary>
 
 ### Policy Matrix
 
@@ -338,6 +303,13 @@ When a sensitive tool is called without an active elevation:
 3. User selects which scopes to grant and sets a lease duration
 4. If approved: scoped elevation is stored in Redis with TTL; tool executes
 5. If denied / timeout: `ToolError` is raised; nothing executes
+
+### Multi-Provider Approval
+
+Three providers are supported, with automatic fallback:
+1. **GNOME DBus GUI** — Desktop notification with scope selection (Wayland/GNOME Shell)
+2. **FastMCP `ctx.elicit()`** — In-client approval prompt with structured response parsing
+3. **systemd-ask-password** — Terminal fallback for headless environments
 
 ### Elicitation Response Format
 
@@ -365,9 +337,10 @@ Set `lease_seconds=0` for single-use approval.
 
 Elevations are scoped to `SHA256(tool_name + context_key + session_id)`. This means an elevation for `write_file` on `/workspace/foo.txt` does **not** grant access to `/workspace/bar.txt`. Every resource gets its own elevation slot.
 
----
+</details>
 
-## Lease Management
+<details>
+<summary><strong>Lease Management</strong> — Redis-backed ephemeral leases with atomic operations</summary>
 
 Leases are the authorization primitive. Every tool access requires an active lease:
 
@@ -389,9 +362,10 @@ Risk-based defaults:
 
 The `consume` operation uses a Lua script for atomic decrement and deletion — a lease cannot be double-spent even under concurrent access.
 
----
+</details>
 
-## Capability Tokens
+<details>
+<summary><strong>Capability Tokens</strong> — HMAC-SHA256 signed, session-bound</summary>
 
 Every lease is backed by an HMAC-SHA256 signed capability token:
 
@@ -419,11 +393,10 @@ Verification checks:
 
 Any failure → token rejected, access denied.
 
----
+</details>
 
-## RAG Pipeline
-
-MetaServer includes a full document retrieval system for grounding agent context:
+<details>
+<summary><strong>RAG Pipeline</strong> — hybrid semantic + BM25 retrieval with governance-aware ranking</summary>
 
 ### Ingestion (`src/meta_mcp/rag/ingestion/`)
 - `SemanticChunker` — splits documents by structure (Markdown headings, paragraph breaks) then by token count with configurable overlap
@@ -453,9 +426,10 @@ MetaServer includes a full document retrieval system for grounding agent context
 ### Context Packing (`src/meta_mcp/rag/context_pack/`)
 - Assembles retrieved chunks into a validated context package for agent consumption
 
----
+</details>
 
-## TOON Output Encoding
+<details>
+<summary><strong>TOON Output Encoding</strong> — context-safe array compression</summary>
 
 Large tool outputs can blow up an agent's context window. TOON (Threshold-Optimized Output Notation) prevents this by replacing long arrays with metadata summaries:
 
@@ -472,11 +446,10 @@ Large tool outputs can blow up an agent's context window. TOON (Threshold-Optimi
 - Applied to all tool responses in the middleware layer
 - Fails safely — original output returned if encoding fails
 
----
+</details>
 
-## Macro Operations
-
-High-throughput operations for agent workflows that need to access many tools at once:
+<details>
+<summary><strong>Macro Operations</strong> — batch primitives for high-throughput workflows</summary>
 
 - **`batch_read_tools(registry, tool_ids, max_risk_level)`** — retrieve multiple tool records in one call, with optional risk-level filtering
 - **`batch_write`** — bulk workspace writes
@@ -484,13 +457,15 @@ High-throughput operations for agent workflows that need to access many tools at
 
 Macros respect the same governance and risk-level constraints as individual tool calls.
 
+</details>
+
 ---
 
-## AI Agent Pipeline
+## AI Agent Pipeline *(Optional)*
 
-MetaServer includes a **multi-agent PR validation system** that plugs into GitHub Actions. Each agent role is bound to a model via `config/models.yaml` — no code changes required to swap providers or models.
+> **This is an optional add-on.** The core MetaServer (progressive discovery, governance, leases, capability tokens, audit) requires no AI model API keys. The agent pipeline below is a separate feature for teams that want automated PR validation on top of MetaServer.
 
-### Agents
+MetaServer includes a **multi-agent PR validation system** that plugs into GitHub Actions. Agent↔model bindings are configured via [`config/models.yaml`](config/models.yaml) — no code changes required to swap providers.
 
 | Agent | Role |
 |-------|------|
@@ -498,22 +473,6 @@ MetaServer includes a **multi-agent PR validation system** that plugs into GitHu
 | **Remediator** | Auto-fixes common issues (imports, conflicts, simple test failures) |
 | **Architectural Guardian** | Rejects breaking changes or structural violations |
 | **Functional Verifier** | Validates end-to-end functionality of meta-PRs |
-
-### Supported Providers
-
-Agent↔model bindings are fully configurable. MetaServer connects to any provider that exposes an **OpenAI-compatible chat completions endpoint**. The following providers are pre-configured out of the box:
-
-| Provider | Compatibility | Examples |
-|----------|--------------|---------|
-| **Azure OpenAI** | OpenAI API (Azure-hosted) | GPT-4o, o4-mini, etc. |
-| **OpenAI** | OpenAI API (direct) | GPT-4o, o3-mini, etc. |
-| **Anthropic** | Anthropic Messages API | Claude Sonnet, Opus, etc. |
-| **GitHub Models** | OpenAI-compatible (Azure inference) | DeepSeek-V3, Llama, Phi, etc. |
-| **Moonshot** | OpenAI-compatible | Kimi K2, Moonshot v1, etc. |
-| **OpenRouter** | OpenAI-compatible (multi-model proxy) | Any model on OpenRouter's catalog |
-| **Ollama** | OpenAI-compatible (local) | Llama, Mistral, Qwen, etc. |
-
-> **Any endpoint that implements the OpenAI `/v1/chat/completions` contract works.** To add a new provider, add its auth configuration to the `providers:` section in `config/models.yaml` and reference it in an agent binding.
 
 ### Running the Pipeline
 
@@ -531,42 +490,6 @@ python -m scripts.agents.run_agent --pr 123 --all --dry-run
 Remove `--dry-run` to post actual GitHub comments and create PRs.
 
 See [`docs/AI_AGENT_PIPELINE.md`](docs/AI_AGENT_PIPELINE.md) and [`examples/ai_agent_quick_start.py`](examples/ai_agent_quick_start.py) for full usage.
-
----
-
-## Security
-
-### Production Checklist
-
-1. **Generate a strong HMAC secret:**
-   ```bash
-   python -c "import os; print(os.urandom(64).hex())"
-   ```
-2. **Secure Redis:** password-protect and network-isolate your Redis instance
-3. **Set governance mode:** use `PERMISSION` (default) or `READ_ONLY` in production; never `BYPASS`
-4. **Review audit logs:** `audit.jsonl` contains every governance decision
-5. **Restrict workspace:** ensure `WORKSPACE_ROOT` permissions are locked down to the server process
-
-### Security Properties
-
-| Property | Implementation |
-|----------|---------------|
-| Path traversal prevention | `path.relative_to(workspace)` — raises before any I/O |
-| Token forgery prevention | HMAC-SHA256 with constant-time comparison |
-| Cross-session token reuse | Tokens bound to `(client_id, tool_id)` |
-| Replay attack prevention | Token expiration enforced on every verify |
-| Lease race conditions | Atomic Lua script for consume (no TOCTOU) |
-| Fail-closed defaults | Unknown mode/risk → `require_approval`; lease errors → deny |
-| Scoped permissions | Elevations are `SHA256(tool+path+session)`, not global |
-
-### Approval Scope Format
-
-Scopes follow a `type:value` pattern:
-- `tool:write_file` — permission to call a specific tool
-- `filesystem:write` — permission category
-- `resource:path:/workspace/data.txt` — permission for a specific resource
-
-The middleware enforces that **all required scopes are selected** and **no extra scopes are granted** (preventing privilege escalation via approval).
 
 ---
 
@@ -639,9 +562,9 @@ Test infrastructure uses `pytest-asyncio` in auto mode. Redis-dependent tests ar
 
 | Document | Description |
 |----------|-------------|
-| [`docs/architecture/AGENT_ARCHITECTURE_DESIGN.md`](docs/architecture/AGENT_ARCHITECTURE_DESIGN.md) | Agent runtime design, subagent architecture, LiteLLM integration |
+| [`docs/architecture/AGENT_ARCHITECTURE_DESIGN.md`](docs/architecture/AGENT_ARCHITECTURE_DESIGN.md) | Agent runtime design, subagent architecture |
 | [`docs/architecture/SECURITY_BOUNDARY.md`](docs/architecture/SECURITY_BOUNDARY.md) | Security boundary definitions and trust model |
-| [`docs/AI_AGENT_PIPELINE.md`](docs/AI_AGENT_PIPELINE.md) | AI agent pipeline for PR management |
+| [`docs/AI_AGENT_PIPELINE.md`](docs/AI_AGENT_PIPELINE.md) | AI agent pipeline for PR management (optional) |
 | [`docs/AGENT_SYSTEM.md`](docs/AGENT_SYSTEM.md) | Multi-agent system for automated PR review |
 | [`docs/development/CONTRIBUTING.md`](docs/development/CONTRIBUTING.md) | Contribution guidelines |
 | [`docs/development/TESTING.md`](docs/development/TESTING.md) | Testing strategy and coverage |
@@ -652,4 +575,4 @@ Test infrastructure uses `pytest-asyncio` in auto mode. Redis-dependent tests ar
 
 ## License
 
-[License information to be added]
+This project is licensed under the [MIT License](LICENSE).
