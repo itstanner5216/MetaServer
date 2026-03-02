@@ -7,7 +7,7 @@ All artifacts are stored under a safe root directory with path validation.
 import html
 import json
 import os
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -245,7 +245,7 @@ class ApprovalArtifactGenerator:
                 "required_scopes": required_scopes,
                 "arguments": arguments,
                 "context_metadata": context_metadata,
-                "generated_at": datetime.utcnow().isoformat(),
+                "generated_at": datetime.now(timezone.utc).isoformat(),
             }
 
             json_content = json.dumps(json_data, indent=2, ensure_ascii=False)
@@ -323,7 +323,7 @@ class ApprovalArtifactGenerator:
         # Generate metadata
         session_id = html.escape(str(context_metadata.get("session_id", "unknown")))
         context_key = html.escape(str(context_metadata.get("context_key", "unknown")))
-        timestamp = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC")
+        timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
 
         html_template = f"""<!DOCTYPE html>
 <html lang="en">

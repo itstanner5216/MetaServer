@@ -1,10 +1,12 @@
 """Test human-in-the-loop approval flows (Invariant #6, Task 15)."""
 
+import asyncio
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from fastmcp.exceptions import ToolError
 
+from src.meta_mcp.audit import audit_logger
 from src.meta_mcp.middleware import GovernanceMiddleware
 from tests.conftest import read_audit_log
 
@@ -364,13 +366,14 @@ async def test_approval_creates_audit_log(
     mock_fastmcp_context,
     mock_elicit_approve,
     grant_lease,
+    audit_log_path,
 ):
     """
     Test that approval decision is logged to audit.jsonl.
 
     Expected: Audit log should contain approval event
     Validates: Invariant #6 (Elicitation - audit requirement)
-    Note: Uses default audit.jsonl file location
+    Note: Uses isolated audit log path via audit_log_path fixture
     """
     # Setup
     middleware = GovernanceMiddleware()
@@ -387,15 +390,13 @@ async def test_approval_creates_audit_log(
     await middleware.on_call_tool(mock_fastmcp_context, call_next)
 
     # Small delay to allow async logging to complete
-    import asyncio
+    await asyncio.sleep(0.1)
 
-    await asyncio.sleep(0.2)
+    # Flush buffered audit entries to disk (buffer_size=100 by default, so explicit flush needed)
+    audit_logger.flush()
 
-    # Read audit log from default location
-    from pathlib import Path
-
-    audit_log_default = Path("./audit.jsonl")
-    entries = read_audit_log(audit_log_default)
+    # Read audit log from isolated path provided by fixture
+    entries = read_audit_log(audit_log_path)
 
     # Filter to only our test session
     test_entries = [e for e in entries if e.get("session_id") == "session-audit-test"]
