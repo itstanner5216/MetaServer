@@ -15,9 +15,9 @@ from datetime import datetime
 from typing import Any
 
 try:
-    import litellm
+    import litellm  # type: ignore[import-not-found]
 except ImportError:
-    litellm = None
+    litellm: Any = None
 
 from ..retrieval import RetrievalCandidate
 
@@ -308,7 +308,7 @@ class RetrievalExplainer:
 
         # All retries exhausted - create fallback output
         logger.error(f"Selection failed after {self.max_retries + 1} attempts: {last_error}")
-        return self._create_fallback_output(query, candidates, last_error)
+        return self._create_fallback_output(query, candidates, last_error or "Unknown error")
 
     def _build_prompt(
         self,

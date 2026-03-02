@@ -8,8 +8,15 @@ import logging
 from abc import ABC, abstractmethod
 from pathlib import Path
 
-import pypdf
-from docx import Document as DOCXDocument
+try:
+    import pypdf  # type: ignore[import-not-found]
+except ImportError:
+    pypdf = None  # type: ignore[assignment]
+
+try:
+    from docx import Document as DOCXDocument  # type: ignore[import-not-found]
+except ImportError:
+    DOCXDocument = None  # type: ignore[assignment,misc]
 
 logger = logging.getLogger(__name__)
 
@@ -60,6 +67,10 @@ class PDFExtractor(Extractor):
     version = "1.0"
 
     def extract(self, path: str) -> str:
+        if pypdf is None:
+            raise RuntimeError(
+                "pypdf is required for PDFExtractor. Install it with: pip install pypdf"
+            )
         try:
             reader = pypdf.PdfReader(path)
             pages = []
@@ -83,6 +94,11 @@ class DOCXExtractor(Extractor):
     version = "1.0"
 
     def extract(self, path: str) -> str:
+        if DOCXDocument is None:
+            raise RuntimeError(
+                "python-docx is required for DOCXExtractor. "
+                "Install it with: pip install python-docx"
+            )
         try:
             doc = DOCXDocument(path)
             paragraphs = []

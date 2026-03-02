@@ -133,7 +133,7 @@ async def get_redis_client() -> aioredis.Redis:
                         socket_timeout=Config.REDIS_SOCKET_TIMEOUT,
                     )
                 _redis_client = InstrumentedRedis(connection_pool=_redis_pool)
-                await _redis_client.ping()
+                await _redis_client.ping()  # type: ignore[misc]
                 _redis_loop = loop
                 _log_pool_stats("ready")
                 break
@@ -159,6 +159,7 @@ async def get_redis_client() -> aioredis.Redis:
                     Config.REDIS_CONNECT_RETRY_MAX_DELAY,
                 )
                 await asyncio.sleep(backoff)
+    assert _redis_client is not None
     return _redis_client
 
 
@@ -200,7 +201,7 @@ async def check_redis_health() -> Tuple[bool, str]:
     """Ping Redis to verify connectivity and return status."""
     try:
         redis = await get_redis_client()
-        result = await redis.ping()
+        result = await redis.ping()  # type: ignore[misc]
         if result is True or result == "PONG":
             return True, "Redis ping succeeded"
         return False, f"Unexpected Redis ping response: {result}"

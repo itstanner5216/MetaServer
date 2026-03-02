@@ -643,7 +643,7 @@ class GovernanceMiddleware(Middleware):
             )
             return False, 0, []
 
-    async def on_call_tool(self, context: Context, call_next):
+    async def on_call_tool(self, context: Context, call_next: Any) -> Any:
         """
         Intercept tool calls and enforce tri-state governance.
 
@@ -663,8 +663,9 @@ class GovernanceMiddleware(Middleware):
         Raises:
             ToolError: If operation is denied
         """
-        tool_name = context.request_context.tool_name
-        arguments = context.request_context.arguments or {}
+        req_ctx: Any = context.request_context
+        tool_name = req_ctx.tool_name
+        arguments = req_ctx.arguments or {}
         session_id = str(context.session_id)
 
         # PHASE 3+4 INTEGRATION: Validate lease and token before governance checks
@@ -740,7 +741,6 @@ class GovernanceMiddleware(Middleware):
                 )
                 raise ToolError(
                     f"Policy violation: {violation.reason}",
-                    details=violation.to_dict(),
                 )
 
         async def _run_after_hooks(result, error=None):
@@ -754,6 +754,7 @@ class GovernanceMiddleware(Middleware):
             if not should_consume_lease:
                 return
 
+            assert client_id is not None, "client_id must be set when consuming lease"
             consumed_lease = await lease_manager.consume(client_id, tool_name)
             if consumed_lease is None:
                 logger.warning(

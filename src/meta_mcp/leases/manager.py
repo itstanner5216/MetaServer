@@ -3,6 +3,7 @@
 import asyncio
 import json
 from datetime import datetime, timezone
+from typing import Any, Optional
 
 from loguru import logger
 from redis import asyncio as aioredis
@@ -256,7 +257,7 @@ class LeaseManager:
             redis = await self._get_redis()
             key = self._lease_key(client_id, tool_id)
 
-            result = await redis.eval(_CONSUME_LEASE_LUA, 1, key)
+            result: Any = await redis.eval(_CONSUME_LEASE_LUA, 1, key)  # type: ignore[misc]
             if not result or result[0] != 1:
                 return None
 

@@ -4,7 +4,7 @@ Provides multiple strategies for extracting agent_id from FastMCP contexts.
 """
 
 import os
-from typing import Optional
+from typing import Any, Optional
 
 from fastmcp import Context
 from loguru import logger
@@ -26,15 +26,16 @@ def detect_agent_id(ctx: Context) -> Optional[str]:
         Agent ID string if detected, None otherwise
     """
     # Strategy 1: Check MCP metadata (if client sends it)
-    if hasattr(ctx, 'metadata') and ctx.metadata:
-        agent_id = ctx.metadata.get('agent_id')
+    ctx_any: Any = ctx
+    if hasattr(ctx, 'metadata') and ctx_any.metadata:
+        agent_id = ctx_any.metadata.get('agent_id')
         if agent_id:
             logger.debug(f"Agent ID from metadata: {agent_id}")
             return agent_id
 
     # Strategy 2: Check request context (if already set)
     if hasattr(ctx, 'request_context') and hasattr(ctx.request_context, 'agent_id'):
-        agent_id = ctx.request_context.agent_id
+        agent_id = ctx_any.request_context.agent_id
         if agent_id:
             logger.debug(f"Agent ID from request_context: {agent_id}")
             return agent_id

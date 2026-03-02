@@ -319,7 +319,7 @@ def search_tools(query: str) -> str:
 
 
 @mcp.tool()
-async def get_tool_schema(tool_name: str, expand: bool = False, ctx: Context = None) -> str:
+async def get_tool_schema(tool_name: str, expand: bool = False, ctx: Context | None = None) -> str:
     """
     Get JSON schema for a specific tool (PROGRESSIVE DISCOVERY TRIGGER).
 

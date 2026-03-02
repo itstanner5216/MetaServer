@@ -5,6 +5,8 @@ Provides efficient batch retrieval of multiple tools from the registry.
 """
 
 
+from typing import Any
+
 from ..registry.models import ToolRecord
 from ..registry.registry import ToolRegistry
 
@@ -18,7 +20,7 @@ def batch_read_tools(
     session_id: str | None = None,
     user_id: str | None = None,
     rate_limit: bool = False,
-) -> dict[str, ToolRecord | None]:
+) -> dict[str, Any]:
     """
     Retrieve multiple tools in a single batch operation.
 

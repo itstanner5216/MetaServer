@@ -9,7 +9,10 @@ import logging
 import re
 from dataclasses import dataclass
 
-import tiktoken
+try:
+    import tiktoken  # type: ignore[import-not-found]
+except ImportError:
+    tiktoken = None  # type: ignore[assignment]
 
 logger = logging.getLogger(__name__)
 
@@ -47,6 +50,11 @@ class SemanticChunker:
         self.overlap_tokens = overlap_tokens
         self.min_tokens = min_tokens
         self.max_tokens = max_tokens
+        if tiktoken is None:
+            raise RuntimeError(
+                "tiktoken is required for SemanticChunker. "
+                "Install it with: pip install tiktoken"
+            )
         # Use cl100k_base encoding (same as GPT-4, close to Gemini tokenization)
         self.encoder = tiktoken.get_encoding("cl100k_base")
 

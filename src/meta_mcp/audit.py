@@ -49,7 +49,7 @@ class AuditLogger:
 
     def __init__(
         self,
-        log_path: str = None,
+        log_path: str | None = None,
         max_bytes: Optional[int] = None,
         backup_count: Optional[int] = None,
         buffer_size: Optional[int] = None,
@@ -68,7 +68,8 @@ class AuditLogger:
             fallback_logger: Optional logger to use if audit file is unavailable
         """
         if log_path is None:
-            log_path = Config.AUDIT_LOG_PATH
+            # Priority: META_MCP_AUDIT_LOG_PATH env var > Config value
+            log_path = os.getenv("META_MCP_AUDIT_LOG_PATH") or Config.AUDIT_LOG_PATH
         self.log_path = Path(log_path)
         self.max_bytes = Config.AUDIT_LOG_MAX_BYTES if max_bytes is None else max_bytes
         self.backup_count = Config.AUDIT_LOG_BACKUP_COUNT if backup_count is None else backup_count
@@ -161,6 +162,8 @@ class AuditLogger:
         try:
             if self.buffer_size <= 1:
                 self._logger.info(json_line)
+                if self._handler:
+                    self._handler.flush()
                 return
 
             self._buffer.append(json_line)
@@ -199,6 +202,7 @@ class AuditLogger:
         payload = "\n".join(buffer)
         try:
             self._logger.info(payload)
+            self._handler.flush()
         except Exception as exc:
             self.fallback_logger.opt(exception=exc).warning(
                 "Audit log write failed. Emitting buffered records to fallback logger."

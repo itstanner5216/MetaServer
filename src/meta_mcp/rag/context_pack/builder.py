@@ -37,7 +37,7 @@ def _count_tokens(text: str) -> int:
         Estimated token count
     """
     try:
-        import tiktoken
+        import tiktoken  # type: ignore[import-not-found]
 
         encoder = tiktoken.get_encoding("cl100k_base")
         return len(encoder.encode(text))

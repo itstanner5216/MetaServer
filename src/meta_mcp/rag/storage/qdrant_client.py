@@ -6,15 +6,24 @@ High-level Qdrant client for chunk storage and retrieval.
 import logging
 from typing import Any
 
-from qdrant_client import QdrantClient
-from qdrant_client.models import (
-    FieldCondition,
-    Filter,
-    MatchValue,
-    PointStruct,
-    Range,
-    UpdateStatus,
-)
+try:
+    from qdrant_client import QdrantClient  # type: ignore[import-not-found]
+    from qdrant_client.models import (  # type: ignore[import-not-found]
+        FieldCondition,
+        Filter,
+        MatchValue,
+        PointStruct,
+        Range,
+        UpdateStatus,
+    )
+except ImportError:
+    QdrantClient: Any = None
+    FieldCondition: Any = None
+    Filter: Any = None
+    MatchValue: Any = None
+    PointStruct: Any = None
+    Range: Any = None
+    UpdateStatus: Any = None
 
 logger = logging.getLogger(__name__)
 
@@ -29,6 +38,11 @@ class QdrantStorageClient:
         collection: str = "chunks_gemini_v1",
         timeout: int = 30,
     ):
+        if QdrantClient is None:
+            raise RuntimeError(
+                "qdrant-client is required for QdrantStorageClient. "
+                "Install it with: pip install qdrant-client"
+            )
         if api_key:
             self.client = QdrantClient(url=url, api_key=api_key, timeout=timeout)
         else:
@@ -199,7 +213,7 @@ class QdrantStorageClient:
             {"name": s.name, "creation_time": s.creation_time, "size": s.size} for s in snapshots
         ]
 
-    def restore_snapshot(self, snapshot_name: str, snapshot_location: str = None) -> bool:
+    def restore_snapshot(self, snapshot_name: str, snapshot_location: str | None = None) -> bool:
         """
         Restore collection from a snapshot.
 

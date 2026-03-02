@@ -7,8 +7,12 @@ import logging
 import time
 from dataclasses import dataclass
 from threading import Lock
+from typing import Any
 
-import google.generativeai as genai
+try:
+    import google.generativeai as genai  # type: ignore[import-not-found]
+except ImportError:
+    genai: Any = None
 
 logger = logging.getLogger(__name__)
 
@@ -65,6 +69,11 @@ class GeminiEmbedderAdapter:
         retry_base_delay: int = 60,
         calls_per_minute: int = 60,
     ):
+        if genai is None:
+            raise RuntimeError(
+                "google-generativeai is required for GeminiEmbedderAdapter. "
+                "Install it with: pip install google-generativeai"
+            )
         genai.configure(api_key=api_key)
         self.model = model
         self.model_version = model_version
@@ -103,7 +112,7 @@ class GeminiEmbedderAdapter:
         """Embed a single batch with retry logic."""
 
         retry_count = 0
-        last_error = None
+        last_error: Exception = RuntimeError("No embedding attempts made")
 
         while retry_count < self.max_retries:
             try:

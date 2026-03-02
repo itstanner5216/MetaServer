@@ -89,8 +89,8 @@ jobs:
             -v \
             --cov=src/meta_mcp/governance \
             --cov=src/meta_mcp/leases \
-            --cov=src/meta_mcp/validation \
-            --cov=src/meta_mcp/middleware \
+            --cov=src.meta_mcp.validation \
+            --cov=src.meta_mcp.middleware \
             --cov-report=term-missing \
             --cov-report=xml \
             --cov-report=html \

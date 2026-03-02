@@ -10,7 +10,7 @@ import heapq
 import math
 
 from ..governance.policy import evaluate_policy
-from ..registry.models import AllowedInMode, ToolCandidate, extract_schema_hint
+from ..registry.models import AllowedInMode, ToolCandidate, ToolRecord, extract_schema_hint
 from ..registry.registry import ToolRegistry
 from ..state import governance_state
 from .embedder import ToolEmbedder
@@ -146,7 +146,7 @@ class SemanticSearch:
 
         mode = self._resolve_governance_mode()
         top_k = max(limit, 0)
-        adjusted_tools: list[tuple[float, str, object, AllowedInMode]] = []
+        adjusted_tools: list[tuple[float, str, ToolRecord, AllowedInMode]] = []
 
         def _push_top_k(tool, score: float, allowed_in_mode: AllowedInMode) -> None:
             if top_k == 0:
