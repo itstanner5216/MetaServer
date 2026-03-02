@@ -67,7 +67,7 @@ class AgentBinding:
 
     agent_id: str
     role_id: str
-    model_id: str  # Model identifier (OpenAI-compatible format, e.g. "gpt-4o", "claude-3-sonnet")
+    model_id: str  # Model identifier (OpenAI-compatible format)
     allowed_tools: list[str] = field(default_factory=list)
     denied_tools: list[str] = field(default_factory=list)
     allowed_paths: list[str] = field(default_factory=list)

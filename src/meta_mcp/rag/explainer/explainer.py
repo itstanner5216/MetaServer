@@ -9,7 +9,6 @@ retrieval candidates, providing rationales for auditability.
 
 import json
 import logging
-import os
 import re
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -17,7 +16,7 @@ from typing import Any, Protocol
 
 
 class LLMClient(Protocol):
-    """Any object with a completion() method (litellm, openai, or custom)."""
+    """Any object with a completion() method (compatible client or custom)."""
 
     def completion(self, model: str, messages: list[dict], **kwargs) -> Any: ...
 
@@ -192,7 +191,7 @@ class RetrievalExplainer:
         Initialize the Retrieval Explainer.
 
         Args:
-            llm_client: LLM client (OpenAI-compatible). If None, auto-detects litellm or openai.
+            llm_client: LLM client (OpenAI-compatible). If None, auto-detects available clients.
             model: Model identifier for LLM calls (e.g., "gpt-4o-mini", "claude-3-haiku-20240307")
             temperature: Sampling temperature (0.3 for determinism)
             max_selected: Maximum chunks to select (default 8)
@@ -222,9 +221,11 @@ class RetrievalExplainer:
                 "llm_client must provide completion() or chat.completions.create()"
             )
 
-        self.model = model or os.getenv("LLM_MODEL", "gpt-4o-mini")
-        self.base_url = os.getenv("LLM_BASE_URL", "")
-        self.api_key = os.getenv("LLM_API_KEY", "")
+        from meta_mcp.config import Config
+
+        self.model = model or Config.LLM_MODEL
+        self.base_url = Config.LLM_BASE_URL
+        self.api_key = Config.LLM_API_KEY
 
         openai_factory = getattr(self.llm_client, "OpenAI", None)
         if openai_factory and not hasattr(self.llm_client, "completion") and self.api_key:
