@@ -69,8 +69,8 @@ class TestDetectAgentId:
         
         result = detect_agent_id(ctx)
         
-        # Empty string is falsy, so should continue to next strategy
-        assert result is None or result == ""
+        # Empty string is falsy, so should continue to next strategy and return None
+        assert result is None
 
     def test_detect_no_metadata_attribute(self, monkeypatch):
         """Should handle context without metadata attribute."""
