@@ -60,7 +60,9 @@ class AuditLogger:
         Initialize audit logger with JSON Lines configuration.
 
         Args:
-            log_path: Path to audit log file (defaults to AUDIT_LOG_PATH env var or ./audit.jsonl)
+            log_path: Path to audit log file. If None, resolved in priority order:
+                1. META_MCP_AUDIT_LOG_PATH environment variable
+                2. Config.AUDIT_LOG_PATH (AUDIT_LOG_PATH env var or ./audit.jsonl)
             max_bytes: Maximum file size in bytes before rotation
             backup_count: Number of rotated audit logs to retain
             buffer_size: Number of entries to buffer before flushing

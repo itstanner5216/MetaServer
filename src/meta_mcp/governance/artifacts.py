@@ -50,8 +50,11 @@ class ApprovalArtifactGenerator:
             ArtifactGenerationError: If root directory is unsafe
         """
         # Prevent writing to system directories
+        # Note: Path("/") is checked separately via equality; it must NOT be in
+        # unsafe_roots used with is_relative_to(), because every absolute path is
+        # relative to "/" which would block all legitimate paths.
+        exact_forbidden_paths = {Path("/")}
         unsafe_roots = {
-            Path("/"),
             Path("/etc"),
             Path("/usr"),
             Path("/bin"),
@@ -64,17 +67,26 @@ class ApprovalArtifactGenerator:
             Path("/root"),
         }
 
+        resolved = self.artifacts_root.resolve()
+
+        # Check exact forbidden paths
+        for forbidden in exact_forbidden_paths:
+            if resolved == forbidden.resolve():
+                raise ArtifactGenerationError(
+                    f"Artifacts root cannot be system directory: {forbidden}"
+                )
+
         for unsafe in unsafe_roots:
             try:
-                if self.artifacts_root.resolve() == unsafe.resolve():
+                if resolved == unsafe.resolve():
                     raise ArtifactGenerationError(
                         f"Artifacts root cannot be system directory: {unsafe}"
                     )
-                if self.artifacts_root.resolve().is_relative_to(unsafe.resolve()):
+                if resolved.is_relative_to(unsafe.resolve()):
                     if unsafe == Path("/var"):
                         # Allow /var/tmp and similar
-                        if not self.artifacts_root.resolve().is_relative_to(Path("/var/tmp")):
-                            if not self.artifacts_root.resolve().is_relative_to(Path("/var/log")):
+                        if not resolved.is_relative_to(Path("/var/tmp")):
+                            if not resolved.is_relative_to(Path("/var/log")):
                                 raise ArtifactGenerationError(
                                     f"Artifacts root cannot be under {unsafe} (except /var/tmp, /var/log)"
                                 )
