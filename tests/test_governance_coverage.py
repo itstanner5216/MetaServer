@@ -508,8 +508,17 @@ async def test_factory_explicit_unknown_provider_falls_back(monkeypatch):
     """ApprovalProviderFactory falls back to auto when unknown provider requested."""
     from src.meta_mcp.governance.approval import (
         ApprovalProviderFactory,
+        DBusGUIProvider,
         FastMCPElicitProvider,
     )
+
+    # Monkeypatch DBusGUIProvider.is_available to return False deterministically
+    # This ensures FastMCPElicitProvider is selected regardless of environment
+    async def _mock_dbus_unavailable(self):
+        return False
+
+    monkeypatch.setattr(DBusGUIProvider, "is_available", _mock_dbus_unavailable)
+
     ctx = MagicMock()
     ctx.elicit = MagicMock()
     provider = await ApprovalProviderFactory.create_provider(
@@ -523,18 +532,31 @@ async def test_factory_explicit_unknown_provider_falls_back(monkeypatch):
 async def test_get_approval_provider_singleton(monkeypatch):
     """get_approval_provider() returns consistent provider for same context."""
     import src.meta_mcp.governance.approval as approval_module
+    from src.meta_mcp.governance.approval import (
+        DBusGUIProvider,
+        FastMCPElicitProvider,
+        get_approval_provider,
+    )
+
+    # Monkeypatch DBusGUIProvider.is_available to return False deterministically
+    async def _mock_dbus_unavailable(self):
+        return False
+
+    monkeypatch.setattr(DBusGUIProvider, "is_available", _mock_dbus_unavailable)
+
     # Reset singleton
     approval_module._approval_provider = None
 
     ctx = MagicMock()
     ctx.elicit = MagicMock()
 
-    from src.meta_mcp.governance.approval import (
-        FastMCPElicitProvider,
-        get_approval_provider,
-    )
+    # First call - creates the provider
     provider1 = await get_approval_provider(context=ctx)
     assert isinstance(provider1, FastMCPElicitProvider)
+
+    # Second call - should return the same instance (singleton behavior)
+    provider2 = await get_approval_provider(context=ctx)
+    assert provider2 is provider1, "get_approval_provider should return the same instance"
 
     # Reset for other tests
     approval_module._approval_provider = None

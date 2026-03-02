@@ -118,7 +118,9 @@ class DOCXExtractor(Extractor):
             raise
 
     def can_extract(self, path: str) -> bool:
-        return Path(path).suffix.lower() in {".docx", ".doc"}
+        # Only .docx (Office Open XML) is supported. Legacy .doc files require
+        # alternative libraries like antiword or textract.
+        return Path(path).suffix.lower() == ".docx"
 
 
 class ExtractorRegistry:
