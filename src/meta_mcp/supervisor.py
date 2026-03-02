@@ -1,6 +1,7 @@
 """Main FastMCP supervisor server with governance middleware and discovery tools."""
 
 import json
+import os
 import sys
 from contextlib import asynccontextmanager
 from pathlib import Path
