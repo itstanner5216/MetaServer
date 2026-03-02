@@ -594,7 +594,7 @@ jobs:
             core.info('Audit log created');
       
       - name: Upload audit artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: ai-pipeline-audit-${{ github.run_id }}
           path: reports/

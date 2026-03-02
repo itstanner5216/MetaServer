@@ -319,7 +319,7 @@ jobs:
             core.info('Consolidation plan saved to artifacts');
       
       - name: 📤 Upload Consolidation Plan
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: consolidation-plan-${{ github.run_id }}
           path: artifacts/consolidation-plan.json
