@@ -2,10 +2,10 @@
 
 import os
 import warnings
-from typing import Dict
 
 
 def _get_default_execution_mode() -> str:
+    """Read cold-start default governance mode from environment."""
     deprecated_value = os.getenv("DEFAULT_MODE")
     governance_value = os.getenv("DEFAULT_GOVERNANCE_MODE")
 
@@ -138,7 +138,9 @@ class Config:
     # ========================================================================
     # Governance Configuration
     # ========================================================================
+    # Used only during cold start (when Redis has no governance:mode key).
     DEFAULT_EXECUTION_MODE: str = _get_default_execution_mode()
+    GOVERNANCE_KEY_DIR: str = os.getenv("GOVERNANCE_KEY_DIR", "/var/lib/metaserver/keys")
     DEFAULT_ELEVATION_TTL: int = 300  # 5 minutes
     ELICITATION_TIMEOUT: int = 300  # 5 minutes
 

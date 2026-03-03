@@ -164,7 +164,7 @@ async def test_mode_change_affects_new_lease_grants(
         await get_tool_schema.fn(tool_name="write_file", ctx=mock_fastmcp_context)
 
     # Change mode to BYPASS
-    await governance_state.set_mode(ExecutionMode.BYPASS)
+    await governance_state.set_mode(ExecutionMode.BYPASS, "test-session-key")
 
     # Request schema for delete_file
     response = await get_tool_schema.fn(tool_name="delete_file", ctx=mock_fastmcp_context)
@@ -197,7 +197,7 @@ async def test_existing_leases_remain_valid_after_mode_change(
     assert lease is not None
 
     # Change mode to READ_ONLY
-    await governance_state.set_mode(ExecutionMode.READ_ONLY)
+    await governance_state.set_mode(ExecutionMode.READ_ONLY, "test-session-key")
 
     # Verify lease still valid
     lease_check = await lease_manager.validate(client_id, "write_file")
@@ -226,7 +226,7 @@ async def test_policy_matrix_integration(
     mock_fastmcp_context.session_id = client_id
 
     # Test READ_ONLY + safe
-    await governance_state.set_mode(ExecutionMode.READ_ONLY)
+    await governance_state.set_mode(ExecutionMode.READ_ONLY, "test-session-key")
     response = await get_tool_schema.fn(tool_name="read_file", ctx=mock_fastmcp_context)
     assert json.loads(response)["name"] == "read_file"
 
@@ -235,7 +235,7 @@ async def test_policy_matrix_integration(
         await get_tool_schema.fn(tool_name="write_file", ctx=mock_fastmcp_context)
 
     # Test PERMISSION + safe
-    await governance_state.set_mode(ExecutionMode.PERMISSION)
+    await governance_state.set_mode(ExecutionMode.PERMISSION, "test-session-key")
     response = await get_tool_schema.fn(tool_name="read_file", ctx=mock_fastmcp_context)
     assert json.loads(response)["name"] == "read_file"
 
@@ -244,7 +244,7 @@ async def test_policy_matrix_integration(
         await get_tool_schema.fn(tool_name="write_file", ctx=mock_fastmcp_context)
 
     # Test BYPASS + any
-    await governance_state.set_mode(ExecutionMode.BYPASS)
+    await governance_state.set_mode(ExecutionMode.BYPASS, "test-session-key")
     response = await get_tool_schema.fn(tool_name="delete_file", ctx=mock_fastmcp_context)
     assert json.loads(response)["name"] == "delete_file"
 

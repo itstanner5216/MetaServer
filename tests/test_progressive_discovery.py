@@ -210,7 +210,7 @@ async def test_governance_intercepts_all_tools(redis_client):
     Even with progressive discovery, governance must still apply.
     """
     # Set governance mode to READ_ONLY
-    await governance_state.set_mode(ExecutionMode.READ_ONLY)
+    await governance_state.set_mode(ExecutionMode.READ_ONLY, "test-session-key")
 
     tools_before = await mcp.get_tools()
     tool_names_before = [t.name for t in tools_before.values()]
@@ -229,7 +229,7 @@ async def test_governance_intercepts_all_tools(redis_client):
     # Note: Actual governance interception is tested in test_governance_modes.py
 
     # Clean up: reset to PERMISSION mode
-    await governance_state.set_mode(ExecutionMode.PERMISSION)
+    await governance_state.set_mode(ExecutionMode.PERMISSION, "test-session-key")
 
 
 @pytest.mark.asyncio

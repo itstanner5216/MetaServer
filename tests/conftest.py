@@ -2,7 +2,6 @@
 
 import asyncio
 import json
-import tempfile
 import os
 from pathlib import Path
 from typing import Any
@@ -91,6 +90,21 @@ def pytest_collection_modifyitems(config, items):
         if "requires_api_keys" in item.keywords and not api_keys_available:
             item.add_marker(skip_api)
 
+
+
+@pytest.fixture(autouse=True)
+def mock_governance_session_key_validation(monkeypatch, request):
+    """Allow existing tests to call governance_state.set_mode without managing keys."""
+    if request.node.fspath.basename == "test_governance_session_key.py":
+        return
+
+    async def _always_valid(self, provided_key, redis):
+        return True
+
+    monkeypatch.setattr(
+        "src.meta_mcp.governance.session_key.GovernanceKeyManager.validate_and_rotate",
+        _always_valid,
+    )
 # ============================================================================
 # REDIS FIXTURES
 # ============================================================================
@@ -158,12 +172,12 @@ async def governance_in_read_only(redis_client):
         Resets mode to PERMISSION
     """
     # Set READ_ONLY mode
-    await governance_state.set_mode(ExecutionMode.READ_ONLY)
+    await governance_state.set_mode(ExecutionMode.READ_ONLY, "test-session-key")
 
     yield
 
     # Reset to PERMISSION (fail-safe default)
-    await governance_state.set_mode(ExecutionMode.PERMISSION)
+    await governance_state.set_mode(ExecutionMode.PERMISSION, "test-session-key")
 
 
 @pytest.fixture
@@ -181,12 +195,12 @@ async def governance_in_bypass(redis_client):
         Resets mode to PERMISSION
     """
     # Set BYPASS mode
-    await governance_state.set_mode(ExecutionMode.BYPASS)
+    await governance_state.set_mode(ExecutionMode.BYPASS, "test-session-key")
 
     yield
 
     # Reset to PERMISSION (fail-safe default)
-    await governance_state.set_mode(ExecutionMode.PERMISSION)
+    await governance_state.set_mode(ExecutionMode.PERMISSION, "test-session-key")
 
 
 @pytest.fixture
@@ -204,12 +218,12 @@ async def governance_in_permission(redis_client):
         Resets mode to PERMISSION
     """
     # Set PERMISSION mode (explicit)
-    await governance_state.set_mode(ExecutionMode.PERMISSION)
+    await governance_state.set_mode(ExecutionMode.PERMISSION, "test-session-key")
 
     yield
 
     # Mode already at PERMISSION, no cleanup needed
-    await governance_state.set_mode(ExecutionMode.PERMISSION)
+    await governance_state.set_mode(ExecutionMode.PERMISSION, "test-session-key")
 
 
 # ============================================================================

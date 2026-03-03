@@ -26,7 +26,7 @@ from .leases import lease_manager
 from .middleware import GovernanceMiddleware
 from .redis_client import check_redis_health
 from .registry import tool_registry
-from .state import governance_state
+from .state import ExecutionMode, governance_state
 from .validation import run_all_validations
 
 # Constants
@@ -196,19 +196,33 @@ async def lifespan(app):
         # governance_state.get_mode() already handles fail-safe to PERMISSION
         # No need to crash - system will operate in PERMISSION mode
 
-    # 2. Load tool registry from YAML configuration
+    # 2. Initialize governance session key
+    try:
+        key_path = await governance_state.initialize_session_key()
+        logger.info(
+            f"Governance session key written to {key_path}. Use this key to change governance mode."
+        )
+    except Exception as e:
+        logger.error(
+            f"Failed to initialize governance session key: {e}. "
+            "Falling back to PERMISSION mode with mode changes disabled until restart."
+        )
+        governance_state.disable_mode_changes()
+        await governance_state.force_mode(ExecutionMode.PERMISSION)
+
+    # 3. Load tool registry from YAML configuration
     all_tools = tool_registry.get_all_summaries()
     logger.info(f"Tool registry initialized with {len(all_tools)} tools")
 
-    # 3. Ensure workspace directory exists
+    # 4. Ensure workspace directory exists
     workspace_path = Path(WORKSPACE_ROOT)
     workspace_path.mkdir(parents=True, exist_ok=True)
     logger.info(f"Workspace directory ready: {workspace_path.resolve()}")
 
-    # 4. Run compliance validations (non-blocking)
+    # 5. Run compliance validations (non-blocking)
     await run_all_validations(mcp, tool_registry)
 
-    # 5. Approval provider health check
+    # 6. Approval provider health check
     try:
         # Initialize approval provider and check availability
         provider = await get_approval_provider(context=None)
@@ -228,7 +242,7 @@ async def lifespan(app):
             "Check logs for details or ensure approval provider dependencies are installed."
         )
 
-    # 6. Artifact generator initialization
+    # 7. Artifact generator initialization
     try:
         artifact_generator = get_artifact_generator()
         logger.info(f"Artifact generator initialized: {artifact_generator.artifacts_root}")
@@ -238,7 +252,7 @@ async def lifespan(app):
             "Approval artifacts will not be generated."
         )
 
-    # 7. Log startup completion
+    # 8. Log startup completion
     logger.info(f"{SERVER_NAME} startup complete")
     logger.info(f"Listening on {HOST}:{PORT}")
     logger.info("Governance middleware: ACTIVE")
@@ -248,6 +262,7 @@ async def lifespan(app):
 
     # SHUTDOWN
     logger.info(f"{SERVER_NAME} shutting down...")
+    governance_state.cleanup_session_key()
     await governance_state.close()
 
 
