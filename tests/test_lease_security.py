@@ -259,7 +259,7 @@ async def test_lease_mode_consistency(redis_client, governance_in_permission):
     )
     assert lease.mode_at_issue == "PERMISSION"
 
-    await governance_state.set_mode(ExecutionMode.READ_ONLY)
+    await governance_state.set_mode(ExecutionMode.READ_ONLY, session_key="test-session-key")
 
     valid = await lease_manager.validate("test_session", "write_file")
     assert valid is not None, "Lease remains valid after mode change"

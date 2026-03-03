@@ -138,6 +138,8 @@ class Config:
     # ========================================================================
     # Governance Configuration
     # ========================================================================
+    GOVERNANCE_KEY_DIR: str = os.getenv("GOVERNANCE_KEY_DIR", "/var/lib/metaserver/keys")
+    # Used only for first-time cold start when Redis has no persisted mode key yet.
     DEFAULT_EXECUTION_MODE: str = _get_default_execution_mode()
     DEFAULT_ELEVATION_TTL: int = 300  # 5 minutes
     ELICITATION_TIMEOUT: int = 300  # 5 minutes

@@ -7,11 +7,13 @@ from typing import Optional
 from loguru import logger
 from redis import asyncio as aioredis
 
+from .audit import AuditEvent, audit_logger
 from .config import Config
 from .redis_client import close_redis_client, get_redis_client
 
 # Constants
 GOVERNANCE_MODE_KEY = "governance:mode"
+GOVERNANCE_SESSION_KEY_HASH_KEY = "governance:session_key_hash"
 ELEVATION_PREFIX = "elevation:"
 DEFAULT_ELEVATION_TTL = Config.DEFAULT_ELEVATION_TTL
 
@@ -39,6 +41,20 @@ class GovernanceState:
         """Initialize governance state with lazy Redis connection."""
         self._redis_client: Optional[aioredis.Redis] = None
         self._cached_mode: Optional[ExecutionMode] = None
+        self._key_manager: Optional[object] = None
+        self._mode_changes_enabled: bool = True
+
+    def set_key_manager(self, key_manager: Optional[object]) -> None:
+        """Attach governance key manager used for mode changes."""
+        self._key_manager = key_manager
+
+    def disable_mode_changes(self) -> None:
+        """Disable governance mode changes when key management is unavailable."""
+        self._mode_changes_enabled = False
+
+    def enable_mode_changes(self) -> None:
+        """Enable governance mode changes when key management is healthy."""
+        self._mode_changes_enabled = True
 
     @staticmethod
     def _parse_mode(mode_value: Optional[str]) -> Optional[ExecutionMode]:
@@ -146,21 +162,66 @@ class GovernanceState:
             return self._cached_mode
         return self._default_mode()
 
-    async def set_mode(self, mode: ExecutionMode) -> bool:
+    async def set_mode(self, mode: ExecutionMode, session_key: str) -> bool:
         """
-        Set governance mode in Redis.
+        Set governance mode in Redis with one-time session key validation.
 
         Args:
             mode: Execution mode to set
+            session_key: Current governance session key
 
         Returns:
-            True if mode was set successfully, False otherwise
+            True if mode was set successfully
+
+        Raises:
+            PermissionError: If mode changes are disabled or key is invalid
         """
+        if not self._mode_changes_enabled or self._key_manager is None:
+            audit_logger.log(
+                AuditEvent.GOVERNANCE_MODE_CHANGE_DENIED,
+                old_mode=self.get_cached_mode().value,
+                requested_mode=mode.value,
+                key_valid=False,
+                reason="key_management_unavailable",
+            )
+            raise PermissionError("Governance mode changes are currently disabled")
+
+        old_mode = (await self.get_mode()).value
+
+        key_valid = await self._key_manager.validate_and_rotate(session_key)
+        if not key_valid:
+            audit_logger.log(
+                AuditEvent.GOVERNANCE_MODE_CHANGE_DENIED,
+                old_mode=old_mode,
+                requested_mode=mode.value,
+                key_valid=False,
+            )
+            audit_logger.log(
+                AuditEvent.GOVERNANCE_KEY_INVALID,
+                old_mode=old_mode,
+                requested_mode=mode.value,
+                key_valid=False,
+            )
+            raise PermissionError("Invalid governance session key")
+
         try:
             redis = await self._get_redis()
             await redis.set(GOVERNANCE_MODE_KEY, mode.value)
-            logger.info(f"Governance mode set to: {mode.value}")
             self._cached_mode = mode
+            audit_logger.log(
+                AuditEvent.GOVERNANCE_MODE_CHANGE,
+                old_mode=old_mode,
+                requested_mode=mode.value,
+                key_valid=True,
+            )
+            audit_logger.log_mode_change(old_mode=old_mode, new_mode=mode.value, changed_by="session_key")
+            audit_logger.log(
+                AuditEvent.GOVERNANCE_KEY_ROTATED,
+                old_mode=old_mode,
+                requested_mode=mode.value,
+                key_valid=True,
+            )
+            logger.info(f"Governance mode set to: {mode.value}")
             return True
         except (aioredis.ConnectionError, aioredis.TimeoutError) as e:
             logger.error(f"Redis connection failed in set_mode: {e}")
@@ -264,6 +325,8 @@ class GovernanceState:
         """Close Redis connection and pool."""
         await close_redis_client()
         self._redis_client = None
+        self._key_manager = None
+        self._mode_changes_enabled = True
 
 
 # Module-level singleton

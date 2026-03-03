@@ -138,6 +138,20 @@ async def redis_client():
         await close_redis_client()
 
 
+@pytest.fixture(autouse=True)
+def mock_governance_key_validation(monkeypatch):
+    """Default all tests to a valid rotating session key manager unless overridden."""
+
+    class _TestKeyManager:
+        async def validate_and_rotate(self, provided_key: str) -> bool:
+            return True
+
+    governance_state.set_key_manager(_TestKeyManager())
+    governance_state.enable_mode_changes()
+    yield
+    governance_state.set_key_manager(None)
+    governance_state.enable_mode_changes()
+
 # ============================================================================
 # GOVERNANCE MODE FIXTURES
 # ============================================================================
@@ -158,12 +172,12 @@ async def governance_in_read_only(redis_client):
         Resets mode to PERMISSION
     """
     # Set READ_ONLY mode
-    await governance_state.set_mode(ExecutionMode.READ_ONLY)
+    await governance_state.set_mode(ExecutionMode.READ_ONLY, session_key="test-session-key")
 
     yield
 
     # Reset to PERMISSION (fail-safe default)
-    await governance_state.set_mode(ExecutionMode.PERMISSION)
+    await governance_state.set_mode(ExecutionMode.PERMISSION, session_key="test-session-key")
 
 
 @pytest.fixture
@@ -181,12 +195,12 @@ async def governance_in_bypass(redis_client):
         Resets mode to PERMISSION
     """
     # Set BYPASS mode
-    await governance_state.set_mode(ExecutionMode.BYPASS)
+    await governance_state.set_mode(ExecutionMode.BYPASS, session_key="test-session-key")
 
     yield
 
     # Reset to PERMISSION (fail-safe default)
-    await governance_state.set_mode(ExecutionMode.PERMISSION)
+    await governance_state.set_mode(ExecutionMode.PERMISSION, session_key="test-session-key")
 
 
 @pytest.fixture
@@ -204,12 +218,12 @@ async def governance_in_permission(redis_client):
         Resets mode to PERMISSION
     """
     # Set PERMISSION mode (explicit)
-    await governance_state.set_mode(ExecutionMode.PERMISSION)
+    await governance_state.set_mode(ExecutionMode.PERMISSION, session_key="test-session-key")
 
     yield
 
     # Mode already at PERMISSION, no cleanup needed
-    await governance_state.set_mode(ExecutionMode.PERMISSION)
+    await governance_state.set_mode(ExecutionMode.PERMISSION, session_key="test-session-key")
 
 
 # ============================================================================

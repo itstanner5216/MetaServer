@@ -21,6 +21,7 @@ from .discovery_utils import format_search_results
 from .governance.approval import get_approval_provider
 from .governance.artifacts import get_artifact_generator
 from .governance.policy import evaluate_policy
+from .governance.session_key import GovernanceKeyManager
 from .governance.tokens import generate_token
 from .leases import lease_manager
 from .middleware import GovernanceMiddleware
@@ -196,6 +197,30 @@ async def lifespan(app):
         # governance_state.get_mode() already handles fail-safe to PERMISSION
         # No need to crash - system will operate in PERMISSION mode
 
+    key_manager = None
+    try:
+        redis = await governance_state._get_redis()
+        key_manager = GovernanceKeyManager(redis)
+        key_path = await key_manager.initialize()
+        governance_state.set_key_manager(key_manager)
+        governance_state.enable_mode_changes()
+        logger.info(
+            f"Governance session key written to {key_path}. "
+            "Use this key to change governance mode."
+        )
+    except Exception as e:
+        governance_state.set_key_manager(None)
+        governance_state.disable_mode_changes()
+        logger.error(
+            f"Failed to initialize governance session key: {e}. "
+            "Falling back to PERMISSION mode with mode changes disabled until restart."
+        )
+        try:
+            redis = await governance_state._get_redis()
+            await redis.set("governance:mode", "permission")
+        except Exception as mode_error:
+            logger.error(f"Failed to enforce PERMISSION mode after key init failure: {mode_error}")
+
     # 2. Load tool registry from YAML configuration
     all_tools = tool_registry.get_all_summaries()
     logger.info(f"Tool registry initialized with {len(all_tools)} tools")
@@ -248,6 +273,8 @@ async def lifespan(app):
 
     # SHUTDOWN
     logger.info(f"{SERVER_NAME} shutting down...")
+    if key_manager is not None:
+        key_manager.cleanup()
     await governance_state.close()
 
 
