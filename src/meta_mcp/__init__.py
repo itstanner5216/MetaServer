@@ -12,13 +12,13 @@ _EXPORTS = {
     "audit_logger": (".audit", "audit_logger"),
 }
 
-__all__ = [  # noqa: RUF022
-    "__version__",
+__all__ = [
+    "AuditEvent",
     "Config",
     "ExecutionMode",
-    "governance_state",
-    "AuditEvent",
+    "__version__",
     "audit_logger",
+    "governance_state",
 ]
 
 
