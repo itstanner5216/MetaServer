@@ -3,13 +3,12 @@
 import atexit
 import json
 import logging
-import os
 import time
 from datetime import datetime, timezone
 from enum import Enum
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Optional
 
 from loguru import logger
 
@@ -31,6 +30,10 @@ class AuditEvent(str, Enum):
     SCOPED_ELEVATION_GRANTED = "scoped_elevation_granted"
     ELEVATIONS_REVOKED = "elevations_revoked"
     MODE_CHANGED = "mode_changed"
+    GOVERNANCE_MODE_CHANGE = "governance_mode_change"
+    GOVERNANCE_MODE_CHANGE_DENIED = "governance_mode_change_denied"
+    GOVERNANCE_KEY_INVALID = "governance_key_invalid"
+    GOVERNANCE_KEY_ROTATED = "governance_key_rotated"
     BLOCKED_READ_ONLY = "blocked_read_only"
     BYPASS_EXECUTED = "bypass_executed"
 

@@ -149,7 +149,7 @@ async def test_mode_transition_read_only_to_permission(redis_client):
     5. Existing leases unaffected
     """
     # Step 1: Set READ_ONLY mode
-    await governance_state.set_mode(ExecutionMode.READ_ONLY)
+    await governance_state.set_mode(ExecutionMode.READ_ONLY, "test-session-key")
 
     # Step 2: Check sensitive tool (blocked)
     decision = evaluate_policy(
@@ -168,7 +168,7 @@ async def test_mode_transition_read_only_to_permission(redis_client):
     assert safe_lease is not None
 
     # Step 3: Transition to PERMISSION
-    await governance_state.set_mode(ExecutionMode.PERMISSION)
+    await governance_state.set_mode(ExecutionMode.PERMISSION, "test-session-key")
 
     # Step 4: Check same tool (now requires approval)
     decision = evaluate_policy(
@@ -196,7 +196,7 @@ async def test_mode_transition_permission_to_bypass(redis_client):
     4. Same tool now allowed without approval
     """
     # Step 1: Set PERMISSION mode
-    await governance_state.set_mode(ExecutionMode.PERMISSION)
+    await governance_state.set_mode(ExecutionMode.PERMISSION, "test-session-key")
 
     # Step 2: Sensitive tool requires approval
     decision = evaluate_policy(
@@ -205,7 +205,7 @@ async def test_mode_transition_permission_to_bypass(redis_client):
     assert decision.action == "require_approval"
 
     # Step 3: Transition to BYPASS
-    await governance_state.set_mode(ExecutionMode.BYPASS)
+    await governance_state.set_mode(ExecutionMode.BYPASS, "test-session-key")
 
     # Step 4: Same tool now allowed
     decision = evaluate_policy(
@@ -479,7 +479,7 @@ async def test_complete_user_journey(redis_client):
     12. User must re-approve for more uses
     """
     # Step 1: Start in READ_ONLY
-    await governance_state.set_mode(ExecutionMode.READ_ONLY)
+    await governance_state.set_mode(ExecutionMode.READ_ONLY, "test-session-key")
 
     # Step 2: Search for tools
     results = tool_registry.search("file")
@@ -498,7 +498,7 @@ async def test_complete_user_journey(redis_client):
     assert sensitive_decision.action == "block"
 
     # Step 5: Elevate to PERMISSION
-    await governance_state.set_mode(ExecutionMode.PERMISSION)
+    await governance_state.set_mode(ExecutionMode.PERMISSION, "test-session-key")
 
     # Step 6: Request sensitive tool
     sensitive_decision = evaluate_policy(
@@ -575,9 +575,9 @@ async def test_security_invariants_maintained(redis_client, fresh_registry):
     assert expired is None
 
     # Invariant 5: Mode changes don't affect existing leases
-    await governance_state.set_mode(ExecutionMode.PERMISSION)
+    await governance_state.set_mode(ExecutionMode.PERMISSION, "test-session-key")
     lease = await lease_manager.grant("mode_test", "tool_c", 300, 5, "PERMISSION")
-    await governance_state.set_mode(ExecutionMode.READ_ONLY)
+    await governance_state.set_mode(ExecutionMode.READ_ONLY, "test-session-key")
     validated = await lease_manager.validate("mode_test", "tool_c")
     assert validated is not None
     assert validated.mode_at_issue == "PERMISSION"

@@ -16,7 +16,7 @@ async def test_shared_pool_reuse(redis_client):
     governance_state._redis_client = None
 
     async def run_governance():
-        await governance_state.set_mode(ExecutionMode.PERMISSION)
+        await governance_state.set_mode(ExecutionMode.PERMISSION, "test-session-key")
         await governance_state.get_mode()
 
     async def run_lease(index: int):

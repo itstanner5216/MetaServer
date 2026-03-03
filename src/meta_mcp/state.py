@@ -7,7 +7,9 @@ from typing import Optional
 from loguru import logger
 from redis import asyncio as aioredis
 
+from .audit import AuditEvent, audit_logger
 from .config import Config
+from .governance.session_key import GovernanceKeyManager
 from .redis_client import close_redis_client, get_redis_client
 
 # Constants
@@ -25,20 +27,14 @@ class ExecutionMode(str, Enum):
 
 
 class GovernanceState:
-    """
-    Redis-backed governance state manager with scoped elevation cache.
-
-    Features:
-    - Lazy Redis client initialization
-    - Fail-safe mode retrieval (defaults to PERMISSION on Redis failure)
-    - Scoped elevation cache with mandatory TTL
-    - SHA256-based elevation hash computation
-    """
+    """Redis-backed governance state manager with scoped elevation cache."""
 
     def __init__(self):
         """Initialize governance state with lazy Redis connection."""
         self._redis_client: Optional[aioredis.Redis] = None
         self._cached_mode: Optional[ExecutionMode] = None
+        self._key_manager = GovernanceKeyManager()
+        self._mode_changes_enabled = True
 
     @staticmethod
     def _parse_mode(mode_value: Optional[str]) -> Optional[ExecutionMode]:
@@ -64,26 +60,37 @@ class GovernanceState:
         return parsed_mode
 
     async def _get_redis(self) -> aioredis.Redis:
-        """
-        Get or create Redis client with shared connection pool.
-
-        Returns:
-            Redis client instance with connection pooling
-        """
+        """Get or create Redis client with shared connection pool."""
         self._redis_client = await get_redis_client()
         return self._redis_client
 
+    async def initialize_session_key(self) -> Optional[str]:
+        """Generate and persist a new governance session key for this server run."""
+        redis = await self._get_redis()
+        path = await self._key_manager.initialize(redis)
+        return str(path)
+
+    def disable_mode_changes(self) -> None:
+        """Disable mode changes until restart (fail-safe)."""
+        self._mode_changes_enabled = False
+
+    async def force_mode(self, mode: ExecutionMode) -> bool:
+        """Set governance mode without key checks (startup fail-safe path only)."""
+        try:
+            redis = await self._get_redis()
+            await redis.set(GOVERNANCE_MODE_KEY, mode.value)
+            self._cached_mode = mode
+            return True
+        except Exception as e:
+            logger.error(f"Failed to force governance mode: {e}")
+            return False
+
+    def cleanup_session_key(self) -> None:
+        """Clean up session key file on shutdown."""
+        self._key_manager.cleanup_key_file()
+
     async def get_mode(self) -> ExecutionMode:
-        """
-        Get current governance mode with fail-safe default.
-
-        FAIL-SAFE: Returns PERMISSION if Redis is unreachable.
-        This ensures the system requires explicit approval even during failures,
-        never defaulting to BYPASS which would be a security risk.
-
-        Returns:
-            Current execution mode, or PERMISSION if Redis fails
-        """
+        """Get current governance mode with fail-safe default."""
         try:
             redis = await self._get_redis()
             mode_str = await redis.get(GOVERNANCE_MODE_KEY)
@@ -96,13 +103,10 @@ class GovernanceState:
                 try:
                     await redis.set(GOVERNANCE_MODE_KEY, default_mode.value)
                 except Exception as e:
-                    logger.error(
-                        f"Failed to initialize governance mode in Redis: {e}"
-                    )
+                    logger.error(f"Failed to initialize governance mode in Redis: {e}")
                 self._cached_mode = default_mode
                 return default_mode
 
-            # Validate and return mode
             parsed_mode = self._parse_mode(mode_str)
             if parsed_mode is None:
                 default_mode = self._default_mode()
@@ -112,9 +116,7 @@ class GovernanceState:
                 try:
                     await redis.set(GOVERNANCE_MODE_KEY, default_mode.value)
                 except Exception as e:
-                    logger.error(
-                        f"Failed to reset governance mode in Redis: {e}"
-                    )
+                    logger.error(f"Failed to reset governance mode in Redis: {e}")
                 self._cached_mode = default_mode
                 return default_mode
             self._cached_mode = parsed_mode
@@ -136,32 +138,48 @@ class GovernanceState:
             return fallback_mode
 
     def get_cached_mode(self) -> ExecutionMode:
-        """
-        Get last-known governance mode without awaiting Redis.
-
-        Returns:
-            Cached mode if available, otherwise config default.
-        """
+        """Get last-known governance mode without awaiting Redis."""
         if self._cached_mode is not None:
             return self._cached_mode
         return self._default_mode()
 
-    async def set_mode(self, mode: ExecutionMode) -> bool:
-        """
-        Set governance mode in Redis.
+    async def set_mode(self, mode: ExecutionMode, session_key: str) -> bool:
+        """Set governance mode in Redis (requires valid session key)."""
+        old_mode = (await self.get_mode()).value
 
-        Args:
-            mode: Execution mode to set
+        if not self._mode_changes_enabled:
+            audit_logger.log(
+                AuditEvent.GOVERNANCE_MODE_CHANGE_DENIED,
+                old_mode=old_mode,
+                requested_mode=mode.value,
+                key_valid=False,
+            )
+            raise PermissionError("Governance mode changes are disabled until restart")
 
-        Returns:
-            True if mode was set successfully, False otherwise
-        """
         try:
             redis = await self._get_redis()
+            key_valid = await self._key_manager.validate_and_rotate(session_key, redis)
+            if not key_valid:
+                audit_logger.log(
+                    AuditEvent.GOVERNANCE_MODE_CHANGE_DENIED,
+                    old_mode=old_mode,
+                    requested_mode=mode.value,
+                    key_valid=False,
+                )
+                raise PermissionError("Invalid governance session key")
+
             await redis.set(GOVERNANCE_MODE_KEY, mode.value)
             logger.info(f"Governance mode set to: {mode.value}")
             self._cached_mode = mode
+            audit_logger.log(
+                AuditEvent.GOVERNANCE_MODE_CHANGE,
+                old_mode=old_mode,
+                requested_mode=mode.value,
+                key_valid=True,
+            )
             return True
+        except PermissionError:
+            raise
         except (aioredis.ConnectionError, aioredis.TimeoutError) as e:
             logger.error(f"Redis connection failed in set_mode: {e}")
             return False
@@ -171,35 +189,13 @@ class GovernanceState:
 
     @staticmethod
     def compute_elevation_hash(tool_name: str, context_key: str, session_id: str) -> str:
-        """
-        Compute SHA256 hash for elevation key.
-
-        Creates a unique hash based on tool name, context, and session
-        to ensure elevation grants are scoped appropriately.
-
-        Args:
-            tool_name: Name of the tool requesting elevation
-            context_key: Context identifier (e.g., file path, resource)
-            session_id: Session identifier
-
-        Returns:
-            SHA256 hex digest prefixed with ELEVATION_PREFIX
-        """
+        """Compute SHA256 hash for elevation key."""
         composite = f"{tool_name}:{context_key}:{session_id}"
         hash_digest = hashlib.sha256(composite.encode("utf-8")).hexdigest()
         return f"{ELEVATION_PREFIX}{hash_digest}"
 
     async def grant_elevation(self, hash_key: str, ttl: int = DEFAULT_ELEVATION_TTL) -> bool:
-        """
-        Grant elevation for a specific hash key with mandatory TTL.
-
-        Args:
-            hash_key: Elevation hash key (from compute_elevation_hash)
-            ttl: Time-to-live in seconds (mandatory, default: 300)
-
-        Returns:
-            True if elevation was granted, False otherwise
-        """
+        """Grant elevation for a specific hash key with mandatory TTL."""
         if ttl <= 0:
             logger.error(f"Invalid TTL for elevation grant: {ttl}")
             return False
@@ -217,15 +213,7 @@ class GovernanceState:
             return False
 
     async def check_elevation(self, hash_key: str) -> bool:
-        """
-        Check if elevation exists for a specific hash key.
-
-        Args:
-            hash_key: Elevation hash key (from compute_elevation_hash)
-
-        Returns:
-            True if elevation exists, False otherwise
-        """
+        """Check if elevation exists for a specific hash key."""
         try:
             redis = await self._get_redis()
             exists = await redis.exists(hash_key)
@@ -238,15 +226,7 @@ class GovernanceState:
             return False
 
     async def revoke_elevation(self, hash_key: str) -> bool:
-        """
-        Revoke elevation for a specific hash key.
-
-        Args:
-            hash_key: Elevation hash key (from compute_elevation_hash)
-
-        Returns:
-            True if elevation was revoked (or didn't exist), False on error
-        """
+        """Revoke elevation for a specific hash key."""
         try:
             redis = await self._get_redis()
             deleted = await redis.delete(hash_key)

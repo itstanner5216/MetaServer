@@ -1,41 +1,34 @@
-"""Phase 4: Governance Engine
+"""Governance package exports with lazy imports to avoid circular dependencies."""
 
-Policy-based access control with HMAC-signed capability tokens.
-"""
+from importlib import import_module
 
-from .approval import (
-    ApprovalDecision,
-    ApprovalProvider,
-    ApprovalRequest,
-    ApprovalResponse,
-    DBusGUIProvider,
-    FastMCPElicitProvider,
-    SystemdFallbackProvider,
-    get_approval_provider,
-)
-from .artifacts import (
-    ApprovalArtifactGenerator,
-    ArtifactGenerationError,
-    get_artifact_generator,
-)
-from .policy import PolicyDecision, evaluate_policy
-from .tokens import decode_token, generate_token, verify_token
+_EXPORTS = {
+    "ApprovalArtifactGenerator": (".artifacts", "ApprovalArtifactGenerator"),
+    "ApprovalDecision": (".approval", "ApprovalDecision"),
+    "ApprovalProvider": (".approval", "ApprovalProvider"),
+    "ApprovalRequest": (".approval", "ApprovalRequest"),
+    "ApprovalResponse": (".approval", "ApprovalResponse"),
+    "ArtifactGenerationError": (".artifacts", "ArtifactGenerationError"),
+    "DBusGUIProvider": (".approval", "DBusGUIProvider"),
+    "FastMCPElicitProvider": (".approval", "FastMCPElicitProvider"),
+    "PolicyDecision": (".policy", "PolicyDecision"),
+    "SystemdFallbackProvider": (".approval", "SystemdFallbackProvider"),
+    "decode_token": (".tokens", "decode_token"),
+    "evaluate_policy": (".policy", "evaluate_policy"),
+    "generate_token": (".tokens", "generate_token"),
+    "get_approval_provider": (".approval", "get_approval_provider"),
+    "get_artifact_generator": (".artifacts", "get_artifact_generator"),
+    "verify_token": (".tokens", "verify_token"),
+}
 
-__all__ = [
-    "ApprovalArtifactGenerator",
-    "ApprovalDecision",
-    "ApprovalProvider",
-    "ApprovalRequest",
-    "ApprovalResponse",
-    "ArtifactGenerationError",
-    "DBusGUIProvider",
-    "FastMCPElicitProvider",
-    "PolicyDecision",
-    "SystemdFallbackProvider",
-    "decode_token",
-    "evaluate_policy",
-    "generate_token",
-    "get_approval_provider",
-    "get_artifact_generator",
-    "verify_token",
-]
+__all__ = sorted(_EXPORTS)
+
+
+def __getattr__(name: str):
+    if name not in _EXPORTS:
+        raise AttributeError(name)
+    module_name, attr = _EXPORTS[name]
+    module = import_module(module_name, __name__)
+    value = getattr(module, attr)
+    globals()[name] = value
+    return value

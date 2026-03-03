@@ -432,7 +432,7 @@ async def test_mode_change_doesnt_affect_existing_leases(redis_client):
     4. New leases follow new mode
     """
     # Set PERMISSION mode
-    await governance_state.set_mode(ExecutionMode.PERMISSION)
+    await governance_state.set_mode(ExecutionMode.PERMISSION, "test-session-key")
 
     # Grant lease in PERMISSION mode
     lease = await lease_manager.grant(
@@ -446,7 +446,7 @@ async def test_mode_change_doesnt_affect_existing_leases(redis_client):
     assert lease.mode_at_issue == "PERMISSION"
 
     # Change to READ_ONLY mode
-    await governance_state.set_mode(ExecutionMode.READ_ONLY)
+    await governance_state.set_mode(ExecutionMode.READ_ONLY, "test-session-key")
 
     # Existing lease still valid
     validated = await lease_manager.validate("mode_change_test", "write_file")
