@@ -38,7 +38,7 @@ async def validate_bootstrap_tools(mcp_instance: Any, tool_registry: Any) -> boo
     # Get actually exposed tools from supervisor
     try:
         actual_tools_list = await mcp_instance.get_tools()
-        actual_exposed = set([tool.name for tool in actual_tools_list.values()])
+        actual_exposed = {tool.name for tool in actual_tools_list.values()}
     except Exception as e:
         logger.error(f"Failed to get tool list for validation: {e}")
         return False
@@ -92,8 +92,10 @@ async def validate_no_auto_mounts(mcp_instance: Any) -> bool:
     Returns:
         True (placeholder - always passes for now)
     """
-    # TODO: Implement mount detection if FastMCP exposes this information
-    # For now, we rely on bootstrap tool count validation
+    del mcp_instance
+
+    # Placeholder: FastMCP does not currently expose mount state; rely on
+    # bootstrap tool count validation
     return True
 
 

@@ -1,11 +1,16 @@
 """Utilities for tool discovery formatting."""
 
-from typing import Iterable
+from collections.abc import Iterable
 
 from .registry.models import ToolCandidate, ToolRecord
 
 
 def _format_tool_entry(tool: ToolCandidate | ToolRecord) -> list[str]:
+    """Format a single tool as a compact multi-line entry for agent display.
+
+    Returns a list of strings: tool name with sensitivity tag, description,
+    and a blank separator line.
+    """
     tool_id = tool.tool_id
     description = tool.description_1line
     sensitivity = "[SAFE]" if tool.risk_level == "safe" else "[SENSITIVE]"
