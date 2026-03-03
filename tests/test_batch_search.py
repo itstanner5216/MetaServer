@@ -185,9 +185,13 @@ class TestBatchSearch:
 
         queries = ["file", "network", "email", "disk"]
 
-        start = time.perf_counter()
-        results = batch_search_tools(sample_registry, queries)
-        batch_time = time.perf_counter() - start
+        with patch(
+            "src.meta_mcp.registry.registry._resolve_governance_mode",
+            return_value=ExecutionMode.PERMISSION,
+        ):
+            start = time.perf_counter()
+            results = batch_search_tools(sample_registry, queries)
+            batch_time = time.perf_counter() - start
 
         # Should complete in reasonable time
         assert batch_time < 1.0  # Less than 1 second for small dataset

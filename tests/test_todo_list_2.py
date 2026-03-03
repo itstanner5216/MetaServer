@@ -786,9 +786,9 @@ def test_admin_tools_imports_without_syspath():
 
         # Verify imports are successful
         assert hasattr(admin_tools, "admin_server")
-        assert hasattr(admin_tools, "set_governance_mode")
+        assert not hasattr(admin_tools, "set_governance_mode")
         assert hasattr(admin_tools, "get_governance_status")
-        assert hasattr(admin_tools, "revoke_all_elevations")
+        assert not hasattr(admin_tools, "revoke_all_elevations")
 
         # Verify sys.path was not mutated during import
         assert sys.path == original_syspath, "sys.path was mutated during import"
@@ -829,13 +829,7 @@ def test_admin_tools_governance_components_accessible():
     Validates: Imports resolve to actual usable objects
     """
     try:
-        from servers.admin_tools import (
-            AuditEvent,
-            ExecutionMode,
-            admin_server,
-            audit_logger,
-            governance_state,
-        )
+        from servers.admin_tools import admin_server, audit_logger, governance_state
 
         # Verify audit_logger has expected methods
         assert hasattr(audit_logger, "log_mode_change")
@@ -845,13 +839,6 @@ def test_admin_tools_governance_components_accessible():
         assert hasattr(governance_state, "get_mode")
         assert hasattr(governance_state, "set_mode")
 
-        # Verify ExecutionMode enum
-        assert hasattr(ExecutionMode, "PERMISSION")
-        assert hasattr(ExecutionMode, "READ_ONLY")
-        assert hasattr(ExecutionMode, "BYPASS")
-
-        # Verify AuditEvent enum
-        assert hasattr(AuditEvent, "ELEVATIONS_REVOKED")
 
     except ImportError as e:
         pytest.fail(f"Failed to import governance components from admin_tools: {e}")
@@ -970,8 +957,8 @@ async def test_todo_list_2_integration(mock_fastmcp_context):
     assert "[SENSITIVE]" in formatted  # remove_directory is sensitive
 
     # 5. Verify admin_tools imports work
-    from servers.admin_tools import admin_server, set_governance_mode
+    from servers.admin_tools import admin_server, get_governance_status
 
     assert admin_server is not None
-    assert hasattr(set_governance_mode, "fn")
-    assert callable(set_governance_mode.fn)
+    assert hasattr(get_governance_status, "fn")
+    assert callable(get_governance_status.fn)

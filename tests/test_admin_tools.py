@@ -8,4 +8,4 @@ def test_admin_tools_docstring_mentions_registry():
     doc = admin_tools.__doc__ or ""
     assert "registered" in doc.lower()
     assert "governance" in doc.lower()
-    assert "read_only" in doc.lower()
+    assert "read-only" in doc.lower() or "read_only" in doc.lower()

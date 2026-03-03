@@ -11,7 +11,8 @@ def test_registry_loads_from_yaml():
     assert tool_registry.is_registered("read_file")
     assert tool_registry.is_registered("write_file")
     assert tool_registry.is_registered("git_commit")
-    assert tool_registry.is_registered("set_governance_mode")
+    for removed in ["set_governance_mode", "revoke_all_elevations", "execute_command", "git_reset"]:
+        assert not tool_registry.is_registered(removed)
 
 
 def test_bootstrap_tools_defined():
@@ -83,7 +84,7 @@ def test_get_tool_not_found():
 def test_all_tools_have_required_fields():
     """All tools should have required metadata fields."""
     summaries = tool_registry.get_all_summaries()
-    assert len(summaries) >= 15  # Total tools from YAML (may grow over time)
+    assert len(summaries) >= 12  # Total tools from YAML (may grow over time)
 
     for tool in summaries:
         assert tool.tool_id

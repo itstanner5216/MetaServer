@@ -10,10 +10,12 @@ Tests:
 
 import os
 import time
+from unittest.mock import patch
 
 import pytest
 
 from src.meta_mcp.registry.models import ToolRecord
+from src.meta_mcp.state import ExecutionMode
 from src.meta_mcp.retrieval.embedder import ToolEmbedder
 from src.meta_mcp.retrieval.search import SemanticSearch
 
@@ -63,41 +65,45 @@ class TestRetrievalPerformance:
         searcher = SemanticSearch(large_registry)
         max_latency_ms = float(os.getenv("SEARCH_LATENCY_BUDGET_MS", "250"))
 
-        # Warm up - build index
-        searcher.search("test")
+        with patch(
+            "src.meta_mcp.state.governance_state.get_mode",
+            return_value=ExecutionMode.PERMISSION,
+        ):
+            # Warm up - build index
+            searcher.search("test")
 
-        # Measure search time
-        queries = [
-            "read files from disk",
-            "network operations",
-            "database queries",
-            "encrypt data",
-            "process images",
-        ]
+            # Measure search time
+            queries = [
+                "read files from disk",
+                "network operations",
+                "database queries",
+                "encrypt data",
+                "process images",
+            ]
 
-        total_time = 0
-        iterations = len(queries)
+            total_time = 0
+            iterations = len(queries)
 
-        for query in queries:
-            start = time.perf_counter()
-            results = searcher.search(query)
-            end = time.perf_counter()
+            for query in queries:
+                start = time.perf_counter()
+                results = searcher.search(query)
+                end = time.perf_counter()
 
-            search_time_ms = (end - start) * 1000
-            total_time += search_time_ms
+                search_time_ms = (end - start) * 1000
+                total_time += search_time_ms
 
-            # Individual search should be under budget
-            assert search_time_ms < max_latency_ms, (
-                f"Search for '{query}' took {search_time_ms:.2f}ms, expected <{max_latency_ms:.0f}ms"
+                # Individual search should be under budget
+                assert search_time_ms < max_latency_ms, (
+                    f"Search for '{query}' took {search_time_ms:.2f}ms, expected <{max_latency_ms:.0f}ms"
+                )
+
+            # Average should be under budget
+            avg_time = total_time / iterations
+            assert avg_time < max_latency_ms, (
+                f"Average search time {avg_time:.2f}ms, expected <{max_latency_ms:.0f}ms"
             )
 
-        # Average should be under budget
-        avg_time = total_time / iterations
-        assert avg_time < max_latency_ms, (
-            f"Average search time {avg_time:.2f}ms, expected <{max_latency_ms:.0f}ms"
-        )
-
-        print(f"\nSearch performance: {avg_time:.2f}ms average over {iterations} queries")
+            print(f"\nSearch performance: {avg_time:.2f}ms average over {iterations} queries")
 
     def test_index_building_performance(self, large_registry):
         """Test index building completes in reasonable time."""
@@ -269,14 +275,18 @@ class TestRetrievalPerformance:
             "text processing",
         ]
 
-        start = time.perf_counter()
+        with patch(
+            "src.meta_mcp.state.governance_state.get_mode",
+            return_value=ExecutionMode.PERMISSION,
+        ):
+            start = time.perf_counter()
 
-        # Sequential searches (simulating concurrent workload)
-        for _ in range(5):  # 5 rounds
-            for query in queries:
-                searcher.search(query)
+            # Sequential searches (simulating concurrent workload)
+            for _ in range(5):  # 5 rounds
+                for query in queries:
+                    searcher.search(query)
 
-        end = time.perf_counter()
+            end = time.perf_counter()
 
         total_searches = 5 * len(queries)
         avg_time_ms = ((end - start) / total_searches) * 1000

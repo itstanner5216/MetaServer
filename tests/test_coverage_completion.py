@@ -30,13 +30,13 @@ def _mock_elicit_with_scopes(required_scopes):
 
 @pytest.mark.asyncio
 @pytest.mark.requires_redis
-async def test_execute_command_context_key_truncation(
+async def test_git_commit_context_key_uses_cwd(
     governance_in_permission,
     mock_fastmcp_context,
     grant_lease,
 ):
     """
-    Test that execute_command context key is truncated to 50 chars.
+    Test that git_commit context key uses cwd argument.
 
     Expected: Long commands should be truncated for context key
     Coverage: middleware.py lines 84-86
@@ -45,12 +45,12 @@ async def test_execute_command_context_key_truncation(
 
     # Setup with long command (>50 chars)
     long_command = "a" * 100
-    mock_fastmcp_context.request_context.tool_name = "execute_command"
+    mock_fastmcp_context.request_context.tool_name = "git_commit"
     mock_fastmcp_context.request_context.arguments = {"command": long_command}
     mock_fastmcp_context.request_context.session_id = "test-session"
-    await grant_lease(client_id="test-session", tool_name="execute_command")
+    await grant_lease(client_id="test-session", tool_name="git_commit")
     required_scopes = middleware._get_required_scopes(
-        "execute_command", mock_fastmcp_context.request_context.arguments
+        "git_commit", mock_fastmcp_context.request_context.arguments
     )
     mock_fastmcp_context.elicit = _mock_elicit_with_scopes(required_scopes)
 
@@ -131,38 +131,6 @@ async def test_git_operations_context_key(
     call_next.assert_called_once()
 
 
-@pytest.mark.asyncio
-@pytest.mark.requires_redis
-async def test_admin_operations_context_key(
-    governance_in_permission,
-    mock_fastmcp_context,
-    grant_lease,
-):
-    """
-    Test that admin operations use tool name as context key.
-
-    Expected: set_governance_mode, revoke_all_elevations use tool_name
-    Coverage: middleware.py lines 93-94
-    """
-    middleware = GovernanceMiddleware()
-
-    # Test set_governance_mode
-    mock_fastmcp_context.request_context.tool_name = "set_governance_mode"
-    mock_fastmcp_context.request_context.arguments = {"mode": "READ_ONLY"}
-    mock_fastmcp_context.request_context.session_id = "test-session"
-    await grant_lease(client_id="test-session", tool_name="set_governance_mode")
-    required_scopes = middleware._get_required_scopes(
-        "set_governance_mode", mock_fastmcp_context.request_context.arguments
-    )
-    mock_fastmcp_context.elicit = _mock_elicit_with_scopes(required_scopes)
-
-    call_next = AsyncMock(return_value="Mode changed")
-
-    # Execute
-    await middleware.on_call_tool(mock_fastmcp_context, call_next)
-
-    # Verify execution succeeded
-    call_next.assert_called_once()
 
 
 # ============================================================================

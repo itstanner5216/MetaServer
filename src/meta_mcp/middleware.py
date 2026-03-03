@@ -38,14 +38,10 @@ SENSITIVE_TOOLS = {
     "create_directory",
     "remove_directory",
     # Command execution
-    "execute_command",
     # Git operations
     "git_commit",
     "git_push",
-    "git_reset",
     # Admin operations
-    "set_governance_mode",
-    "revoke_all_elevations",
 }
 
 ELICITATION_TIMEOUT = Config.ELICITATION_TIMEOUT
@@ -99,7 +95,7 @@ class GovernanceMiddleware(Middleware):
             arguments: Tool arguments
 
         Returns:
-            Context key (path for file ops, command[:50] for commands)
+            Context key (path for file and directory ops, cwd for git ops)
         """
         # Move operation: use source path (MUST check BEFORE general file ops)
         if tool_name == "move_file":
@@ -117,18 +113,9 @@ class GovernanceMiddleware(Middleware):
         if tool_name in {"create_directory", "remove_directory", "list_directory"}:
             return arguments.get("path", "unknown")
 
-        # Command execution: use first 50 chars of command
-        if tool_name == "execute_command":
-            command = arguments.get("command", "unknown")
-            return command[:50] if len(command) > 50 else command
-
         # Git operations: use current directory
         if tool_name.startswith("git_"):
             return arguments.get("cwd", ".")
-
-        # Admin operations: use operation name
-        if tool_name in {"set_governance_mode", "revoke_all_elevations"}:
-            return tool_name
 
         # Default: tool name
         return tool_name
@@ -274,13 +261,6 @@ class GovernanceMiddleware(Middleware):
                 base_scopes.append(f"resource:path:{source}")
             if dest:
                 base_scopes.append(f"resource:path:{dest}")
-
-        elif tool_name == "execute_command":
-            command = arguments.get("command", "")
-            if command:
-                # Add specific command being executed (first 50 chars)
-                cmd_preview = command[:50] if len(command) > 50 else command
-                base_scopes.append(f"resource:command:{cmd_preview}")
 
         elif tool_name in {"create_directory", "list_directory", "remove_directory"}:
             path = arguments.get("path", "")

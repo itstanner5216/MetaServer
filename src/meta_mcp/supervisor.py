@@ -78,16 +78,12 @@ async def _get_tool_function(tool_name: str) -> Any | None:
         "create_directory",
         "remove_directory",
         "move_file",
-        "execute_command",
         "git_commit",
         "git_push",
-        "git_reset",
     }
 
     admin_tools = {
-        "set_governance_mode",
         "get_governance_status",
-        "revoke_all_elevations",
     }
 
     # Try to get FunctionTool from core_server
@@ -267,19 +263,17 @@ mcp = FastMCP(name=SERVER_NAME, middleware=[GovernanceMiddleware()], lifespan=li
 # context minimization principles. Tools will be registered dynamically via
 # progressive discovery as they are requested.
 #
-# Previously auto-exposed tools (13 total):
-# - core_server (10): read_file, write_file, delete_file, list_directory,
-#                     create_directory, move_file, execute_command,
-#                     git_commit, git_push, git_reset
-# - admin_server (3): set_governance_mode, get_governance_status,
-#                     revoke_all_elevations
+# Previously auto-exposed tools (9 total):
+# - core_server (8): read_file, write_file, delete_file, list_directory,
+#                    create_directory, move_file, git_commit, git_push
+# - admin_server (1): get_governance_status
 #
 # Tools will now be exposed on-demand via _expose_tool() function below.
 # ============================================================================
 
 # DEPRECATED: Auto-exposure via mount() - DO NOT UNCOMMENT
-# mcp.mount(core_server)   # Would expose all 10 core tools immediately
-# mcp.mount(admin_server)  # Would expose all 3 admin tools immediately
+# mcp.mount(core_server)   # Would expose all 8 core tools immediately
+# mcp.mount(admin_server)  # Would expose all 1 admin tools immediately
 
 
 # ============================================================================
