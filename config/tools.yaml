@@ -18,14 +18,12 @@ servers:
   description: Core file, system, and git operations
   risk_level: dangerous
   tags:
-  - command
   - commit
   - core
   - create
   - delete
   - directory
   - discovery
-  - execute
   - file
   - get
   - git
@@ -42,7 +40,6 @@ servers:
   - admin
   - get
   - governance
-  - set
 tools:
 - tool_id: read_file
   server_id: core_tools
@@ -158,21 +155,6 @@ tools:
   required_scopes:
   - tool:remove_directory
   - filesystem:delete
-- tool_id: execute_command
-  server_id: core_tools
-  description_1line: Execute shell command with timeout.
-  description_full: 'Execute shell command with timeout.
-
-    Runs command in workspace directory with 30-second timeout. Returns stdout, stderr, and exit code.'
-  tags:
-  - core
-  - execute
-  - command
-  risk_level: sensitive
-  requires_permission: true
-  required_scopes:
-  - tool:execute_command
-  - system:execute
 - tool_id: search_tools
   server_id: core_tools
   description_1line: Search for available tools by name or description.
@@ -235,36 +217,6 @@ tools:
   - vcs:git
   - vcs:write
   - network:remote
-- tool_id: git_reset
-  server_id: core_tools
-  description_1line: Reset git repository to a specific state.
-  description_full: 'Reset git repository to a specific state.
-
-    Resets the repository to specified commit or state. Can be destructive - use with caution.'
-  tags:
-  - git
-  risk_level: dangerous
-  requires_permission: true
-  required_scopes:
-  - tool:git_reset
-  - vcs:git
-  - vcs:destructive
-- tool_id: set_governance_mode
-  server_id: admin_tools
-  description_1line: Set the governance execution mode.
-  description_full: 'Set the governance execution mode.
-
-    Switches between READ_ONLY, PERMISSION, and BYPASS modes. Affects all subsequent tool calls.'
-  tags:
-  - admin
-  - set
-  - governance
-  risk_level: sensitive
-  requires_permission: true
-  required_scopes:
-  - tool:set_governance_mode
-  - admin:governance
-  - admin:configure
 - tool_id: get_governance_status
   server_id: admin_tools
   description_1line: Get current governance mode and state.
@@ -280,18 +232,3 @@ tools:
   required_scopes:
   - tool:get_governance_status
   - admin:read
-- tool_id: revoke_all_elevations
-  server_id: admin_tools
-  description_1line: Revoke all active governance elevations.
-  description_full: 'Revoke all active governance elevations.
-
-    Clears all temporary permission grants. Resets all tools to base governance policy.'
-  tags:
-  - admin
-  - governance
-  risk_level: dangerous
-  requires_permission: true
-  required_scopes:
-  - tool:revoke_all_elevations
-  - admin:governance
-  - admin:security

@@ -236,53 +236,6 @@ def remove_directory(path: str) -> str:
 
 
 @core_server.tool()
-def execute_command(command: str, cwd: str | None = None) -> str:
-    """
-    Execute shell command with timeout.
-
-    Args:
-        command: Shell command to execute
-        cwd: Working directory (relative to workspace root, default: workspace root)
-
-    Returns:
-        Command output (stdout + stderr)
-    """
-    # Validate and resolve working directory
-    if cwd is None:
-        work_dir = Path(WORKSPACE_ROOT).resolve()
-    else:
-        work_dir = _validate_path(cwd)
-        if not work_dir.is_dir():
-            raise ToolError(f"Working directory is not a directory: {cwd}")
-
-    try:
-        result = subprocess.run(
-            command,
-            shell=True,
-            cwd=str(work_dir),
-            capture_output=True,
-            text=True,
-            timeout=COMMAND_TIMEOUT,
-            encoding="utf-8",
-            errors="replace",
-        )
-
-        output = []
-        if result.stdout:
-            output.append(f"STDOUT:\n{result.stdout}")
-        if result.stderr:
-            output.append(f"STDERR:\n{result.stderr}")
-        output.append(f"Exit code: {result.returncode}")
-
-        return "\n\n".join(output) if output else "Command produced no output"
-
-    except subprocess.TimeoutExpired:
-        raise ToolError(f"Command timed out after {COMMAND_TIMEOUT} seconds: {command}")
-    except Exception as e:
-        raise ToolError(f"Failed to execute command: {e}")
-
-
-@core_server.tool()
 async def git_commit(message: str, cwd: str | None = None) -> str:
     """
     Commit staged changes to git repository.
@@ -401,71 +354,6 @@ async def git_push(
     except Exception as e:
         raise ToolError(f"Git push error: {e}")
 
-
-@core_server.tool()
-async def git_reset(ref: str = "HEAD", hard: bool = False, cwd: str | None = None) -> str:
-    """
-    Reset git repository to a specific commit.
-
-    WARNING: --hard flag will discard all uncommitted changes!
-
-    Args:
-        ref: Git reference (commit SHA, branch, tag, default: "HEAD")
-        hard: If True, discard all changes (--hard reset)
-        cwd: Working directory (defaults to WORKSPACE_ROOT)
-
-    Returns:
-        Reset output
-
-    Raises:
-        ToolError: If git reset fails or path validation fails
-
-    Example:
-        git_reset("HEAD~1", hard=True, "/workspace/myproject")
-    """
-    # Validate and resolve working directory
-    if cwd is None:
-        work_dir = Path(WORKSPACE_ROOT).resolve()
-    else:
-        work_dir = _validate_path(cwd)
-        if not work_dir.is_dir():
-            raise ToolError(f"Working directory is not a directory: {cwd}")
-
-    # Build git reset command
-    cmd = ["git", "reset"]
-    if hard:
-        cmd.append("--hard")
-    cmd.append(ref)
-
-    # Execute git reset
-    try:
-        result = subprocess.run(
-            cmd,
-            cwd=str(work_dir),
-            capture_output=True,
-            text=True,
-            timeout=COMMAND_TIMEOUT,
-            encoding="utf-8",
-            errors="replace",
-        )
-
-        output = {
-            "exit_code": result.returncode,
-            "stdout": result.stdout,
-            "stderr": result.stderr,
-        }
-
-        if result.returncode != 0:
-            raise ToolError(f"Git reset failed: {result.stderr}")
-
-        reset_type = "--hard" if hard else "--soft"
-        logger.warning(f"Git reset {reset_type} to {ref} in {work_dir}")
-        return json.dumps(output, indent=2)
-
-    except subprocess.TimeoutExpired:
-        raise ToolError(f"Git reset timed out after {COMMAND_TIMEOUT}s")
-    except Exception as e:
-        raise ToolError(f"Git reset error: {e}")
 
 
 # Export server for mounting

@@ -78,16 +78,12 @@ async def _get_tool_function(tool_name: str) -> Any | None:
         "create_directory",
         "remove_directory",
         "move_file",
-        "execute_command",
         "git_commit",
         "git_push",
-        "git_reset",
     }
 
     admin_tools = {
-        "set_governance_mode",
         "get_governance_status",
-        "revoke_all_elevations",
     }
 
     # Try to get FunctionTool from core_server
@@ -269,10 +265,8 @@ mcp = FastMCP(name=SERVER_NAME, middleware=[GovernanceMiddleware()], lifespan=li
 #
 # Previously auto-exposed tools (13 total):
 # - core_server (10): read_file, write_file, delete_file, list_directory,
-#                     create_directory, move_file, execute_command,
-#                     git_commit, git_push, git_reset
-# - admin_server (3): set_governance_mode, get_governance_status,
-#                     revoke_all_elevations
+#                     create_directory, move_file, git_commit, git_push
+# - admin_server (1): get_governance_status
 #
 # Tools will now be exposed on-demand via _expose_tool() function below.
 # ============================================================================

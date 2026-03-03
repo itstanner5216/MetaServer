@@ -258,7 +258,7 @@ async def test_permission_mode_blocks_dangerous_without_approval_at_schema(
     tools_before = await mcp.get_tools()
 
     with pytest.raises(ToolError, match="requires approval"):
-        await get_tool_schema.fn(tool_name="execute_command")
+        await get_tool_schema.fn(tool_name="git_push")
 
     tools_after = await mcp.get_tools()
     assert _tool_names(tools_after) == _tool_names(tools_before)
@@ -274,14 +274,14 @@ async def test_bypass_mode_allows_all_at_schema_time(
     tools_before = await mcp.get_tools()
     names_before = _tool_names(tools_before)
 
-    response = await get_tool_schema.fn(tool_name="execute_command")
+    response = await get_tool_schema.fn(tool_name="git_push")
     response_data = _parse_schema_response(response)
     assert response_data.get("inputSchema") is not None
 
     tools_after = await mcp.get_tools()
     names_after = _tool_names(tools_after)
-    assert "execute_command" in names_after
-    if "execute_command" not in names_before:
+    assert "git_push" in names_after
+    if "git_push" not in names_before:
         assert len(names_after) == len(names_before) + 1
 
 

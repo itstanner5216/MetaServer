@@ -28,39 +28,15 @@ def _mock_elicit_with_scopes(required_scopes):
 # ============================================================================
 
 
-@pytest.mark.asyncio
-@pytest.mark.requires_redis
-async def test_execute_command_context_key_truncation(
-    governance_in_permission,
-    mock_fastmcp_context,
-    grant_lease,
-):
-    """
-    Test that execute_command context key is truncated to 50 chars.
-
-    Expected: Long commands should be truncated for context key
-    Coverage: middleware.py lines 84-86
-    """
+def test_unknown_tool_context_key_defaults_to_tool_name():
+    """Removed tools should fall back to default context-key behavior."""
     middleware = GovernanceMiddleware()
 
-    # Setup with long command (>50 chars)
-    long_command = "a" * 100
-    mock_fastmcp_context.request_context.tool_name = "execute_command"
-    mock_fastmcp_context.request_context.arguments = {"command": long_command}
-    mock_fastmcp_context.request_context.session_id = "test-session"
-    await grant_lease(client_id="test-session", tool_name="execute_command")
-    required_scopes = middleware._get_required_scopes(
-        "execute_command", mock_fastmcp_context.request_context.arguments
+    context_key = middleware._extract_context_key(
+        "execute_command", {"command": "echo test"}
     )
-    mock_fastmcp_context.elicit = _mock_elicit_with_scopes(required_scopes)
 
-    call_next = AsyncMock(return_value="Command executed")
-
-    # Execute
-    await middleware.on_call_tool(mock_fastmcp_context, call_next)
-
-    # Verify execution succeeded
-    call_next.assert_called_once()
+    assert context_key == "execute_command"
 
 
 @pytest.mark.asyncio
@@ -139,20 +115,20 @@ async def test_admin_operations_context_key(
     grant_lease,
 ):
     """
-    Test that admin operations use tool name as context key.
+    Test that admin status operation uses default context-key behavior.
 
-    Expected: set_governance_mode, revoke_all_elevations use tool_name
-    Coverage: middleware.py lines 93-94
+    Expected: get_governance_status uses tool_name
+    Coverage: middleware.py default context-key branch
     """
     middleware = GovernanceMiddleware()
 
-    # Test set_governance_mode
-    mock_fastmcp_context.request_context.tool_name = "set_governance_mode"
-    mock_fastmcp_context.request_context.arguments = {"mode": "READ_ONLY"}
+    # Test get_governance_status
+    mock_fastmcp_context.request_context.tool_name = "get_governance_status"
+    mock_fastmcp_context.request_context.arguments = {}
     mock_fastmcp_context.request_context.session_id = "test-session"
-    await grant_lease(client_id="test-session", tool_name="set_governance_mode")
+    await grant_lease(client_id="test-session", tool_name="get_governance_status")
     required_scopes = middleware._get_required_scopes(
-        "set_governance_mode", mock_fastmcp_context.request_context.arguments
+        "get_governance_status", mock_fastmcp_context.request_context.arguments
     )
     mock_fastmcp_context.elicit = _mock_elicit_with_scopes(required_scopes)
 
