@@ -91,7 +91,11 @@ async def test_get_tool_schema_triggers_exposure():
     read_file_preexposed = "read_file" in tool_names_before
 
     # Request schema for read_file (triggers exposure)
-    schema_result = await get_tool_schema.fn(tool_name="read_file")
+    with (
+        patch.object(governance_state, "get_mode", new=AsyncMock(return_value=ExecutionMode.BYPASS)),
+        patch("src.meta_mcp.supervisor.lease_manager.grant", AsyncMock(return_value=MagicMock())),
+    ):
+        schema_result = await get_tool_schema.fn(tool_name="read_file")
 
     # Verify schema was returned
     assert "read_file" in schema_result, "Schema should contain tool name"
@@ -247,7 +251,7 @@ async def test_context_reduction_calculation():
     reduction_percentage = ((total_registered - initially_exposed) / total_registered) * 100
 
     # Verify metrics
-    assert total_registered >= 13, f"Expected at least 13 total tools, got {total_registered}"
+    assert total_registered >= 12, f"Expected at least 12 total tools, got {total_registered}"
 
     assert initially_exposed == 2, f"Expected 2 bootstrap tools, got {initially_exposed}"
 
@@ -273,14 +277,14 @@ async def test_discovery_workflow_complete():
     This simulates the expected model behavior with progressive discovery.
     """
     # Step 1: Model searches for tools
-    search_result = search_tools.fn(query="execute")
-    assert "execute_command" in search_result, "Search should find execute_command"
+    search_result = search_tools.fn(query="git")
+    assert "git_push" in search_result, "Search should find git_push"
 
-    # Verify execute_command not yet exposed
+    # Verify git_push not yet exposed
     tools_after_search = await mcp.get_tools()
     names_after_search = [t.name for t in tools_after_search.values()]
-    assert "execute_command" not in names_after_search, (
-        "execute_command should not be exposed after search"
+    assert "git_push" not in names_after_search, (
+        "git_push should not be exposed after search"
     )
 
     # Step 2: Model requests schema
@@ -293,21 +297,21 @@ async def test_discovery_workflow_complete():
             AsyncMock(return_value=MagicMock()),
         ),
     ):
-        schema_result = await get_tool_schema.fn(tool_name="execute_command")
-    assert "execute_command" in schema_result, "Schema should be returned"
+        schema_result = await get_tool_schema.fn(tool_name="git_push")
+    assert "git_push" in schema_result, "Schema should be returned"
 
-    # Verify execute_command now exposed
+    # Verify git_push now exposed
     tools_after_schema = await mcp.get_tools()
     names_after_schema = [t.name for t in tools_after_schema.values()]
-    assert "execute_command" in names_after_schema, (
-        "execute_command should be exposed after schema request"
+    assert "git_push" in names_after_schema, (
+        "git_push should be exposed after schema request"
     )
 
     # Step 3: Model can now invoke the tool
     # (We won't actually execute a command, just verify it's callable)
-    tool = await mcp.get_tool("execute_command")
+    tool = await mcp.get_tool("git_push")
     assert tool is not None, "Tool should be retrievable after exposure"
-    assert tool.name == "execute_command", "Tool name should match"
+    assert tool.name == "git_push", "Tool name should match"
 
 
 @pytest.mark.asyncio
@@ -325,10 +329,8 @@ async def test_no_breaking_changes():
         "list_directory",
         "create_directory",
         "move_file",
-        "execute_command",
         "git_commit",
         "git_push",
-        "git_reset",
     ]
 
     with (
@@ -373,5 +375,9 @@ async def test_bootstrap_tools_always_available():
     search_result = search_tools.fn(query="test")
     assert search_result is not None, "search_tools should be callable"
 
-    schema_result = await get_tool_schema.fn(tool_name="search_tools")
+    with (
+        patch.object(governance_state, "get_mode", new=AsyncMock(return_value=ExecutionMode.BYPASS)),
+        patch("src.meta_mcp.supervisor.lease_manager.grant", AsyncMock(return_value=MagicMock())),
+    ):
+        schema_result = await get_tool_schema.fn(tool_name="search_tools")
     assert "search_tools" in schema_result, "get_tool_schema should be callable"

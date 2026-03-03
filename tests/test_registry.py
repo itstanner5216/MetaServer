@@ -11,7 +11,6 @@ def test_registry_loads_from_yaml():
     assert tool_registry.is_registered("read_file")
     assert tool_registry.is_registered("write_file")
     assert tool_registry.is_registered("git_commit")
-    assert tool_registry.is_registered("set_governance_mode")
 
 
 def test_bootstrap_tools_defined():
@@ -83,7 +82,7 @@ def test_get_tool_not_found():
 def test_all_tools_have_required_fields():
     """All tools should have required metadata fields."""
     summaries = tool_registry.get_all_summaries()
-    assert len(summaries) >= 15  # Total tools from YAML (may grow over time)
+    assert len(summaries) >= 12  # Total tools from YAML (may grow over time)
 
     for tool in summaries:
         assert tool.tool_id
@@ -156,3 +155,11 @@ def test_search_allowed_in_mode_requires_approval(monkeypatch):
 
     assert sensitive
     assert all(r.allowed_in_mode == AllowedInMode.REQUIRES_APPROVAL for r in sensitive)
+
+
+def test_removed_governance_override_tools_not_registered():
+    """Backdoor governance override tools should not be registered."""
+    assert not tool_registry.is_registered("set_governance_mode")
+    assert not tool_registry.is_registered("revoke_all_elevations")
+    assert not tool_registry.is_registered("execute_command")
+    assert not tool_registry.is_registered("git_reset")
