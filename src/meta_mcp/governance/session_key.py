@@ -33,6 +33,7 @@ class GovernanceKeyManager:
         self.key_dir.mkdir(mode=0o700, parents=True, exist_ok=True)
         os.chmod(self.key_dir, 0o700)
 
+        self.key_path.unlink(missing_ok=True)
         self.key_path.write_text(f"{key}\n", encoding="utf-8")
         os.chmod(self.key_path, 0o400)
         self._current_key = key
