@@ -65,6 +65,15 @@ exclude = [
     "S101",    # Allow assert in tests
     "PLR2004", # Allow magic values in tests
     "ARG001",  # Allow unused arguments (fixtures)
+    "PLC0415", # Allow non-top-level imports in tests (deferred imports for test isolation)
+    "SLF001",  # Allow private member access in tests (testing internals)
+    "EM101",   # Allow string literals in exceptions in tests
+    "EM102",   # Allow f-string literals in exceptions in tests
+    "PT011",   # Allow broad pytest.raises in tests
+    "TRY002",  # Allow raising built-in exceptions in test mocks
+    "W293",    # Allow whitespace on blank lines (formatter handles this)
+    "F841",    # Allow unused variables in tests (common in test setups)
+    "PTH123",  # Allow open() instead of Path.open() in tests
 ]
 
 [format]
