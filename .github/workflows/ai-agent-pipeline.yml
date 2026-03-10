@@ -192,11 +192,22 @@ jobs:
           python-version: '3.10'
       
       - name: Generate summary
+        env:
+          RUN_AGENTS_RESULT: ${{ needs.run-agents.result }}
         run: |
           python << 'PYTHON_SCRIPT'
           import json
           import os
           from pathlib import Path
+          
+          # If run-agents was skipped, emit a concise no-op summary and exit
+          if os.environ.get("RUN_AGENTS_RESULT") == "skipped":
+              summary = "# 🤖 AI Agent Pipeline Results\n\n"
+              summary += "ℹ️ Agent pipeline was intentionally skipped (e.g., Dependabot PR or missing environment secrets).\n"
+              with open(os.environ["GITHUB_STEP_SUMMARY"], "w") as f:
+                  f.write(summary)
+              print(summary)
+              exit(0)
           
           # Find all result files
           results_dir = Path("results")
