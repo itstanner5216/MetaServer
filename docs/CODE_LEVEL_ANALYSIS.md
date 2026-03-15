@@ -17,7 +17,7 @@ MetaServer is a **governance-aware MCP (Model Context Protocol) supervisor** tha
   ```
 - `servers/core_tools.py` — Exposes 9 tools: `read_file`, `write_file`, `delete_file`, `list_directory`, `create_directory`, `remove_directory`, `move_file`, `git_commit`, `git_push`.
 - `servers/admin_tools.py` — Exposes 1 tool: `get_governance_status`.
-- `config/tools.yaml:43-234` — Declares 12 tools across 2 servers (core_tools, admin_tools), plus 2 bootstrap meta-tools (`search_tools`, `get_tool_schema`).
+- `config/tools.yaml:43-234` — Declares 12 tools total across 2 servers: 11 in core_tools (9 operational + 2 bootstrap meta-tools `search_tools` and `get_tool_schema`) and 1 in admin_tools.
 
 ---
 
@@ -361,17 +361,17 @@ Agent ID is extracted via 4 strategies in priority order:
 
 ## 8. What Mechanisms Are Involved in Context Minimization?
 
-MetaServer employs **five distinct mechanisms** to reduce the amount of context (tokens) consumed by the AI model:
+MetaServer employs **six distinct mechanisms** to reduce the amount of context (tokens) consumed by the AI model:
 
 ### 8a. Progressive Discovery (`supervisor.py:107-150, 274-291`)
 
 Tools are **NOT auto-exposed** at startup. The `mount()` calls are explicitly disabled:
 ```python
 # DEPRECATED: Auto-exposure via mount() - DO NOT UNCOMMENT
-# mcp.mount(core_server)   # Would expose all 10 core tools immediately
+# mcp.mount(core_server)   # Would expose all 9 core tools immediately
 ```
 
-Only 2 bootstrap tools are available initially: `search_tools` and `get_tool_schema`. The model must explicitly discover and request access to each tool. This reduces the initial `tools/list` response from 13+ tools to just 2, an **86.7% context reduction** (`(15-2)/15`).
+Only 2 bootstrap tools are available initially: `search_tools` and `get_tool_schema`. The model must explicitly discover and request access to each tool. This reduces the initial `tools/list` response from 12 tools to just 2, an **83% context reduction** (`(12-2)/12`).
 
 ### 8b. Tool Visibility Filtering (`middleware.py:270-305`)
 
