@@ -293,7 +293,7 @@ on_call_tool() {
 - **Core/Admin tools**: Defined in `servers/core_tools.py` and `servers/admin_tools.py` as separate FastMCP servers (`core_server`, `admin_server`). NOT mounted — exposed on-demand via `_expose_tool()` → `mcp.add_tool()`.
 
 **Evidence:**
-- `config/tools.yaml`: 15 tool definitions (2 bootstrap, 11 core, 2 admin — but only `get_governance_status` appears in admin_tools.py)
+- `config/tools.yaml`: 12 tool definitions (2 bootstrap, 9 core, 1 admin) across 2 servers
 - `supervisor.py:289-291`: Mount calls commented out
 - `supervisor.py:144`: Dynamic exposure via `mcp.add_tool()`
 
@@ -471,7 +471,7 @@ All permission failures are fail-closed:
    - File: `supervisor.py:289-291` — `mcp.mount()` calls commented out
    - File: `supervisor.py:107-150` — `_expose_tool()` adds tools individually
    - File: `supervisor.py:414-420` — exposure happens inside `get_tool_schema()`
-   - Effect: Only 2 tools visible at startup instead of 15
+   - Effect: Only 2 tools visible at startup instead of 12
 
 2. **Tool list filtering (ACTIVE when ENABLE_LEASE_MANAGEMENT=True)**
    - File: `middleware.py:270-305` — `on_list_tools()` filters
@@ -500,10 +500,10 @@ All permission failures are fail-closed:
 
 ### How Tools Are Exposed
 
-- **Static registry**: 15 tools defined in `config/tools.yaml`, loaded at import time into `tool_registry` singleton
+- **Static registry**: 12 tools defined in `config/tools.yaml`, loaded at import time into `tool_registry` singleton
 - **Bootstrap auto-exposure**: 2 tools (`search_tools`, `get_tool_schema`) via `@mcp.tool()` decorators
 - **Dynamic exposure**: Via `_expose_tool()` → `mcp.add_tool(tool_instance)` when `get_tool_schema()` is called
-- **Tool sources**: `core_server` (8 tools: read_file, write_file, delete_file, list_directory, create_directory, move_file, git_commit, git_push) and `admin_server` (1 tool: get_governance_status)
+- **Tool sources**: `core_server` (9 tools: read_file, write_file, delete_file, list_directory, create_directory, move_file, remove_directory, git_commit, git_push) and `admin_server` (1 tool: get_governance_status)
 - **Exposure is one-way**: Once exposed, tools remain visible for the server lifetime (no `_loaded_tools.remove()` anywhere)
 
 ### How Schemas Are Built/Exposed
