@@ -61,11 +61,6 @@ on:
         default: ''
         type: string
 
-permissions:
-  contents: write
-  pull-requests: write
-  id-token: write  # Required for Sonatype Guide OIDC authentication
-
 concurrency:
   group: agp-workflow-${{ inputs.mode || 'full' }}
   cancel-in-progress: false
@@ -75,6 +70,9 @@ jobs:
   # it should, writes the governed effective agp.yml to the workspace (fail-closed).
   gate:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write  # Required for Sonatype Guide OIDC authentication
     timeout-minutes: 5
     outputs:
       directive: ${{ steps.gate.outputs.directive }}
@@ -91,6 +89,10 @@ jobs:
     needs: gate
     if: needs.gate.outputs.directive == 'run'
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+      id-token: write  # Required for Sonatype Guide OIDC authentication
     timeout-minutes: 60
     steps:
       - name: Checkout
