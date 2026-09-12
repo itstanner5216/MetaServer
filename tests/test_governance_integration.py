@@ -48,7 +48,7 @@ async def test_governance_check_before_lease_grant(
 
     # Attempt to get schema for write_file (blocked in READ_ONLY)
     with pytest.raises(ToolError, match="blocked"):
-        await get_tool_schema.fn(tool_name="write_file", ctx=mock_fastmcp_context)
+        await get_tool_schema(tool_name="write_file", ctx=mock_fastmcp_context)
 
     # Verify NO lease was granted
     lease = await lease_manager.validate(client_id, "write_file")
@@ -70,7 +70,7 @@ async def test_token_verification_at_call_time(redis_client, governance_in_bypas
     mock_fastmcp_context.session_id = client_id
 
     # Get schema (should grant lease in BYPASS)
-    response = await get_tool_schema.fn(tool_name="write_file", ctx=mock_fastmcp_context)
+    response = await get_tool_schema(tool_name="write_file", ctx=mock_fastmcp_context)
     assert json.loads(response)["name"] == "write_file"
 
     # Verify lease was granted
@@ -108,9 +108,9 @@ async def test_read_only_mode_blocks_sensitive_tools(
     for tool in all_tools:
         if tool.risk_level != "safe":
             with pytest.raises(ToolError, match="blocked"):
-                await get_tool_schema.fn(tool_name=tool.tool_id, ctx=mock_fastmcp_context)
+                await get_tool_schema(tool_name=tool.tool_id, ctx=mock_fastmcp_context)
         else:
-            response = await get_tool_schema.fn(tool_name=tool.tool_id, ctx=mock_fastmcp_context)
+            response = await get_tool_schema(tool_name=tool.tool_id, ctx=mock_fastmcp_context)
             assert json.loads(response)["name"] == tool.tool_id
 
 
@@ -132,7 +132,7 @@ async def test_bypass_mode_skips_governance(
     mock_fastmcp_context.session_id = client_id
 
     # Request schema for sensitive tool (no token needed)
-    response = await get_tool_schema.fn(tool_name="delete_file", ctx=mock_fastmcp_context)
+    response = await get_tool_schema(tool_name="delete_file", ctx=mock_fastmcp_context)
     assert json.loads(response)["name"] == "delete_file"
 
     # Verify lease was granted
@@ -161,13 +161,13 @@ async def test_mode_change_affects_new_lease_grants(
 
     # Request schema for write_file
     with pytest.raises(ToolError, match="requires approval"):
-        await get_tool_schema.fn(tool_name="write_file", ctx=mock_fastmcp_context)
+        await get_tool_schema(tool_name="write_file", ctx=mock_fastmcp_context)
 
     # Change mode to BYPASS
     await governance_state.set_mode(ExecutionMode.BYPASS, "test-session-key")
 
     # Request schema for delete_file
-    response = await get_tool_schema.fn(tool_name="delete_file", ctx=mock_fastmcp_context)
+    response = await get_tool_schema(tool_name="delete_file", ctx=mock_fastmcp_context)
     assert json.loads(response)["name"] == "delete_file"
 
 
@@ -189,7 +189,7 @@ async def test_existing_leases_remain_valid_after_mode_change(
     mock_fastmcp_context.session_id = client_id
 
     # Grant lease for write_file
-    response = await get_tool_schema.fn(tool_name="write_file", ctx=mock_fastmcp_context)
+    response = await get_tool_schema(tool_name="write_file", ctx=mock_fastmcp_context)
     assert json.loads(response)["name"] == "write_file"
 
     # Verify lease exists
@@ -227,25 +227,25 @@ async def test_policy_matrix_integration(
 
     # Test READ_ONLY + safe
     await governance_state.set_mode(ExecutionMode.READ_ONLY, "test-session-key")
-    response = await get_tool_schema.fn(tool_name="read_file", ctx=mock_fastmcp_context)
+    response = await get_tool_schema(tool_name="read_file", ctx=mock_fastmcp_context)
     assert json.loads(response)["name"] == "read_file"
 
     # Test READ_ONLY + sensitive
     with pytest.raises(ToolError, match="blocked"):
-        await get_tool_schema.fn(tool_name="write_file", ctx=mock_fastmcp_context)
+        await get_tool_schema(tool_name="write_file", ctx=mock_fastmcp_context)
 
     # Test PERMISSION + safe
     await governance_state.set_mode(ExecutionMode.PERMISSION, "test-session-key")
-    response = await get_tool_schema.fn(tool_name="read_file", ctx=mock_fastmcp_context)
+    response = await get_tool_schema(tool_name="read_file", ctx=mock_fastmcp_context)
     assert json.loads(response)["name"] == "read_file"
 
     # Test PERMISSION + sensitive
     with pytest.raises(ToolError, match="requires approval"):
-        await get_tool_schema.fn(tool_name="write_file", ctx=mock_fastmcp_context)
+        await get_tool_schema(tool_name="write_file", ctx=mock_fastmcp_context)
 
     # Test BYPASS + any
     await governance_state.set_mode(ExecutionMode.BYPASS, "test-session-key")
-    response = await get_tool_schema.fn(tool_name="delete_file", ctx=mock_fastmcp_context)
+    response = await get_tool_schema(tool_name="delete_file", ctx=mock_fastmcp_context)
     assert json.loads(response)["name"] == "delete_file"
 
 
@@ -266,12 +266,12 @@ async def test_lease_ttl_based_on_risk_level(
     mock_fastmcp_context.session_id = client_id
 
     # Grant lease for safe tool
-    await get_tool_schema.fn(tool_name="read_file", ctx=mock_fastmcp_context)
+    await get_tool_schema(tool_name="read_file", ctx=mock_fastmcp_context)
     lease_safe = await lease_manager.validate(client_id, "read_file")
     assert lease_safe.calls_remaining == Config.LEASE_CALLS_BY_RISK["safe"]
 
     # Grant lease for sensitive tool
-    await get_tool_schema.fn(tool_name="write_file", ctx=mock_fastmcp_context)
+    await get_tool_schema(tool_name="write_file", ctx=mock_fastmcp_context)
     lease_sensitive = await lease_manager.validate(client_id, "write_file")
     assert lease_sensitive.calls_remaining == Config.LEASE_CALLS_BY_RISK["sensitive"]
 
@@ -300,7 +300,7 @@ async def test_governance_fail_safe_on_redis_error(redis_client, mock_fastmcp_co
 
         # Attempt to get schema
         with pytest.raises(ToolError, match="requires approval"):
-            await get_tool_schema.fn(tool_name="write_file", ctx=mock_fastmcp_context)
+            await get_tool_schema(tool_name="write_file", ctx=mock_fastmcp_context)
 
 
 @pytest.mark.asyncio
@@ -319,7 +319,7 @@ async def test_token_required_in_permission_mode(redis_client, governance_in_per
 
     # Request without token
     with pytest.raises(ToolError, match="requires approval"):
-        await get_tool_schema.fn(tool_name="write_file", ctx=mock_fastmcp_context)
+        await get_tool_schema(tool_name="write_file", ctx=mock_fastmcp_context)
 
     # Verify no lease was granted
     lease = await lease_manager.validate(client_id, "write_file")

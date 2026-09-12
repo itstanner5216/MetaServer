@@ -1,6 +1,9 @@
 """Tests for TOON threshold configuration and feature flag."""
 
+import json
 from unittest.mock import patch
+
+from fastmcp.tools import ToolResult
 
 from src.meta_mcp.config import Config
 from src.meta_mcp.middleware import GovernanceMiddleware
@@ -113,6 +116,55 @@ class TestMiddlewareIntegration:
             assert encoded["files"]["__toon"] is True
             assert encoded["files"]["count"] == 50
             assert encoded["message"] == "Success"
+
+    def test_middleware_encodes_standard_tool_result_content(self):
+        """Middleware should encode standard ToolResult content and structured data."""
+        middleware = GovernanceMiddleware()
+        structured_content = {"files": [f"file{i}.txt" for i in range(50)]}
+        tool_result = ToolResult(
+            content=structured_content,
+            structured_content=structured_content,
+            meta={"request_id": "request-123"},
+        )
+
+        with patch.object(Config, "ENABLE_TOON_OUTPUTS", True):
+            encoded = middleware._apply_toon_encoding(tool_result)
+
+        assert isinstance(encoded, ToolResult)
+        assert encoded.meta == tool_result.meta
+        assert encoded.structured_content["files"]["__toon"] is True
+        assert encoded.structured_content["files"]["count"] == 50
+        assert json.loads(encoded.content[0].text) == encoded.structured_content
+        assert isinstance(tool_result.structured_content["files"], list)
+        assert json.loads(tool_result.content[0].text) == structured_content
+
+    def test_middleware_preserves_custom_tool_result_content(self):
+        """Middleware should not replace intentional custom text content."""
+        middleware = GovernanceMiddleware()
+        tool_result = ToolResult(
+            content="Success",
+            structured_content={"files": [f"file{i}.txt" for i in range(50)]},
+        )
+
+        encoded = middleware._apply_toon_encoding(tool_result)
+
+        assert encoded.content == tool_result.content
+        assert encoded.structured_content["files"]["__toon"] is True
+
+    def test_middleware_encodes_wrapped_tool_result_content(self):
+        """Middleware should encode text content when structured output wraps it."""
+        middleware = GovernanceMiddleware()
+        content = {"files": [f"file{i}.txt" for i in range(50)]}
+        tool_result = ToolResult(
+            content=content,
+            structured_content={"result": content},
+            meta={"fastmcp": {"wrap_result": True}},
+        )
+
+        encoded = middleware._apply_toon_encoding(tool_result)
+
+        assert json.loads(encoded.content[0].text)["files"]["__toon"] is True
+        assert encoded.structured_content["result"]["files"]["__toon"] is True
 
     def test_middleware_handles_encoding_errors_gracefully(self):
         """Middleware should return original result if encoding fails."""

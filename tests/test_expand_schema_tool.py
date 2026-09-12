@@ -40,11 +40,11 @@ async def test_expand_parameter_returns_full_schema():
 
     try:
         # First, get minimal schema (this triggers tool exposure)
-        minimal_result = await get_tool_schema.fn(tool_name="read_file", expand=False)
+        minimal_result = await get_tool_schema(tool_name="read_file", expand=False)
         minimal_data = json.loads(minimal_result)
 
         # Now expand the schema
-        expanded_result = await get_tool_schema.fn(tool_name="read_file", expand=True)
+        expanded_result = await get_tool_schema(tool_name="read_file", expand=True)
         expanded_data = json.loads(expanded_result)
 
         # Should have inputSchema
@@ -67,7 +67,7 @@ async def test_expand_parameter_unregistered_tool():
     from src.meta_mcp.supervisor import get_tool_schema
 
     with pytest.raises(ToolError, match="not registered"):
-        await get_tool_schema.fn(tool_name="nonexistent_tool", expand=True)
+        await get_tool_schema(tool_name="nonexistent_tool", expand=True)
 
 
 @pytest.mark.asyncio
@@ -80,7 +80,7 @@ async def test_expand_parameter_without_prior_access():
     # Try to expand schema for a tool we haven't accessed yet
     # This should still work by falling back to live tool instance
     try:
-        result = await get_tool_schema.fn(tool_name="write_file", expand=True)
+        result = await get_tool_schema(tool_name="write_file", expand=True)
         data = json.loads(result)
 
         # Should return schema
@@ -109,10 +109,10 @@ async def test_expand_parameter_bypasses_governance():
 
     try:
         # Get schema for a tool (approves it)
-        await get_tool_schema.fn(tool_name="read_file", expand=False)
+        await get_tool_schema(tool_name="read_file", expand=False)
 
         # Expand should work without additional approval
-        result = await get_tool_schema.fn(tool_name="read_file", expand=True)
+        result = await get_tool_schema(tool_name="read_file", expand=True)
         data = json.loads(result)
 
         # Should succeed
@@ -130,10 +130,10 @@ async def test_expand_parameter_format():
     from src.meta_mcp.supervisor import get_tool_schema
 
     # Get schema first to expose tool
-    await get_tool_schema.fn(tool_name="read_file", expand=False)
+    await get_tool_schema(tool_name="read_file", expand=False)
 
     # Expand schema
-    result = await get_tool_schema.fn(tool_name="read_file", expand=True)
+    result = await get_tool_schema(tool_name="read_file", expand=True)
     data = json.loads(result)
 
     # Check format
@@ -157,14 +157,14 @@ async def test_progressive_schema_workflow():
 
     try:
         # Step 1: Get minimal schema
-        minimal_result = await get_tool_schema.fn(tool_name="read_file", expand=False)
+        minimal_result = await get_tool_schema(tool_name="read_file", expand=False)
         minimal_data = json.loads(minimal_result)
 
         minimal_schema = minimal_data.get("inputSchema", {})
         minimal_tokens = estimate_token_count(minimal_schema)
 
         # Step 2: Expand to full schema
-        expanded_result = await get_tool_schema.fn(tool_name="read_file", expand=True)
+        expanded_result = await get_tool_schema(tool_name="read_file", expand=True)
         expanded_data = json.loads(expanded_result)
 
         expanded_schema = expanded_data.get("inputSchema", {})
@@ -194,7 +194,7 @@ async def test_expand_parameter_fallback_to_live_tool():
     from src.meta_mcp.supervisor import get_tool_schema
 
     # Get a tool and clear its schemas in registry
-    await get_tool_schema.fn(tool_name="read_file", expand=False)
+    await get_tool_schema(tool_name="read_file", expand=False)
 
     tool_record = tool_registry.get("read_file")
     if tool_record:
@@ -203,7 +203,7 @@ async def test_expand_parameter_fallback_to_live_tool():
         tool_record.schema_min = None
 
     # Expand should still work by falling back to live tool
-    result = await get_tool_schema.fn(tool_name="read_file", expand=True)
+    result = await get_tool_schema(tool_name="read_file", expand=True)
     data = json.loads(result)
 
     # Should still return schema
@@ -224,8 +224,8 @@ async def test_expand_parameter_preserves_structure():
 
     try:
         # Get and expand schema
-        await get_tool_schema.fn(tool_name="read_file", expand=False)
-        result = await get_tool_schema.fn(tool_name="read_file", expand=True)
+        await get_tool_schema(tool_name="read_file", expand=False)
+        result = await get_tool_schema(tool_name="read_file", expand=True)
         data = json.loads(result)
 
         schema = data["inputSchema"]

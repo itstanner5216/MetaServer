@@ -48,7 +48,7 @@ async def test_governance_state_timeout_requires_approval(mock_fastmcp_context):
         governance_state, "_get_redis", side_effect=aioredis.TimeoutError("Redis timeout")
     ), patch("src.meta_mcp.supervisor._expose_tool", AsyncMock()) as expose_tool:
         with pytest.raises(ToolError) as exc_info:
-            await get_tool_schema.fn(tool_name="write_file", ctx=mock_fastmcp_context)
+            await get_tool_schema(tool_name="write_file", ctx=mock_fastmcp_context)
 
     assert "requires approval" in str(exc_info.value)
     expose_tool.assert_not_called()

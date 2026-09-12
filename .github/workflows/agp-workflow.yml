@@ -61,11 +61,6 @@ on:
         default: ''
         type: string
 
-permissions:
-  contents: write
-  pull-requests: write
-  id-token: write  # Required for Sonatype Guide OIDC authentication
-
 concurrency:
   group: agp-workflow-${{ inputs.mode || 'full' }}
   cancel-in-progress: false
@@ -75,15 +70,18 @@ jobs:
   # it should, writes the governed effective agp.yml to the workspace (fail-closed).
   gate:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write  # Required for Sonatype Guide OIDC authentication
     timeout-minutes: 5
     outputs:
       directive: ${{ steps.gate.outputs.directive }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09  # v5
       - name: Sonatype Guide gate
         id: gate
-        uses: sonatype/agp-action/gate@v1
+        uses: sonatype/agp-action/gate@41940121a017240d481fb0f355e0934baf724d2e  # v1
         with:
           guide-url: ${{ vars.AGP_API_URL }}
 
@@ -91,20 +89,27 @@ jobs:
     needs: gate
     if: needs.gate.outputs.directive == 'run'
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+      id-token: write  # Required for Sonatype Guide OIDC authentication
     timeout-minutes: 60
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09  # v5
 
       - name: Fetch governed configuration
         # GitHub jobs run separately and don't share files, so fetch the governed configuration
         # again here for the AGP run below to use.
-        uses: sonatype/agp-action/gate@v1
+        id: fetch-gate
+        continue-on-error: true
+        uses: sonatype/agp-action/gate@41940121a017240d481fb0f355e0934baf724d2e  # v1
         with:
           guide-url: ${{ vars.AGP_API_URL }}
 
       - name: Run AGP
-        uses: sonatype/agp-action@v1
+        if: steps.fetch-gate.outcome == 'success' && steps.fetch-gate.outputs.directive == 'run'
+        uses: sonatype/agp-action@41940121a017240d481fb0f355e0934baf724d2e  # v1
         with:
           create-pr: true
           # Forward the dispatch inputs so a backend-triggered run targets the right mode.

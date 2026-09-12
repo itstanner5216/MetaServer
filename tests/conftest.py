@@ -245,6 +245,18 @@ def mock_fastmcp_context():
         - elicit() async method
     """
 
+    class MockCallToolRequest:
+        def __init__(self, request_context):
+            self._request_context = request_context
+
+        @property
+        def name(self):
+            return self._request_context.tool_name
+
+        @property
+        def arguments(self):
+            return self._request_context.arguments
+
     class MockContext:
         def __init__(self):
             self.request_context = MagicMock()
@@ -252,6 +264,8 @@ def mock_fastmcp_context():
             self.request_context.arguments = {"path": "test.txt", "content": "test content"}
             self.request_context.session_id = "test-session-123"
             self.elicit = AsyncMock()
+            self.fastmcp_context = self
+            self.message = MockCallToolRequest(self.request_context)
 
         @property
         def session_id(self):

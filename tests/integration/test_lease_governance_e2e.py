@@ -25,17 +25,17 @@ async def test_permission_mode_requires_approval(redis_client, governance_in_per
     """
     Test complete flow: search → schema request → approval required.
     """
-    results = search_tools.fn(query="file")
+    results = search_tools(query="file")
     assert "write_file" in str(results).lower()
 
-    tools_before = await mcp.get_tools()
-    tool_names_before = {tool.name for tool in tools_before.values()}
+    tools_before = await mcp.list_tools(run_middleware=False)
+    tool_names_before = {tool.name for tool in tools_before}
 
     with pytest.raises(ToolError, match="requires approval"):
-        await get_tool_schema.fn(tool_name="write_file")
+        await get_tool_schema(tool_name="write_file")
 
-    tools_after = await mcp.get_tools()
-    tool_names_after = {tool.name for tool in tools_after.values()}
+    tools_after = await mcp.list_tools(run_middleware=False)
+    tool_names_after = {tool.name for tool in tools_after}
     if "write_file" not in tool_names_before:
         assert "write_file" not in tool_names_after
 
@@ -48,7 +48,7 @@ async def test_bypass_mode_grants_schema_and_lease(redis_client, governance_in_b
     Test that BYPASS mode grants immediate schema access and lease.
     """
     ctx = mock_fastmcp_context(session_id="e2e_bypass_client")
-    response = await get_tool_schema.fn(tool_name="delete_file", ctx=ctx)
+    response = await get_tool_schema(tool_name="delete_file", ctx=ctx)
     response_data = json.loads(response) if isinstance(response, str) else response
 
     assert response_data.get("inputSchema") is not None
@@ -65,11 +65,11 @@ async def test_read_only_mode_blocks_flow(redis_client, governance_in_read_only)
     """
     Test that READ_ONLY mode blocks sensitive tool access at schema request.
     """
-    results = search_tools.fn(query="file")
+    results = search_tools(query="file")
     assert results is not None
 
     with pytest.raises(ToolError, match="blocked"):
-        await get_tool_schema.fn(tool_name="write_file")
+        await get_tool_schema(tool_name="write_file")
 
 
 @pytest.mark.asyncio
@@ -80,7 +80,7 @@ async def test_lease_exhaustion_flow(redis_client, governance_in_bypass):
     Test that lease exhaustion prevents further calls.
     """
     ctx = mock_fastmcp_context(session_id="e2e_exhaust_client")
-    response = await get_tool_schema.fn(tool_name="read_file", ctx=ctx)
+    response = await get_tool_schema(tool_name="read_file", ctx=ctx)
     response_data = json.loads(response) if isinstance(response, str) else response
     assert response_data.get("inputSchema") is not None
 

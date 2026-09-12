@@ -1,15 +1,21 @@
 """FastMCP middleware for tri-state governance with scoped elevation and elicitation."""
 
 import hashlib
+import json
 import re
 import time
+from collections.abc import Sequence
 from typing import Any
 
 from fastmcp import Context
 from fastmcp.exceptions import ToolError
-from fastmcp.server.middleware import Middleware
+from fastmcp.server.middleware import CallNext, Middleware, MiddlewareContext
+from fastmcp.tools import Tool, ToolResult
 from loguru import logger
+from mcp import types as mcp_types
 
+# Agent hooks (opt-in only when config/agents.yaml exists with bindings)
+from .agent_detector import detect_agent_id
 from .audit import AuditEvent, audit_logger
 from .config import Config
 from .governance.approval import (
@@ -19,15 +25,11 @@ from .governance.approval import (
 )
 from .governance.artifacts import get_artifact_generator
 from .governance.tokens import verify_token
+from .hooks import hook_manager
 from .leases import lease_manager
 from .registry import tool_registry
 from .state import ExecutionMode, governance_state
 from .toon import encode_output
-
-# Agent hooks (opt-in only when config/agents.yaml exists with bindings)
-from .agent_detector import detect_agent_id
-from .hooks import PolicyViolation, hook_manager
-
 
 # Constants
 SENSITIVE_TOOLS = {
@@ -77,6 +79,36 @@ class GovernanceMiddleware(Middleware):
             return result
 
         try:
+            if isinstance(result, ToolResult):
+                if result.structured_content is None:
+                    return result
+                encoded = encode_output(
+                    result.structured_content,
+                    threshold=Config.TOON_ARRAY_THRESHOLD,
+                )
+                updates: dict[str, Any] = {"structured_content": encoded}
+                if len(result.content) == 1 and isinstance(
+                    result.content[0], mcp_types.TextContent
+                ):
+                    try:
+                        content = json.loads(result.content[0].text)
+                        encoded_content = encode_output(
+                            content,
+                            threshold=Config.TOON_ARRAY_THRESHOLD,
+                        )
+                        if encoded_content != content:
+                            updates["content"] = [
+                                result.content[0].model_copy(
+                                    update={
+                                        "text": json.dumps(
+                                            encoded_content, separators=(",", ":"), default=str
+                                        )
+                                    }
+                                )
+                            ]
+                    except (TypeError, json.JSONDecodeError):
+                        pass
+                return result.model_copy(update=updates)
             return encode_output(result, threshold=Config.TOON_ARRAY_THRESHOLD)
         except Exception as e:
             # Fail-safe: return original result if encoding fails
@@ -267,7 +299,11 @@ class GovernanceMiddleware(Middleware):
 
         return base_scopes
 
-    async def on_list_tools(self, tools: list[str], ctx: Context) -> list[str]:
+    async def on_list_tools(
+        self,
+        context: MiddlewareContext[mcp_types.ListToolsRequest],
+        call_next: CallNext[mcp_types.ListToolsRequest, Sequence[Tool]],
+    ) -> Sequence[Tool]:
         """
         Filter tool list to only show meta-tools and leased tools.
 
@@ -276,32 +312,37 @@ class GovernanceMiddleware(Middleware):
         - Leased tools: Visible only if active lease for this client_id
         - All others: Hidden
         """
+        tools = await call_next(context)
+
         if not Config.ENABLE_LEASE_MANAGEMENT:
             logger.debug("Lease management disabled, returning full tool list")
             return tools
 
         bootstrap_tools = set(tool_registry.get_bootstrap_tools()) | {"expand_tool_schema"}
-        visible_tools = [tool for tool in tools if tool in bootstrap_tools]
+        visible_tools = [tool for tool in tools if tool.name in bootstrap_tools]
+        fastmcp_context = context.fastmcp_context
+
+        if fastmcp_context is None:
+            logger.warning("Failed to extract client_id in on_list_tools")
+            return visible_tools
 
         try:
-            client_id = str(ctx.session_id)
+            client_id = str(fastmcp_context.session_id)
         except Exception:
             logger.warning("Failed to extract client_id in on_list_tools")
             return visible_tools
 
-        for tool_name in tools:
-            if tool_name in bootstrap_tools:
+        for tool in tools:
+            if tool.name in bootstrap_tools:
                 continue
 
-            lease = await lease_manager.validate(client_id, tool_name)
+            lease = await lease_manager.validate(client_id, tool.name)
             if lease is not None:
-                visible_tools.append(tool_name)
+                visible_tools.append(tool)
 
         logger.debug(
-            f"Filtered {len(tools)} tools to {len(visible_tools)} visible "
-            f"(client: {client_id})"
+            f"Filtered {len(tools)} tools to {len(visible_tools)} visible (client: {client_id})"
         )
-
         return visible_tools
 
     @staticmethod
@@ -621,7 +662,11 @@ class GovernanceMiddleware(Middleware):
             )
             return False, 0, []
 
-    async def on_call_tool(self, context: Context, call_next):
+    async def on_call_tool(
+        self,
+        context: MiddlewareContext[mcp_types.CallToolRequestParams],
+        call_next: CallNext[mcp_types.CallToolRequestParams, ToolResult],
+    ) -> ToolResult:
         """
         Intercept tool calls and enforce tri-state governance.
 
@@ -641,9 +686,13 @@ class GovernanceMiddleware(Middleware):
         Raises:
             ToolError: If operation is denied
         """
-        tool_name = context.request_context.tool_name
-        arguments = context.request_context.arguments or {}
-        session_id = str(context.session_id)
+        fastmcp_context = context.fastmcp_context
+        if fastmcp_context is None:
+            raise ToolError("Tool calls require a FastMCP request context")
+
+        tool_name = context.message.name
+        arguments = context.message.arguments or {}
+        session_id = str(fastmcp_context.session_id)
 
         # PHASE 3+4 INTEGRATION: Validate lease and token before governance checks
         # Note: Bootstrap tools bypass lease checks
@@ -651,12 +700,12 @@ class GovernanceMiddleware(Middleware):
         bootstrap_tools = {"search_tools", "get_tool_schema"}
 
         should_consume_lease = Config.ENABLE_LEASE_MANAGEMENT and tool_name not in bootstrap_tools
-        client_id = None
+        client_id = session_id
 
         if should_consume_lease:
             # Extract client_id from FastMCP session context
             # In FastMCP/MCP protocol, session_id is the stable client connection identifier
-            client_id = str(context.session_id)
+            client_id = str(fastmcp_context.session_id)
 
             # Validate lease exists
             lease = await lease_manager.validate(client_id, tool_name)
@@ -699,7 +748,7 @@ class GovernanceMiddleware(Middleware):
         # AGENT HOOKS INTEGRATION: Run before_tool_call hooks if in agent mode
         # This is opt-in only - hooks only run when agent binding exists in config/agents.yaml
         hook_receipt = None
-        agent_id = detect_agent_id(context)
+        agent_id = detect_agent_id(fastmcp_context)
 
         if hook_manager.is_agent_mode(agent_id):
             violation, hook_receipt = await hook_manager.run_before_tool_call(
@@ -716,10 +765,7 @@ class GovernanceMiddleware(Middleware):
                     session_id=session_id,
                     reason=f"agent_hook:{violation.gate_type.value}",
                 )
-                raise ToolError(
-                    f"Policy violation: {violation.reason}",
-                    details=violation.to_dict(),
-                )
+                raise ToolError(f"Policy violation: {violation.reason}")
 
         async def _run_after_hooks(result, error=None):
             """Run after_tool_result hooks if in agent mode."""
@@ -766,7 +812,7 @@ class GovernanceMiddleware(Middleware):
                 arguments=arguments,
                 session_id=session_id,
             )
-            result = await call_next()
+            result = await call_next(context)
             await _consume_lease_after_success()
             await _run_after_hooks(result)
             return self._apply_toon_encoding(result)
@@ -774,7 +820,7 @@ class GovernanceMiddleware(Middleware):
         # Path 2: Non-sensitive tools - pass through
         if tool_name not in SENSITIVE_TOOLS:
             logger.debug(f"Non-sensitive tool {tool_name}, passing through")
-            result = await call_next()
+            result = await call_next(context)
             await _consume_lease_after_success()
             await _run_after_hooks(result)
             return self._apply_toon_encoding(result)
@@ -806,7 +852,7 @@ class GovernanceMiddleware(Middleware):
                     context_key=context_key,
                     session_id=session_id,
                 )
-                result = await call_next()
+                result = await call_next(context)
                 await _consume_lease_after_success()
                 await _run_after_hooks(result)
                 return self._apply_toon_encoding(result)
@@ -814,7 +860,7 @@ class GovernanceMiddleware(Middleware):
             # No elevation, elicit approval
             logger.info(f"Eliciting approval for {tool_name} (session: {session_id})")
             approved, lease_seconds, selected_scopes = await self._elicit_approval(
-                context, tool_name, arguments
+                fastmcp_context, tool_name, arguments
             )
 
             if approved:
@@ -835,7 +881,7 @@ class GovernanceMiddleware(Middleware):
                     )
 
                 # Execute tool
-                result = await call_next()
+                result = await call_next(context)
                 await _consume_lease_after_success()
                 await _run_after_hooks(result)
                 return self._apply_toon_encoding(result)
