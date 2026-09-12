@@ -9,11 +9,12 @@ from typing import Any
 from fastmcp import Context
 from fastmcp.exceptions import ToolError
 from fastmcp.server.middleware import CallNext, Middleware, MiddlewareContext
-from fastmcp.tools import Tool
-from fastmcp.tools.tool import ToolResult
-from mcp import types as mcp_types
+from fastmcp.tools import Tool, ToolResult
 from loguru import logger
+from mcp import types as mcp_types
 
+# Agent hooks (opt-in only when config/agents.yaml exists with bindings)
+from .agent_detector import detect_agent_id
 from .audit import AuditEvent, audit_logger
 from .config import Config
 from .governance.approval import (
@@ -23,15 +24,11 @@ from .governance.approval import (
 )
 from .governance.artifacts import get_artifact_generator
 from .governance.tokens import verify_token
+from .hooks import hook_manager
 from .leases import lease_manager
 from .registry import tool_registry
 from .state import ExecutionMode, governance_state
 from .toon import encode_output
-
-# Agent hooks (opt-in only when config/agents.yaml exists with bindings)
-from .agent_detector import detect_agent_id
-from .hooks import PolicyViolation, hook_manager
-
 
 # Constants
 SENSITIVE_TOOLS = {
@@ -321,8 +318,7 @@ class GovernanceMiddleware(Middleware):
                 visible_tools.append(tool)
 
         logger.debug(
-            f"Filtered {len(tools)} tools to {len(visible_tools)} visible "
-            f"(client: {client_id})"
+            f"Filtered {len(tools)} tools to {len(visible_tools)} visible (client: {client_id})"
         )
         return visible_tools
 
@@ -681,7 +677,7 @@ class GovernanceMiddleware(Middleware):
         bootstrap_tools = {"search_tools", "get_tool_schema"}
 
         should_consume_lease = Config.ENABLE_LEASE_MANAGEMENT and tool_name not in bootstrap_tools
-        client_id = None
+        client_id = session_id
 
         if should_consume_lease:
             # Extract client_id from FastMCP session context
@@ -746,10 +742,7 @@ class GovernanceMiddleware(Middleware):
                     session_id=session_id,
                     reason=f"agent_hook:{violation.gate_type.value}",
                 )
-                raise ToolError(
-                    f"Policy violation: {violation.reason}",
-                    details=violation.to_dict(),
-                )
+                raise ToolError(f"Policy violation: {violation.reason}")
 
         async def _run_after_hooks(result, error=None):
             """Run after_tool_result hooks if in agent mode."""

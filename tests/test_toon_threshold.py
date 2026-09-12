@@ -2,6 +2,8 @@
 
 from unittest.mock import patch
 
+from fastmcp.tools import ToolResult
+
 from src.meta_mcp.config import Config
 from src.meta_mcp.middleware import GovernanceMiddleware
 from src.meta_mcp.toon import encode_output
@@ -113,6 +115,25 @@ class TestMiddlewareIntegration:
             assert encoded["files"]["__toon"] is True
             assert encoded["files"]["count"] == 50
             assert encoded["message"] == "Success"
+
+    def test_middleware_preserves_tool_result_protocol_fields(self):
+        """Middleware should encode structured content without replacing a ToolResult."""
+        middleware = GovernanceMiddleware()
+        tool_result = ToolResult(
+            content="Success",
+            structured_content={"files": [f"file{i}.txt" for i in range(50)]},
+            meta={"request_id": "request-123"},
+        )
+
+        with patch.object(Config, "ENABLE_TOON_OUTPUTS", True):
+            encoded = middleware._apply_toon_encoding(tool_result)
+
+        assert isinstance(encoded, ToolResult)
+        assert encoded.content == tool_result.content
+        assert encoded.meta == tool_result.meta
+        assert encoded.structured_content["files"]["__toon"] is True
+        assert encoded.structured_content["files"]["count"] == 50
+        assert isinstance(tool_result.structured_content["files"], list)
 
     def test_middleware_handles_encoding_errors_gracefully(self):
         """Middleware should return original result if encoding fails."""
