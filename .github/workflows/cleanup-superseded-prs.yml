@@ -1,0 +1,90 @@
+name: Close Superseded Consolidation PRs
+
+on:
+  pull_request:
+    branches: [main]
+    types: [closed]
+
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+
+jobs:
+  cleanup:
+    if: >-
+      github.event.pull_request.merged == true &&
+      github.event.pull_request.head.ref == 'copilot/consolidate-prs-and-delete-previous'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Close superseded pull requests and delete their branches
+        uses: actions/github-script@v9
+        with:
+          script: |
+            const supersededPullRequests = new Map([
+              [244, "a94117288b34342fafe5c0f12f7af87f149b524a"],
+              [245, "ef3f1a1cf5d5b6b8ba37f6610d4c9032b860045d"],
+              [246, "6df9ba129637aec22f925230c3daed01f97d21d4"],
+              [247, "8263db3d9280485522ea1b8f31ebd66bb6e7ceea"],
+              [249, "fbaf922c1a79e9da989bb77dd174b5b8d45cd85e"],
+              [250, "4fa7568f8c1a1cf0bdf3c7521ded92f973acfc94"],
+              [251, "8f9b726ecd5d5b49d2eb6fb9474133bf0ea80291"],
+              [252, "5fbbeb7e20701b9811316a122e62154e6318ff97"],
+              [254, "c8d225261fd885f065153580e4848c5b626a42d7"],
+            ]);
+
+            for (const [pullNumber, expectedHeadSha] of supersededPullRequests) {
+              const { data: pullRequest } = await github.rest.pulls.get({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                pull_number: pullNumber,
+              });
+
+              if (pullRequest.state !== "open") {
+                core.info(`PR #${pullNumber} is already ${pullRequest.state}; skipping.`);
+                continue;
+              }
+
+              if (pullRequest.head.sha !== expectedHeadSha) {
+                core.warning(
+                  `PR #${pullNumber} has a newer head (${pullRequest.head.sha}); leaving it open.`
+                );
+                continue;
+              }
+
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: pullNumber,
+                body: [
+                  "This PR has been superseded by the consolidated dependency and workflow update.",
+                  "",
+                  `Its unchanged head was included in #${context.payload.pull_request.number}.`,
+                ].join("\n"),
+              });
+
+              await github.rest.pulls.update({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                pull_number: pullNumber,
+                state: "closed",
+              });
+
+              if (pullRequest.head.repo?.full_name !== context.payload.repository.full_name) {
+                core.info(`PR #${pullNumber} branch belongs to another repository; not deleting it.`);
+                continue;
+              }
+
+              try {
+                await github.rest.git.deleteRef({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  ref: `heads/${pullRequest.head.ref}`,
+                });
+                core.info(`Closed PR #${pullNumber} and deleted ${pullRequest.head.ref}.`);
+              } catch (error) {
+                core.warning(
+                  `Closed PR #${pullNumber}, but could not delete ${pullRequest.head.ref}: ${error.message}`
+                );
+              }
+            }

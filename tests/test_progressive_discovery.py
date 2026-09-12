@@ -30,8 +30,8 @@ async def test_initial_exposure_minimal():
     - get_tool_schema
     """
     # Get initial tool list
-    tools = await mcp.get_tools()
-    tool_names = sorted([t.name for t in tools.values()])
+    tools = await mcp.list_tools(run_middleware=False)
+    tool_names = sorted([t.name for t in tools])
 
     # Verify bootstrap tools are always exposed
     assert len(tool_names) >= 2, f"Expected at least 2 tools, got {len(tool_names)}: {tool_names}"
@@ -55,11 +55,11 @@ async def test_search_does_not_expose_tools():
     Searching for tools should return metadata but NOT expose them to tools/list.
     """
     # Get initial tool count
-    tools_before = await mcp.get_tools()
-    tool_names_before = {t.name for t in tools_before.values()}
+    tools_before = await mcp.list_tools(run_middleware=False)
+    tool_names_before = {t.name for t in tools_before}
 
     # Search for file-related tools
-    search_result = search_tools.fn(query="file")
+    search_result = search_tools(query="file")
 
     # Verify search returned results
     assert "read_file" in search_result or "Read file" in search_result, (
@@ -67,8 +67,8 @@ async def test_search_does_not_expose_tools():
     )
 
     # Get tool count after search
-    tools_after = await mcp.get_tools()
-    tool_names_after = {t.name for t in tools_after.values()}
+    tools_after = await mcp.list_tools(run_middleware=False)
+    tool_names_after = {t.name for t in tools_after}
 
     # Verify no tools were exposed
     assert tool_names_after == tool_names_before, "search_tools should not expose additional tools"
@@ -84,9 +84,9 @@ async def test_get_tool_schema_triggers_exposure():
     2. Return the full JSON schema
     """
     # Get initial tool count
-    tools_before = await mcp.get_tools()
+    tools_before = await mcp.list_tools(run_middleware=False)
     count_before = len(tools_before)
-    tool_names_before = [t.name for t in tools_before.values()]
+    tool_names_before = [t.name for t in tools_before]
 
     read_file_preexposed = "read_file" in tool_names_before
 
@@ -95,7 +95,7 @@ async def test_get_tool_schema_triggers_exposure():
         patch.object(governance_state, "get_mode", new=AsyncMock(return_value=ExecutionMode.BYPASS)),
         patch("src.meta_mcp.supervisor.lease_manager.grant", AsyncMock(return_value=MagicMock())),
     ):
-        schema_result = await get_tool_schema.fn(tool_name="read_file")
+        schema_result = await get_tool_schema(tool_name="read_file")
 
     # Verify schema was returned
     assert "read_file" in schema_result, "Schema should contain tool name"
@@ -104,9 +104,9 @@ async def test_get_tool_schema_triggers_exposure():
     )
 
     # Get tool count after schema request
-    tools_after = await mcp.get_tools()
+    tools_after = await mcp.list_tools(run_middleware=False)
     count_after = len(tools_after)
-    tool_names_after = [t.name for t in tools_after.values()]
+    tool_names_after = [t.name for t in tools_after]
 
     # Verify tool was exposed (or already exposed)
     if read_file_preexposed:
@@ -135,19 +135,19 @@ async def test_exposed_tools_persist():
         ),
     ):
         # Expose write_file
-        await get_tool_schema.fn(tool_name="write_file")
+        await get_tool_schema(tool_name="write_file")
 
         # Verify it's exposed
-        tools_after_first = await mcp.get_tools()
-        tool_names_first = [t.name for t in tools_after_first.values()]
+        tools_after_first = await mcp.list_tools(run_middleware=False)
+        tool_names_first = [t.name for t in tools_after_first]
         assert "write_file" in tool_names_first, "write_file should be exposed"
         count_first = len(tools_after_first)
 
         # Call get_tool_schema again for the same tool
-        await get_tool_schema.fn(tool_name="write_file")
+        await get_tool_schema(tool_name="write_file")
 
         # Verify no duplicate exposure
-        tools_after_second = await mcp.get_tools()
+        tools_after_second = await mcp.list_tools(run_middleware=False)
         count_second = len(tools_after_second)
 
         assert count_second == count_first, (
@@ -163,9 +163,9 @@ async def test_tools_list_updates_dynamically():
     The tools/list should reflect the current exposure state.
     """
     # Start with baseline
-    initial_tools = await mcp.get_tools()
+    initial_tools = await mcp.list_tools(run_middleware=False)
     initial_count = len(initial_tools)
-    exposed_tools = {t.name for t in initial_tools.values()}
+    exposed_tools = {t.name for t in initial_tools}
 
     # Expose multiple tools in sequence
     tools_to_expose = ["list_directory", "create_directory", "move_file"]
@@ -182,12 +182,12 @@ async def test_tools_list_updates_dynamically():
         expected_count = initial_count
         for tool_name in tools_to_expose:
             # Expose the tool
-            await get_tool_schema.fn(tool_name=tool_name)
+            await get_tool_schema(tool_name=tool_name)
 
             # Check tools/list
-            current_tools = await mcp.get_tools()
+            current_tools = await mcp.list_tools(run_middleware=False)
             current_count = len(current_tools)
-            current_names = [t.name for t in current_tools.values()]
+            current_names = [t.name for t in current_tools]
 
             # Verify count increased when newly exposed
             if tool_name not in exposed_tools:
@@ -212,17 +212,17 @@ async def test_governance_intercepts_all_tools(redis_client):
     # Set governance mode to READ_ONLY
     await governance_state.set_mode(ExecutionMode.READ_ONLY, "test-session-key")
 
-    tools_before = await mcp.get_tools()
-    tool_names_before = [t.name for t in tools_before.values()]
+    tools_before = await mcp.list_tools(run_middleware=False)
+    tool_names_before = [t.name for t in tools_before]
     delete_file_preexposed = "delete_file" in tool_names_before
 
     # Expose delete_file via schema request (should be blocked in READ_ONLY)
     with pytest.raises(ToolError, match="blocked"):
-        await get_tool_schema.fn(tool_name="delete_file")
+        await get_tool_schema(tool_name="delete_file")
 
     # Verify delete_file is not newly exposed
-    tools = await mcp.get_tools()
-    tool_names = [t.name for t in tools.values()]
+    tools = await mcp.list_tools(run_middleware=False)
+    tool_names = [t.name for t in tools]
     if not delete_file_preexposed:
         assert "delete_file" not in tool_names, "delete_file should remain hidden when blocked"
 
@@ -277,12 +277,12 @@ async def test_discovery_workflow_complete():
     This simulates the expected model behavior with progressive discovery.
     """
     # Step 1: Model searches for tools
-    search_result = search_tools.fn(query="git")
+    search_result = search_tools(query="git")
     assert "git_push" in search_result, "Search should find git_push"
 
     # Verify git_push not yet exposed
-    tools_after_search = await mcp.get_tools()
-    names_after_search = [t.name for t in tools_after_search.values()]
+    tools_after_search = await mcp.list_tools(run_middleware=False)
+    names_after_search = [t.name for t in tools_after_search]
     assert "git_push" not in names_after_search, (
         "git_push should not be exposed after search"
     )
@@ -297,12 +297,12 @@ async def test_discovery_workflow_complete():
             AsyncMock(return_value=MagicMock()),
         ),
     ):
-        schema_result = await get_tool_schema.fn(tool_name="git_push")
+        schema_result = await get_tool_schema(tool_name="git_push")
     assert "git_push" in schema_result, "Schema should be returned"
 
     # Verify git_push now exposed
-    tools_after_schema = await mcp.get_tools()
-    names_after_schema = [t.name for t in tools_after_schema.values()]
+    tools_after_schema = await mcp.list_tools(run_middleware=False)
+    names_after_schema = [t.name for t in tools_after_schema]
     assert "git_push" in names_after_schema, (
         "git_push should be exposed after schema request"
     )
@@ -349,11 +349,11 @@ async def test_no_breaking_changes():
             )
 
             # Should be searchable
-            search_result = search_tools.fn(query=tool_name)
+            search_result = search_tools(query=tool_name)
             assert tool_name in search_result, f"{tool_name} should be found via search"
 
             # Should be exposable via schema request
-            schema_result = await get_tool_schema.fn(tool_name=tool_name)
+            schema_result = await get_tool_schema(tool_name=tool_name)
             assert tool_name in schema_result, f"{tool_name} schema should be retrievable"
 
 
@@ -365,19 +365,19 @@ async def test_bootstrap_tools_always_available():
     search_tools and get_tool_schema should work without progressive discovery.
     """
     # Both should be in tools/list initially
-    tools = await mcp.get_tools()
-    tool_names = [t.name for t in tools.values()]
+    tools = await mcp.list_tools(run_middleware=False)
+    tool_names = [t.name for t in tools]
 
     assert "search_tools" in tool_names, "search_tools must be available at startup"
     assert "get_tool_schema" in tool_names, "get_tool_schema must be available at startup"
 
     # Both should be immediately callable
-    search_result = search_tools.fn(query="test")
+    search_result = search_tools(query="test")
     assert search_result is not None, "search_tools should be callable"
 
     with (
         patch.object(governance_state, "get_mode", new=AsyncMock(return_value=ExecutionMode.BYPASS)),
         patch("src.meta_mcp.supervisor.lease_manager.grant", AsyncMock(return_value=MagicMock())),
     ):
-        schema_result = await get_tool_schema.fn(tool_name="search_tools")
+        schema_result = await get_tool_schema(tool_name="search_tools")
     assert "search_tools" in schema_result, "get_tool_schema should be callable"

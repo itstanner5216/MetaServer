@@ -37,8 +37,8 @@ async def validate_bootstrap_tools(mcp_instance: Any, tool_registry: Any) -> boo
 
     # Get actually exposed tools from supervisor
     try:
-        actual_tools_list = await mcp_instance.get_tools()
-        actual_exposed = {tool.name for tool in actual_tools_list.values()}
+        actual_tools_list = await mcp_instance.list_tools(run_middleware=False)
+        actual_exposed = {tool.name for tool in actual_tools_list}
     except Exception as e:
         logger.error(f"Failed to get tool list for validation: {e}")
         return False

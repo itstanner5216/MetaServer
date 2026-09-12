@@ -51,7 +51,7 @@ def test_remove_directory_validates_path_in_workspace(core_tools_module):
 
     # Try to remove directory outside workspace (path traversal attack)
     with pytest.raises(ToolError) as exc_info:
-        remove_directory.fn("../../etc")
+        remove_directory("../../etc")
 
     # Verify error message mentions path traversal
     assert "traversal" in str(exc_info.value).lower()
@@ -80,7 +80,7 @@ def test_remove_directory_succeeds_on_valid_directory(core_tools_module):
     assert test_dir.is_dir()
 
     # Remove directory
-    result = remove_directory.fn("test_remove_dir")
+    result = remove_directory("test_remove_dir")
 
     # Verify success message
     assert "Successfully removed directory" in result
@@ -100,7 +100,7 @@ def test_remove_directory_fails_on_nonexistent_path(core_tools_module):
 
     # Try to remove non-existent directory
     with pytest.raises(ToolError) as exc_info:
-        remove_directory.fn("nonexistent_directory_xyz123")
+        remove_directory("nonexistent_directory_xyz123")
 
     # Verify error message mentions "not found"
     assert "not found" in str(exc_info.value).lower()
@@ -122,7 +122,7 @@ def test_remove_directory_fails_on_file_path(core_tools_module):
     try:
         # Try to remove file with remove_directory
         with pytest.raises(ToolError) as exc_info:
-            remove_directory.fn("test_file.txt")
+            remove_directory("test_file.txt")
 
         # Verify error message mentions "not a directory"
         assert "not a directory" in str(exc_info.value).lower()
@@ -159,7 +159,7 @@ def test_remove_directory_recursive_deletion(core_tools_module):
     assert (level2 / "deep_file.txt").exists()
 
     # Remove entire tree
-    result = remove_directory.fn("test_recursive")
+    result = remove_directory("test_recursive")
 
     # Verify entire tree is gone
     assert not test_dir.exists()
@@ -474,7 +474,7 @@ async def test_supervisor_get_tool_schema_uses_session_id_for_client_id(mock_fas
 
                     # Execute get_tool_schema with context
                     try:
-                        result = await get_tool_schema.fn(
+                        result = await get_tool_schema(
                             tool_name="test_tool", expand=False, ctx=mock_context
                         )
 
@@ -536,7 +536,7 @@ async def test_supervisor_handles_missing_context_gracefully():
 
                     # Execute with ctx=None (fail-safe scenario)
                     try:
-                        await get_tool_schema.fn(
+                        await get_tool_schema(
                             tool_name="test_tool", expand=False, ctx=None
                         )
 
@@ -597,10 +597,10 @@ async def test_supervisor_client_id_stable_across_calls():
                     mock_tool.to_mcp_tool.return_value = mcp_tool
                     mock_mcp.get_tool = AsyncMock(return_value=mock_tool)
 
-                    await get_tool_schema.fn(
+                    await get_tool_schema(
                         tool_name="test_tool", expand=False, ctx=mock_context
                     )
-                    await get_tool_schema.fn(
+                    await get_tool_schema(
                         tool_name="test_tool", expand=False, ctx=mock_context
                     )
 
@@ -651,10 +651,10 @@ async def test_supervisor_client_id_unique_across_sessions():
                     mock_tool.to_mcp_tool.return_value = mcp_tool
                     mock_mcp.get_tool = AsyncMock(return_value=mock_tool)
 
-                    await get_tool_schema.fn(
+                    await get_tool_schema(
                         tool_name="test_tool", expand=False, ctx=context_a
                     )
-                    await get_tool_schema.fn(
+                    await get_tool_schema(
                         tool_name="test_tool", expand=False, ctx=context_b
                     )
 
@@ -867,7 +867,7 @@ async def test_admin_tools_functions_use_imported_components():
         mock_redis.return_value = DummyRedis()
 
         # Call admin tool
-        status = await get_governance_status.fn()
+        status = await get_governance_status()
 
     # Verify status includes the mode we set
     assert "PERMISSION" in status or "permission" in status
@@ -894,7 +894,7 @@ async def test_todo_list_2_integration(mock_fastmcp_context):
     # 1. Verify remove_directory exists and is importable
     from servers.core_tools import remove_directory
 
-    assert hasattr(remove_directory, "fn")
+    assert callable(remove_directory)
 
     # 2. Verify remove_directory is registered in middleware's SENSITIVE_TOOLS
     from src.meta_mcp.middleware import SENSITIVE_TOOLS
@@ -954,7 +954,6 @@ async def test_todo_list_2_integration(mock_fastmcp_context):
 
     # 5. Verify admin_tools imports work
     from servers.admin_tools import admin_server, get_governance_status
-
     assert admin_server is not None
-    assert hasattr(get_governance_status, "fn")
-    assert callable(get_governance_status.fn)
+    assert admin_server is not None
+    assert callable(get_governance_status)

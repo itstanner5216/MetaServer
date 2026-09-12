@@ -29,10 +29,7 @@ class TestValidateBootstrapTools:
         mock_tool_2 = MagicMock()
         mock_tool_2.name = "get_tool_schema"
 
-        mcp_instance.get_tools = AsyncMock(return_value={
-            "search_tools": mock_tool_1,
-            "get_tool_schema": mock_tool_2,
-        })
+        mcp_instance.list_tools = AsyncMock(return_value=[mock_tool_1, mock_tool_2])
 
         result = await validate_bootstrap_tools(mcp_instance, tool_registry)
 
@@ -53,10 +50,7 @@ class TestValidateBootstrapTools:
         mock_tool_2 = MagicMock()
         mock_tool_2.name = "write_file"  # Extra tool!
 
-        mcp_instance.get_tools = AsyncMock(return_value={
-            "search_tools": mock_tool_1,
-            "write_file": mock_tool_2,
-        })
+        mcp_instance.list_tools = AsyncMock(return_value=[mock_tool_1, mock_tool_2])
 
         result = await validate_bootstrap_tools(mcp_instance, tool_registry)
 
@@ -75,9 +69,7 @@ class TestValidateBootstrapTools:
         mock_tool_1 = MagicMock()
         mock_tool_1.name = "search_tools"
 
-        mcp_instance.get_tools = AsyncMock(return_value={
-            "search_tools": mock_tool_1,
-        })
+        mcp_instance.list_tools = AsyncMock(return_value=[mock_tool_1])
 
         result = await validate_bootstrap_tools(mcp_instance, tool_registry)
 
@@ -90,7 +82,7 @@ class TestValidateBootstrapTools:
         tool_registry = MagicMock()
 
         tool_registry.get_bootstrap_tools.return_value = ["search_tools"]
-        mcp_instance.get_tools = AsyncMock(side_effect=RuntimeError("Connection failed"))
+        mcp_instance.list_tools = AsyncMock(side_effect=RuntimeError("Connection failed"))
 
         result = await validate_bootstrap_tools(mcp_instance, tool_registry)
 
@@ -103,7 +95,7 @@ class TestValidateBootstrapTools:
         tool_registry = MagicMock()
 
         tool_registry.get_bootstrap_tools.return_value = []
-        mcp_instance.get_tools = AsyncMock(return_value={})
+        mcp_instance.list_tools = AsyncMock(return_value=[])
 
         result = await validate_bootstrap_tools(mcp_instance, tool_registry)
 
@@ -146,7 +138,7 @@ class TestRunAllValidations:
         tool_registry.get_bootstrap_tools.return_value = ["tool1"]
         mock_tool = MagicMock()
         mock_tool.name = "tool1"
-        mcp_instance.get_tools = AsyncMock(return_value={"tool1": mock_tool})
+        mcp_instance.list_tools = AsyncMock(return_value=[mock_tool])
 
         results = await run_all_validations(mcp_instance, tool_registry)
 
@@ -165,7 +157,7 @@ class TestRunAllValidations:
         tool_registry.get_bootstrap_tools.return_value = ["expected_tool"]
         mock_tool = MagicMock()
         mock_tool.name = "different_tool"
-        mcp_instance.get_tools = AsyncMock(return_value={"different_tool": mock_tool})
+        mcp_instance.list_tools = AsyncMock(return_value=[mock_tool])
 
         results = await run_all_validations(mcp_instance, tool_registry)
 
@@ -179,7 +171,7 @@ class TestRunAllValidations:
         tool_registry = MagicMock()
 
         tool_registry.get_bootstrap_tools.return_value = []
-        mcp_instance.get_tools = AsyncMock(return_value={})
+        mcp_instance.list_tools = AsyncMock(return_value=[])
 
         results = await run_all_validations(mcp_instance, tool_registry)
 

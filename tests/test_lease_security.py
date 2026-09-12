@@ -93,11 +93,11 @@ async def test_bootstrap_tools_skip_lease_check(redis_client, governance_in_read
     - Can't get lease without calling get_tool_schema
     - Can't call get_tool_schema without lease
     """
-    result = search_tools.fn(query="file")
+    result = search_tools(query="file")
     assert "read_file" in result or "write_file" in result
 
     ctx = mock_fastmcp_context(session_id="bootstrap_session")
-    schema = await get_tool_schema.fn(tool_name="search_tools", ctx=ctx)
+    schema = await get_tool_schema(tool_name="search_tools", ctx=ctx)
     assert "search_tools" in schema
 
 
