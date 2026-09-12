@@ -1,6 +1,7 @@
 """FastMCP middleware for tri-state governance with scoped elevation and elicitation."""
 
 import hashlib
+import json
 import re
 import time
 from collections.abc import Sequence
@@ -85,7 +86,29 @@ class GovernanceMiddleware(Middleware):
                     result.structured_content,
                     threshold=Config.TOON_ARRAY_THRESHOLD,
                 )
-                return result.model_copy(update={"structured_content": encoded})
+                updates: dict[str, Any] = {"structured_content": encoded}
+                if len(result.content) == 1 and isinstance(
+                    result.content[0], mcp_types.TextContent
+                ):
+                    try:
+                        content = json.loads(result.content[0].text)
+                        encoded_content = encode_output(
+                            content,
+                            threshold=Config.TOON_ARRAY_THRESHOLD,
+                        )
+                        if encoded_content != content:
+                            updates["content"] = [
+                                result.content[0].model_copy(
+                                    update={
+                                        "text": json.dumps(
+                                            encoded_content, separators=(",", ":"), default=str
+                                        )
+                                    }
+                                )
+                            ]
+                    except (TypeError, json.JSONDecodeError):
+                        pass
+                return result.model_copy(update=updates)
             return encode_output(result, threshold=Config.TOON_ARRAY_THRESHOLD)
         except Exception as e:
             # Fail-safe: return original result if encoding fails
